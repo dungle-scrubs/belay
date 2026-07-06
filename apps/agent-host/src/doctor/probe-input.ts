@@ -53,6 +53,26 @@ export interface DoctorRootProbe {
   readonly migrationAvailable: boolean; // legacy only: importable ~/.trevor data present
 }
 
+export interface StoreDiagPayload {
+  readonly indexHealthy: boolean;
+  readonly queries: number;
+  readonly schemaVersion: number;
+  readonly slowQueries: number;
+  readonly startupSha: string | null;
+}
+
+export type StoreDiagProbe =
+  | {
+      readonly kind: "ok";
+      readonly diag: StoreDiagPayload;
+      readonly hostSha: string | null;
+    }
+  | {
+      readonly kind: "unknown";
+      readonly hostSha: string | null;
+      readonly reason: string;
+    };
+
 export interface DoctorProbeInput {
   readonly host: { readonly instanceId: string; readonly role: string; readonly live: boolean };
   /** The live turn-machine facts (active run, queue, last termination), already string-formatted. */
@@ -72,7 +92,10 @@ export interface DoctorProbeInput {
     /** Cwd advisory-lock state for this host's working directory (plan 01); absent when not probed. */
     readonly cwdLock?: CwdLockDoctorFact;
   };
-  readonly storage: { readonly roots: readonly DoctorRootProbe[] };
+  readonly storage: {
+    readonly roots: readonly DoctorRootProbe[];
+    readonly store?: StoreDiagProbe;
+  };
   /** Local-model admission state (plan 11): active owners, queue depth, oldest wait; absent when not
    *  probed (e.g. no local provider in use). */
   readonly admission?: AdmissionDoctorSummary;

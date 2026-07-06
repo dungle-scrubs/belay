@@ -745,7 +745,7 @@ const { doctorFacts } = makeHostFacts({
 registerDoctorSnapshotSource(async () =>
   buildLiveDoctorSnapshot({
     runtime: doctorFacts(),
-    probes: await collectDoctorProbeResults(providers),
+    probes: await collectDoctorProbeResults(providers, { telemetry: hostTelemetry }),
   }),
 );
 
@@ -806,6 +806,7 @@ async function runCommand(name: string, args: string): Promise<void> {
     providers,
     cwd: process.cwd(),
     doctor: { ...doctorFacts(), lease: lease.debugInfo(Date.now()) },
+    doctorProbeOptions: { telemetry: hostTelemetry },
     compact: forceCompact,
     loops,
   });

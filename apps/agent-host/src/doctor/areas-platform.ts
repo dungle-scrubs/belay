@@ -7,7 +7,7 @@ import {
 } from "@trevor/session";
 import type { ResidencyDoctorSummary } from "../residency/doctor";
 import { area } from "./area";
-import type { DoctorProbeInput, DoctorRootProbe } from "./probe-input";
+import type { DoctorProbeInput, DoctorRootProbe, StoreDiagProbe } from "./probe-input";
 
 /**
  * The machine/platform areas of the /doctor grid: Storage / Roots (per-root health off the root
@@ -48,6 +48,69 @@ function rootFact(root: DoctorRootProbe): {
   return root.overridden ? { ...base, value: `${base.value} · overridden` } : base;
 }
 
+function shortSha(sha: string | null): string {
+  return sha ? sha.slice(0, 8) : "unknown";
+}
+
+function storeDiagParts(store: StoreDiagProbe | undefined): {
+  readonly facts: readonly DoctorFact[];
+  readonly findings: readonly DoctorFinding[];
+  readonly unknown: boolean;
+} {
+  if (!store) {
+    return { facts: [], findings: [], unknown: false };
+  }
+  if (store.kind === "unknown") {
+    return {
+      facts: [
+        {
+          label: "session-store",
+          value: `diag unknown (${store.reason})`,
+          status: "not_checked",
+        },
+      ],
+      findings: [],
+      unknown: true,
+    };
+  }
+
+  const { diag, hostSha } = store;
+  const shaMismatch = diag.startupSha !== null && hostSha !== null && diag.startupSha !== hostSha;
+  const status: DoctorStatus = diag.indexHealthy && !shaMismatch ? "ok" : "warn";
+  const facts: DoctorFact[] = [
+    {
+      label: "session-store",
+      value:
+        `diag ${status === "ok" ? "ok" : "drift"} · schema ${diag.schemaVersion}` +
+        ` · store ${shortSha(diag.startupSha)} · ${diag.queries} queries` +
+        ` · ${diag.slowQueries} slow`,
+      status,
+    },
+  ];
+  const findings: DoctorFinding[] = [];
+  if (!diag.indexHealthy) {
+    findings.push({
+      id: "storage.store.index",
+      status: "warn",
+      title: "Session-store index drift",
+      message: "Hot inventory lookup is not using events_session_type_seq.",
+      nextAction: { label: "Restart the session-store from the current checkout" },
+    });
+  }
+  if (shaMismatch) {
+    findings.push({
+      id: "storage.store.sha",
+      status: "warn",
+      title: "Session-store code drift",
+      message: `session-store is running ${shortSha(diag.startupSha)} while host HEAD is ${shortSha(
+        hostSha,
+      )}.`,
+      nextAction: { label: "Restart the session-store from the current checkout" },
+    });
+  }
+  return { facts, findings, unknown: false };
+}
+
 /**
  * The Storage / Roots area (D-005): one fact per resolved root with its health, plus problem-only
  * findings (an unwritable Trevor root errors; importable ~/.trevor data warns with a migration hint).
@@ -57,10 +120,12 @@ function rootFact(root: DoctorRootProbe): {
  */
 export function storageArea(input: DoctorProbeInput): DoctorArea {
   const roots = input.storage.roots;
+  const store = storeDiagParts(input.storage.store);
   const facts: DoctorFact[] = roots.map((root) => {
     const { status, value } = rootFact(root);
     return { label: root.label, value, status };
   });
+  facts.push(...store.facts);
 
   const findings: DoctorFinding[] = [];
   for (const root of roots) {
@@ -87,14 +152,20 @@ export function storageArea(input: DoctorProbeInput): DoctorArea {
       });
     }
   }
+  findings.push(...store.findings);
 
-  const statusOverride = rollupStatus(facts.map((f) => f.status ?? "not_checked"));
+  const rolledStatus = rollupStatus(facts.map((f) => f.status ?? "not_checked"));
+  const statusOverride = store.unknown && rolledStatus === "ok" ? "not_checked" : rolledStatus;
   const verdict =
     statusOverride === "error"
       ? "A storage root needs attention."
       : statusOverride === "warn"
-        ? "Legacy data is importable."
-        : "All roots resolved and writable.";
+        ? findings.some((f) => f.id.startsWith("storage.store."))
+          ? "Session-store drift detected."
+          : "Legacy data is importable."
+        : statusOverride === "not_checked"
+          ? "Session-store diag unknown."
+          : "All roots resolved and writable.";
   return area("storage", "Storage / Roots", verdict, findings, facts, statusOverride);
 }
 

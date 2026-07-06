@@ -607,6 +607,97 @@ test("all-healthy roots roll the Storage area up to ok with one fact per root", 
   assert.ok(!/\/Users\/|\/home\//.test(JSON.stringify(area)), "no raw home path leaks");
 });
 
+test("an unhealthy session-store type index warns inside the existing Storage area", () => {
+  const area = buildDoctorSnapshot(
+    input({
+      storage: {
+        roots: HEALTHY_ROOTS,
+        store: {
+          kind: "ok",
+          diag: {
+            indexHealthy: false,
+            queries: 12,
+            schemaVersion: 1,
+            slowQueries: 0,
+            startupSha: "abc123",
+          },
+          hostSha: "abc123",
+        },
+      },
+    }),
+  ).areas.find((a) => a.id === "storage");
+
+  assert.equal(area?.status, "warn");
+  const finding = area?.findings?.find((f) => f.id === "storage.store.index");
+  assert.equal(finding?.status, "warn");
+  assert.match(finding?.message ?? "", /events_session_type_seq/);
+  assert.ok(
+    area?.facts?.some((f) => f.label === "session-store" && f.status === "warn"),
+    "the store fact is visibly degraded",
+  );
+});
+
+test("a stale session-store startup SHA warns inside the existing Storage area", () => {
+  const area = buildDoctorSnapshot(
+    input({
+      storage: {
+        roots: HEALTHY_ROOTS,
+        store: {
+          kind: "ok",
+          diag: {
+            indexHealthy: true,
+            queries: 12,
+            schemaVersion: 1,
+            slowQueries: 0,
+            startupSha: "oldsha",
+          },
+          hostSha: "newsha",
+        },
+      },
+    }),
+  ).areas.find((a) => a.id === "storage");
+
+  assert.equal(area?.status, "warn");
+  const finding = area?.findings?.find((f) => f.id === "storage.store.sha");
+  assert.equal(finding?.status, "warn");
+  assert.match(finding?.message ?? "", /oldsha/);
+  assert.match(finding?.message ?? "", /newsha/);
+});
+
+test("a healthy session-store diag adds a clean Storage fact without a finding", () => {
+  const area = buildDoctorSnapshot(
+    input({
+      storage: {
+        roots: HEALTHY_ROOTS,
+        store: {
+          kind: "ok",
+          diag: {
+            indexHealthy: true,
+            queries: 12,
+            schemaVersion: 1,
+            slowQueries: 0,
+            startupSha: "abc123",
+          },
+          hostSha: "abc123",
+        },
+      },
+    }),
+  ).areas.find((a) => a.id === "storage");
+
+  assert.equal(area?.status, "ok");
+  assert.equal(area?.findings?.length ?? 0, 0);
+  assert.ok(
+    area?.facts?.some(
+      (f) =>
+        f.label === "session-store" &&
+        f.status === "ok" &&
+        /schema 1/.test(f.value) &&
+        /12 queries/.test(f.value),
+    ),
+    "the clean store diag is a fact",
+  );
+});
+
 test("an unwritable state root is an error finding and lifts the Storage area to error", () => {
   const area = buildDoctorSnapshot(
     input({

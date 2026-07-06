@@ -1,3 +1,4 @@
+import { spawnSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -48,9 +49,24 @@ interface AggregateRow {
   readonly updatedAt: string;
 }
 
+export interface SessionLogDiag {
+  readonly indexHealthy: boolean;
+  readonly queries: number;
+  readonly schemaVersion: number;
+  readonly slowQueries: number;
+  readonly startupSha: string | null;
+}
+
+type GitRunner = (args: readonly string[]) => {
+  readonly status: number | null;
+  readonly stdout: string;
+};
+
 /** The full event column list every row-returning read selects, in `EventRow` order. Shared so the
  *  replay/type-lookup reads and the query-plan diagnostic all speak the exact same projection. */
 const EVENT_COLUMNS = "sessionId, seq, eventId, type, producerId, payload, createdAt";
+
+const TYPE_LOOKUP_INDEX = "events_session_type_seq";
 
 /** The per-session "latest/first event of a type" lookup (`ORDER BY seq DESC/ASC LIMIT 1`). Shared by
  *  `latestOfType`/`firstOfType` and the `explainTypeLookup` diagnostic so the query-plan guardrail always
@@ -65,6 +81,35 @@ const typeLookupSql = (order: "ASC" | "DESC"): string =>
  * ~1.67s scan 45.1 removed, so the signal marks a real regression, not routine work.
  */
 const SLOW_QUERY_MS = 100;
+export const SESSION_LOG_SCHEMA_VERSION = 1;
+
+/** A node-backed git runner scoped to `cwd`, using argv arrays with no shell parsing. */
+function nodeGitRunner(cwd: string): GitRunner {
+  return (args) => {
+    const out = spawnSync("git", [...args], {
+      cwd,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return { status: out.status, stdout: typeof out.stdout === "string" ? out.stdout : "" };
+  };
+}
+
+/** The git HEAD at store startup, or null when the process is not in a git checkout. */
+function readStartupSha(cwd = process.cwd()): string | null {
+  const out = nodeGitRunner(cwd)(["rev-parse", "HEAD"]);
+  const sha = out.status === 0 ? out.stdout.trim() : "";
+  return sha || null;
+}
+
+function typeLookupPlanIsHealthy(plan: string): boolean {
+  const upper = plan.toUpperCase();
+  return (
+    /\bSEARCH\b.*\bUSING\b(?:\s+\w+)*\s+INDEX\s+EVENTS_SESSION_TYPE_SEQ\b/.test(upper) &&
+    !/\bSCAN\b/.test(upper) &&
+    !upper.includes("TEMP B-TREE")
+  );
+}
 
 /** Maps a private SQLite row (payload as a JSON string) into the shared SessionEvent shape. */
 function rowToEvent(r: EventRow): SessionEvent {
@@ -85,6 +130,9 @@ export class SessionLog {
   /** Monotonically increasing count of SQLite statements executed - see {@link queries}. */
   private queryCount = 0;
 
+  /** Monotonically increasing count of statements that crossed the slow-query threshold. */
+  private slowQueryCount = 0;
+
   /** Opens (creating if absent) the SQLite log at `path`, or `:memory:` for tests. Telemetry is off by
    *  default (NOOP_SINK); the append span carries only the event type, never the session id or payload.
    *  `now` is injectable so the slow-query timing (M3) is deterministic in tests. */
@@ -92,6 +140,7 @@ export class SessionLog {
     path: string,
     private readonly sink: TelemetrySink = NOOP_SINK,
     private readonly now: () => number = Date.now,
+    private readonly startupSha: string | null = readStartupSha(),
   ) {
     if (path !== ":memory:") {
       mkdirSync(dirname(path), { recursive: true });
@@ -123,8 +172,9 @@ export class SessionLog {
     // no filesort. The PK (sessionId, seq) alone can only seek sessionId, then scans + filters by type.
     // `IF NOT EXISTS` so reopening the (large, already-populated) live DB is a no-op, never a rebuild.
     this.db.exec(
-      "CREATE INDEX IF NOT EXISTS events_session_type_seq ON events(sessionId, type, seq);",
+      `CREATE INDEX IF NOT EXISTS ${TYPE_LOOKUP_INDEX} ON events(sessionId, type, seq);`,
     );
+    this.migrateSchemaVersion();
   }
 
   /**
@@ -149,6 +199,7 @@ export class SessionLog {
     const result = run();
     const durationMs = this.now() - startedAt;
     if (durationMs > SLOW_QUERY_MS) {
+      this.slowQueryCount += 1;
       safeEmitSpan(this.sink, {
         name: SPAN_NAMES.storeSlowQuery,
         attributes: safeAttributes({ query: name, threshold_ms: SLOW_QUERY_MS }),
@@ -345,6 +396,50 @@ export class SessionLog {
       .prepare(`EXPLAIN QUERY PLAN ${typeLookupSql("DESC")}`)
       .all("s", "t") as unknown as { detail: string }[];
     return rows.map((r) => r.detail).join("; ");
+  }
+
+  /**
+   * Diagnostic self-check for the store's drift-sensitive substrate. This stays off the request hot path:
+   * it explains the exact type lookup used by inventory warmup, reads SQLite's `user_version`, and reports
+   * the process-start git SHA so the host doctor can spot a stale running store.
+   */
+  diag(): SessionLogDiag {
+    return {
+      // Gate on a FRESH sqlite_master read, not the cached query plan alone: a long-lived connection
+      // caches the plan it compiled, so an index dropped/created at runtime (the drift this check exists
+      // to catch) is invisible to EXPLAIN but always shows in sqlite_master. The plan check still guards
+      // against a present-but-unused index (stats degradation); both agree in production, where the index
+      // is created once at startup and never changes under the live connection.
+      indexHealthy: this.hasTypeIndex() && typeLookupPlanIsHealthy(this.explainTypeLookup()),
+      queries: this.queryCount,
+      schemaVersion: this.readSchemaVersion(),
+      slowQueries: this.slowQueryCount,
+      startupSha: this.startupSha,
+    };
+  }
+
+  /** Whether the hot-lookup index physically exists right now (a fresh sqlite_master read, so a runtime
+   *  drop/create is seen even when the connection's cached EXPLAIN plan is stale). */
+  private hasTypeIndex(): boolean {
+    const row = this.db
+      .prepare(
+        "SELECT 1 AS present FROM sqlite_master WHERE type = 'index' AND name = 'events_session_type_seq'",
+      )
+      .get() as { readonly present?: number } | undefined;
+    return row?.present === 1;
+  }
+
+  private readSchemaVersion(): number {
+    const row = this.db.prepare("PRAGMA user_version").get() as
+      | { readonly user_version?: number }
+      | undefined;
+    return Number(row?.user_version ?? 0);
+  }
+
+  private migrateSchemaVersion(): void {
+    if (this.readSchemaVersion() < SESSION_LOG_SCHEMA_VERSION) {
+      this.db.exec(`PRAGMA user_version = ${SESSION_LOG_SCHEMA_VERSION};`);
+    }
   }
 
   /** Every event for a session with seq > afterSeq, in seq order (the replay). */

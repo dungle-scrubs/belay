@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { frames } from "@trevor/session";
-import { SPAN_NAMES } from "@trevor/session/telemetry";
+import { NOOP_SINK, SPAN_NAMES } from "@trevor/session/telemetry";
 import { recordingTelemetrySink, tempDir } from "@trevor/test-kit";
 import { test } from "vitest";
-import { SessionLog } from "./log";
+import { SESSION_LOG_SCHEMA_VERSION, SessionLog } from "./log";
 
 const at = "2026-06-24T00:00:00.000Z";
 
@@ -185,6 +186,38 @@ test("type lookups seek the (sessionId, type) index with no filesort", () => {
   assert.ok(!plan.includes("TEMP B-TREE"), `expected no filesort, got: ${plan}`);
 });
 
+test("diag reports unhealthy when the type index is absent and healthy when it is present", () => {
+  const dir = tempDir("trevor-diag-");
+  const path = join(dir, "sessions.db");
+  try {
+    const log = new SessionLog(path, NOOP_SINK, () => 0, "abc123");
+    log.append("s1", { type: "host.online", producerId: "host", payload: {} }, "e1", at);
+
+    const before = log.diag();
+    assert.equal(before.indexHealthy, true);
+    assert.equal(before.queries, 3);
+    assert.equal(before.slowQueries, 0);
+    assert.equal(before.startupSha, "abc123");
+
+    const withoutIndex = new DatabaseSync(path);
+    withoutIndex.exec("PRAGMA user_version = 37;");
+    withoutIndex.exec("DROP INDEX events_session_type_seq;");
+    withoutIndex.close();
+
+    const missing = log.diag();
+    assert.equal(missing.indexHealthy, false);
+    assert.equal(missing.schemaVersion, 37);
+
+    const withIndex = new DatabaseSync(path);
+    withIndex.exec("CREATE INDEX events_session_type_seq ON events(sessionId, type, seq);");
+    withIndex.close();
+
+    assert.equal(log.diag().indexHealthy, true);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("the type index is created idempotently on an existing (pre-index) DB", () => {
   const dir = tempDir("trevor-index-");
   const path = join(dir, "sessions.db");
@@ -197,6 +230,20 @@ test("the type index is created idempotently on an existing (pre-index) DB", () 
     const reopened = new SessionLog(path);
     assert.ok(reopened.explainTypeLookup().includes("events_session_type_seq"));
     assert.equal(reopened.readAfter("s1", 0).length, 1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("opening the log stamps SQLite user_version to the current schema version", () => {
+  const dir = tempDir("trevor-user-version-");
+  const path = join(dir, "sessions.db");
+  try {
+    const log = new SessionLog(path);
+    assert.equal(log.diag().schemaVersion, SESSION_LOG_SCHEMA_VERSION);
+
+    const reopened = new SessionLog(path);
+    assert.equal(reopened.diag().schemaVersion, SESSION_LOG_SCHEMA_VERSION);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -226,6 +273,7 @@ test("a synchronous query over the slow threshold emits a store.slow_query span 
 
   const spans = recorder.named(SPAN_NAMES.storeSlowQuery);
   assert.ok(spans.length >= 1, "a slow query emits a store.slow_query span");
+  assert.equal(log.diag().slowQueries, spans.length, "diag reports the slow-query count");
   const [span] = spans;
   assert.equal(typeof span?.attributes.query, "string", "the span names the query");
   assert.equal(span?.attributes.threshold_ms, 100);

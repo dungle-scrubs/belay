@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SPAN_NAMES } from "@trevor/session/telemetry";
+import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, test } from "vitest";
 import type { ProviderRegistry } from "../providers";
@@ -67,6 +71,18 @@ function provider(over: {
   } as unknown as ProviderRegistry[string];
 }
 
+async function startDiagServer(
+  handler: (req: IncomingMessage, res: ServerResponse) => void,
+): Promise<{ readonly close: () => Promise<void>; readonly url: string }> {
+  const server: Server = createServer(handler);
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
 test("a wedged provider readiness degrades to unreachable within the injected timeout, not a hang", async () => {
   const providers = {
     // Readiness never settles; with a 20ms probe budget it must still resolve as unreachable.
@@ -115,4 +131,60 @@ test("running /doctor probes never warm, load, or stream a provider (non-mutatin
     ["cold", "warm"],
     "readiness alone drives the warm/cold verdict",
   );
+});
+
+test("collectDoctorProbeResults decodes session-store /diag and emits a store diag span", async () => {
+  const recorder = recordingTelemetrySink();
+  const diagServer = await startDiagServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        indexHealthy: false,
+        queries: 8,
+        schemaVersion: 1,
+        slowQueries: 2,
+        startupSha: "store-sha",
+      }),
+    );
+  });
+  try {
+    const results = await collectDoctorProbeResults({} as ProviderRegistry, {
+      hostSha: "host-sha",
+      probeTimeoutMs: 20,
+      storeDiagTimeoutMs: 100,
+      storeDiagUrl: diagServer.url,
+      telemetry: recorder.sink,
+    });
+
+    assert.equal(results.storeDiag.kind, "ok");
+    assert.equal(results.storeDiag.hostSha, "host-sha");
+    assert.equal(results.storeDiag.kind === "ok" && results.storeDiag.diag.indexHealthy, false);
+    const span = recorder.named(SPAN_NAMES.storeDiag)[0];
+    assert.equal(span?.status, "ok");
+    assert.equal(span?.attributes.index_healthy, false);
+    assert.equal(span?.attributes.schema_version, 1);
+  } finally {
+    await diagServer.close();
+  }
+});
+
+test("collectDoctorProbeResults degrades a hung session-store /diag probe to unknown", async () => {
+  const diagServer = await startDiagServer(() => {
+    // Leave the request open; the injected AbortController timeout must bound the doctor probe.
+  });
+  try {
+    const start = Date.now();
+    const results = await collectDoctorProbeResults({} as ProviderRegistry, {
+      hostSha: "host-sha",
+      probeTimeoutMs: 20,
+      storeDiagTimeoutMs: 20,
+      storeDiagUrl: diagServer.url,
+    });
+    const elapsed = Date.now() - start;
+
+    assert.equal(results.storeDiag.kind, "unknown");
+    assert.ok(elapsed < 1000, "the bounded store diag probe returns quickly");
+  } finally {
+    await diagServer.close();
+  }
 });

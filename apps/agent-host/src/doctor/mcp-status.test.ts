@@ -258,6 +258,7 @@ test("mcpDebugSummary is a compact status histogram, absent when nothing is conf
 // --- the live-snapshot wiring: DoctorRuntimeFacts.mcp flows into the MCP area ---------------
 
 const PROBES: DoctorProbeResults = {
+  storeDiag: { kind: "unknown", hostSha: null, reason: "not probed" },
   providers: [],
   roots: [],
   tools: ["read"],

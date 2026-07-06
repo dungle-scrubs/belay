@@ -32,6 +32,7 @@ import { SessionHub } from "./session-hub";
  *   POST  /sessions                      { sessionId }                 -> { session: { sessionId } }
  *   POST  /sessions/<id>/events          { type, producerId, payload } -> { ok, seq }
  *   GET   /sessions/<id>/stream?after=N  (WebSocket)                   -> replay (seq>N) then live tail
+ *   GET   /diag                          -> store self-check payload
  *   GET   /health                        -> { ok: true }
  *
  * The stream is replay-then-tail: on connect we send every event with seq>after as
@@ -48,6 +49,7 @@ const HOST_RUNTIME = RUNTIME_KIND.host;
 
 // The browser (trevor-web :17420) reads/writes cross-origin; the store serves GET/POST.
 const CORS_METHODS = "GET, POST, OPTIONS";
+const DIAG_PATH = "/diag";
 
 /**
  * The session-store's assembled parts: the HTTP+WS `server` plus the `log` (durable substrate) and the
@@ -86,6 +88,15 @@ export function buildSessionStore(dbPath: string): SessionStore {
   // The store's domain routes; CORS, the OPTIONS preflight, GET /health, and the 404 fallthrough are
   // owned by createService. The stream (GET /sessions/<id>/stream) is a WebSocket, handled below.
   const routes: Route[] = [
+    {
+      method: "GET",
+      match: DIAG_PATH,
+      // Rich store health is intentionally separate from server-kit's cheap `/health` probe. Operators
+      // and /doctor read this drift-sensitive payload; launchers keep probing the bare liveness body.
+      handler: ({ res }) => {
+        json(res, 200, log.diag());
+      },
+    },
     {
       method: "GET",
       match: SESSIONS_PATH,

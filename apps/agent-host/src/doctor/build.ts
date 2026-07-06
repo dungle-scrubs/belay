@@ -14,6 +14,15 @@ import {
 } from "@trevor/session";
 import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
 import { type RootCategory, resolveRootPolicy } from "@trevor/session/node-paths";
+import { serviceUrl } from "@trevor/session/ports";
+import {
+  NOOP_SINK,
+  redactAttributeValue,
+  SPAN_NAMES,
+  safeAttributes,
+  safeEmitSpan,
+  type TelemetrySink,
+} from "@trevor/session/telemetry";
 import { Duration, Effect } from "effect";
 import type { AdmissionDoctorSummary } from "../admission/doctor";
 import type { ProviderRegistry } from "../providers";
@@ -22,12 +31,16 @@ import { providerFailures } from "../providers/provider-failure-log";
 import { incidentCategory, providerIncidents } from "../providers/provider-incidents";
 import type { ResidencyDoctorSummary } from "../residency/doctor";
 import { lastWebFetchError } from "../tools/web-fetch/web-fetch-log";
+import { headCommit } from "../worktrees/git";
+import { nodeGitRunner } from "../worktrees/git-status";
 import type {
   DoctorLspDiagnostics,
   DoctorProviderIncident,
   DoctorProviderProbe,
   DoctorRootProbe,
   PeripheralState,
+  StoreDiagPayload,
+  StoreDiagProbe,
   TelemetryDoctorSummary,
 } from "./probe-input";
 import { buildDoctorSnapshot } from "./snapshot";
@@ -88,12 +101,14 @@ export interface DoctorRuntimeFacts {
 }
 
 export interface DoctorCommandInput extends DoctorRuntimeFacts {
+  readonly probeOptions?: DoctorProbeOptions;
   readonly providers: ProviderRegistry;
 }
 
 export interface DoctorProbeResults {
   readonly providers: readonly DoctorProviderProbe[];
   readonly roots: readonly DoctorRootProbe[];
+  readonly storeDiag: StoreDiagProbe;
   readonly tools: readonly string[];
   readonly observations: {
     readonly distinct: number;
@@ -165,6 +180,7 @@ function parseDoctorCommand(args: string): DoctorCommand {
  * than blocking. Read-only either way: readiness never loads or warms a model.
  */
 const PROVIDER_PROBE_TIMEOUT_MS = 2000;
+const STORE_DIAG_TIMEOUT_MS = 300;
 
 /**
  * One probe of a provider's reachability: run `readiness()` once, BOUNDED by a timeout, and map it -
@@ -287,7 +303,121 @@ function hostStr(host: Record<string, unknown> | undefined, key: string): string
 /** Options for {@link collectDoctorProbeResults}: the per-provider readiness timeout (plan 41 M4),
  *  injectable so the bounded-probe behavior is deterministic in tests. */
 export interface DoctorProbeOptions {
+  /** The host HEAD SHA to compare with the store startup SHA; injectable for deterministic tests. */
+  readonly hostSha?: string | null;
   readonly probeTimeoutMs?: number;
+  /** The store base URL. Defaults to SESSION_STORE_URL or the reserved local store URL. */
+  readonly storeDiagUrl?: string;
+  /** A short HTTP budget for the store `/diag` probe. */
+  readonly storeDiagTimeoutMs?: number;
+  /** The host telemetry sink for the `trevor.store.diag` span. */
+  readonly telemetry?: TelemetrySink;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function storeDiagEndpoint(baseUrl: string): string {
+  return new URL("/diag", baseUrl).toString();
+}
+
+function decodeStoreDiag(value: unknown): StoreDiagPayload | null {
+  if (typeof value !== "object" || value === null) {
+    return null;
+  }
+  const record = value as Record<string, unknown>;
+  if (
+    typeof record.indexHealthy !== "boolean" ||
+    typeof record.queries !== "number" ||
+    typeof record.schemaVersion !== "number" ||
+    typeof record.slowQueries !== "number" ||
+    !(typeof record.startupSha === "string" || record.startupSha === null)
+  ) {
+    return null;
+  }
+  return {
+    indexHealthy: record.indexHealthy,
+    queries: record.queries,
+    schemaVersion: record.schemaVersion,
+    slowQueries: record.slowQueries,
+    startupSha: record.startupSha,
+  };
+}
+
+async function fetchJsonWithTimeout(url: string, timeoutMs: number): Promise<unknown> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  timeout.unref?.();
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function emitStoreDiagSpan(
+  sink: TelemetrySink,
+  startedAt: number,
+  status: "ok" | "error",
+  attributes: Readonly<Record<string, unknown>>,
+  error?: string,
+): void {
+  safeEmitSpan(sink, {
+    name: SPAN_NAMES.storeDiag,
+    attributes: safeAttributes(attributes),
+    status,
+    durationMs: Date.now() - startedAt,
+    ...(error ? { error: redactAttributeValue(error) } : {}),
+  });
+}
+
+function readHostSha(opts: DoctorProbeOptions): string | null {
+  if (opts.hostSha !== undefined) {
+    return opts.hostSha;
+  }
+  try {
+    return headCommit(nodeGitRunner(process.cwd()));
+  } catch {
+    return null;
+  }
+}
+
+async function probeStoreDiag(opts: DoctorProbeOptions): Promise<StoreDiagProbe> {
+  const sink = opts.telemetry ?? NOOP_SINK;
+  const startedAt = Date.now();
+  const hostSha = readHostSha(opts);
+  try {
+    const baseUrl = opts.storeDiagUrl ?? process.env.SESSION_STORE_URL ?? serviceUrl("store");
+    const raw = await fetchJsonWithTimeout(
+      storeDiagEndpoint(baseUrl),
+      opts.storeDiagTimeoutMs ?? STORE_DIAG_TIMEOUT_MS,
+    );
+    const diag = decodeStoreDiag(raw);
+    if (!diag) {
+      throw new Error("invalid /diag payload");
+    }
+    emitStoreDiagSpan(sink, startedAt, "ok", {
+      host_sha: hostSha?.slice(0, 8) ?? "unknown",
+      index_healthy: diag.indexHealthy,
+      outcome: "ok",
+      queries: diag.queries,
+      schema_version: diag.schemaVersion,
+      sha_match:
+        diag.startupSha !== null && hostSha !== null ? diag.startupSha === hostSha : "unknown",
+      slow_queries: diag.slowQueries,
+      store_sha: diag.startupSha?.slice(0, 8) ?? "unknown",
+    });
+    return { kind: "ok", diag, hostSha };
+  } catch (error) {
+    const reason = errorMessage(error);
+    emitStoreDiagSpan(sink, startedAt, "error", { outcome: "unknown", reason }, reason);
+    return { kind: "unknown", hostSha, reason: redactAttributeValue(reason) };
+  }
 }
 
 /** Probes bounded live dependencies for /doctor without exposing raw provider/storage internals. */
@@ -295,13 +425,14 @@ export async function collectDoctorProbeResults(
   providers: ProviderRegistry,
   opts: DoctorProbeOptions = {},
 ): Promise<DoctorProbeResults> {
-  const [providerProbes, roots, observationStore, tools] = await Promise.all([
+  const [providerProbes, roots, storeDiag, observationStore, tools] = await Promise.all([
     Promise.all(
       Object.entries(providers).map(([key, provider]) =>
         doctorProviderProbe(key, provider, opts.probeTimeoutMs),
       ),
     ),
     Promise.all(resolveRootPolicy().map(probeRoot)),
+    probeStoreDiag(opts),
     readObservations(),
     toolNames(),
   ]);
@@ -324,6 +455,7 @@ export async function collectDoctorProbeResults(
   return {
     providers: providerProbes,
     roots,
+    storeDiag,
     tools,
     observations: obs,
     providerFailures: {
@@ -356,7 +488,7 @@ export function buildLiveDoctorSnapshot(input: DoctorSnapshotInput): DoctorSnaps
       branch: facts.branch,
       ...(facts.cwdLock ? { cwdLock: facts.cwdLock } : {}),
     },
-    storage: { roots: probes.roots },
+    storage: { roots: probes.roots, store: probes.storeDiag },
     ...(facts.admission ? { admission: facts.admission } : {}),
     ...(facts.residency ? { residency: facts.residency } : {}),
     ...(facts.telemetry ? { telemetry: facts.telemetry } : {}),
@@ -434,6 +566,6 @@ export async function buildDoctorCommandResult(
   if (command.view === "text") {
     return doctorText(input);
   }
-  const probes = await collectDoctorProbeResults(input.providers);
+  const probes = await collectDoctorProbeResults(input.providers, input.probeOptions);
   return JSON.stringify(buildLiveDoctorSnapshot({ runtime: input, probes }));
 }

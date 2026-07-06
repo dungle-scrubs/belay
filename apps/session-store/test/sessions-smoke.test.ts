@@ -203,3 +203,24 @@ test("GET /sessions returns the inventory read model with live presence folded i
 
   host.close();
 });
+
+test("GET /diag returns the store diagnostic payload without changing /health", async () => {
+  const res = await fetch(`${store.url}/diag`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    readonly indexHealthy?: unknown;
+    readonly queries?: unknown;
+    readonly schemaVersion?: unknown;
+    readonly slowQueries?: unknown;
+    readonly startupSha?: unknown;
+  };
+  assert.equal(body.indexHealthy, true);
+  assert.equal(typeof body.queries, "number");
+  assert.equal(typeof body.schemaVersion, "number");
+  assert.equal(typeof body.slowQueries, "number");
+  assert.ok(typeof body.startupSha === "string" || body.startupSha === null);
+
+  const health = await fetch(`${store.url}/health`);
+  assert.equal(health.status, 200);
+  assert.deepEqual(await health.json(), { ok: true });
+});

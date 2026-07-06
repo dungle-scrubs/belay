@@ -251,6 +251,7 @@ test("lspDebugSummary appends stored diagnostic counts when errors are present",
 // --- the live-snapshot wiring: DoctorRuntimeFacts.lsp flows into the LSP area ---------------
 
 const PROBES: DoctorProbeResults = {
+  storeDiag: { kind: "unknown", hostSha: null, reason: "not probed" },
   providers: [],
   roots: [],
   tools: ["read"],

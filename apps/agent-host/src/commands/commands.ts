@@ -1,6 +1,7 @@
 import {
   buildDoctorCommandResult,
   type DoctorCommandInput,
+  type DoctorProbeOptions,
   type DoctorRuntimeFacts,
 } from "@host/doctor/build";
 import { buildLoopCommands } from "@host/loop/command";
@@ -45,6 +46,8 @@ export interface CommandContext {
   readonly cwd: string;
   /** The opaque /doctor fact bag. A new doctor fact changes host-facts, not CommandContext. */
   readonly doctor: DoctorRuntimeFacts;
+  /** Optional bounded-probe wiring for /doctor, such as the host telemetry sink. */
+  readonly doctorProbeOptions?: DoctorProbeOptions;
   /** Forces one cross-turn compaction fold now and resolves with a human-readable result line
    *  (D-040), for /compact. Absent when the host cannot compact (e.g. not the live leader). */
   readonly compact?: () => Promise<string>;
@@ -126,7 +129,11 @@ function buildDoctorCommand(): Command<DoctorInput> {
       name: "/doctor",
       summary: "Host health dashboard (providers, internet, tools, workspace)",
     },
-    select: ({ providers, doctor }) => ({ ...doctor, providers }),
+    select: ({ providers, doctor, doctorProbeOptions }) => ({
+      ...doctor,
+      ...(doctorProbeOptions ? { probeOptions: doctorProbeOptions } : {}),
+      providers,
+    }),
     run: (args, input) => buildDoctorCommandResult(args, input),
   };
 }
