@@ -129,7 +129,7 @@ test("D-003: jobToDetailModel reflects an interrupted job as terminal with a rec
   assert.equal(model.output, "compiling...", "the bounded tail is still shown");
 });
 
-test("runningSubagents keeps only non-terminal delegation rows from the transcript (M7)", () => {
+test("runningSubagents keeps only non-terminal BACKGROUND rows; inline is excluded (M7 / 09.4 M4)", () => {
   const messages: Message[] = [
     {
       kind: "delegation",
@@ -137,7 +137,7 @@ test("runningSubagents keeps only non-terminal delegation rows from the transcri
       childSessionId: "c1",
       agent: "explorer",
       task: "scan",
-      mode: "m",
+      mode: "background",
       status: "running",
     },
     {
@@ -146,14 +146,32 @@ test("runningSubagents keeps only non-terminal delegation rows from the transcri
       childSessionId: "c2",
       agent: "reviewer",
       task: "review",
-      mode: "m",
+      mode: "background",
       status: "done",
+    },
+    // An inline delegation renders as an inline-agent row, never in the BACKGROUND group (09.4 M4):
+    // it is a different message kind entirely, and even a stray delegation with mode "inline" is filtered.
+    {
+      kind: "inlineAgent",
+      id: "ia1",
+      parentRunId: "r1",
+      agents: [{ childSessionId: "c3", agent: "planner", status: "running" }],
+    },
+    {
+      kind: "delegation",
+      id: "d3",
+      childSessionId: "c4",
+      agent: "clip",
+      task: "blocking",
+      mode: "inline",
+      status: "running",
     },
     { kind: "user", id: "u1", text: "hi", artifacts: [], pastes: [] },
   ];
   assert.deepEqual(
     runningSubagents(messages).map((s) => s.agent),
     ["explorer"],
+    "only the running background child; the done one, the inline-agent row, and the inline-mode link are all excluded",
   );
 });
 

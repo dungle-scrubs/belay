@@ -1012,6 +1012,89 @@ test("turnStatusHeaderFrom: with no task the headline falls back to the engine t
   assert.equal(header?.state, "thinking");
 });
 
+test("turnStatusHeaderFrom: a running inline delegation reads 'delegating to {agent}…', never the tool verb (09.4 M5)", () => {
+  const header = turnStatusHeaderFrom(
+    [
+      userMessage(),
+      started("r1"),
+      evt("tool.started", { runId: "r1", callId: "c1", name: "delegate_inline", arguments: "{}" }),
+      evt("delegated.to", {
+        runId: "r1",
+        childSessionId: "s::sub::a",
+        agent: "explorer",
+        task: "search",
+        mode: "inline",
+        status: "running",
+      }),
+    ],
+    { awaitingResponse: false },
+  );
+  assert.equal(header?.state, "delegating to explorer…");
+  assert.equal(
+    header?.headline,
+    "delegating to explorer…",
+    "no task -> the headline is the delegation state",
+  );
+  assert.doesNotMatch(header?.state ?? "", /delegate_inline/);
+});
+
+test("turnStatusHeaderFrom: background-delegation start gets the same friendly headline (09.4 M5)", () => {
+  const header = turnStatusHeaderFrom(
+    [
+      userMessage(),
+      started("r1"),
+      evt("tool.started", {
+        runId: "r1",
+        callId: "c1",
+        name: "delegate_background",
+        arguments: "{}",
+      }),
+      evt("delegated.to", {
+        runId: "r1",
+        childSessionId: "s::sub::bg",
+        agent: "auditor",
+        task: "scan",
+        mode: "background",
+        status: "running",
+      }),
+    ],
+    { awaitingResponse: false },
+  );
+  assert.equal(header?.state, "delegating to auditor…");
+});
+
+test("turnStatusHeaderFrom: the delegating headline clears once the only child folds back (09.4 M5)", () => {
+  const header = turnStatusHeaderFrom(
+    [
+      userMessage(),
+      started("r1"),
+      evt("tool.started", { runId: "r1", callId: "c1", name: "delegate_inline", arguments: "{}" }),
+      evt("delegated.to", {
+        runId: "r1",
+        childSessionId: "s::sub::a",
+        agent: "explorer",
+        task: "t",
+        mode: "inline",
+        status: "running",
+      }),
+      evt("delegated.to", {
+        runId: "r1",
+        childSessionId: "s::sub::a",
+        agent: "explorer",
+        task: "t",
+        mode: "inline",
+        status: "done",
+        result: "ok",
+      }),
+    ],
+    { awaitingResponse: false },
+  );
+  // The delegation is terminal but the turn is still in flight, so the header no longer says
+  // "delegating…" and never regresses to a raw delegate_inline tool verb.
+  assert.notEqual(header?.state, "delegating to explorer…");
+  assert.doesNotMatch(header?.state ?? "", /delegate_inline/);
+});
+
 test("turnStatusHeaderFrom: a running tool with no task drives a tool-verb headline", () => {
   const header = turnStatusHeaderFrom(
     [

@@ -898,6 +898,11 @@ function runningToolLabel(
       continue;
     }
     if (decoded.type === "tool.started") {
+      // A delegation tool surfaces as the friendly "delegating to X…" headline (M5), never a raw
+      // "running delegate_inline" tool verb, so it never becomes the newest running tool here.
+      if (decoded.name === "delegate_inline" || decoded.name === "delegate_background") {
+        continue;
+      }
       running.set(decoded.callId, { name: decoded.name, arguments: decoded.arguments });
     } else if (decoded.type === "tool.completed") {
       running.delete(decoded.callId);
@@ -905,6 +910,34 @@ function runningToolLabel(
   }
   const newest = [...running.values()].at(-1);
   return newest ? toolActionLabel(newest.name, newest.arguments) : undefined;
+}
+
+/**
+ * The agent of the newest still-running delegation on this run - a `delegated.to` link (inline or
+ * background) whose child has no terminal link yet - or undefined. Drives the friendly "delegating to
+ * {agent}…" turn-status headline (plan 09.4 M5) instead of the raw delegation tool verb, for both the
+ * inline block and the brief window a background child is still spawning under the active turn.
+ */
+function activeDelegatingAgent(
+  events: readonly SessionEvent[],
+  runId: string | null,
+): string | undefined {
+  if (!runId) {
+    return undefined;
+  }
+  const runningByChild = new Map<string, string>();
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type !== "delegated.to" || decoded.runId !== runId) {
+      continue;
+    }
+    if (isTerminalDelegationStatus(decoded.status)) {
+      runningByChild.delete(decoded.childSessionId);
+    } else {
+      runningByChild.set(decoded.childSessionId, decoded.agent);
+    }
+  }
+  return [...runningByChild.values()].at(-1);
 }
 
 /**
@@ -956,8 +989,12 @@ export function turnStatusHeaderFrom(
     return undefined;
   }
   const runId = activeTurnRunId(events);
-  const state =
-    runningToolLabel(events, runId) ?? turnActionLabel(activeTurnEvidence(events, runId));
+  // A running delegation reads as "delegating to {agent}…" (M5), taking precedence over the raw tool
+  // verb; otherwise the newest running tool's verb, else the engine phase.
+  const delegatingAgent = activeDelegatingAgent(events, runId);
+  const state = delegatingAgent
+    ? `delegating to ${delegatingAgent}…`
+    : (runningToolLabel(events, runId) ?? turnActionLabel(activeTurnEvidence(events, runId)));
   const inProgress = tasksFrom(events).find((task) => task.status === "in_progress");
   const startedAt = activeTurnStartedAt(events);
   const outputTokens = liveOutputTokens(events);
