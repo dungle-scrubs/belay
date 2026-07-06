@@ -7,14 +7,9 @@
  *
  * Not for: assembling the prompt (history-projection.ts) or deciding when a turn runs (turn-scheduler.ts).
  */
-import type { SessionEvent } from "@trevor/session";
+import { hasForkOrigin, type SessionEvent } from "@trevor/session";
 import type { ChatMessage } from "../providers";
 import { buildHistory } from "./history-projection";
-
-/** The reserved payload key a FORK copies onto every inherited event (see fork.ts). A tangent must carry
- *  none - its presence in a tangent log means the parent transcript was copied in, which is a fork, not a
- *  tangent. */
-const FORK_ORIGIN_KEY = "_forkOrigin";
 
 /** A structured report on whether a tangent's prompt excludes the parent transcript (plan 37, M2). */
 export interface TangentIsolationReport {
@@ -31,15 +26,6 @@ export interface TangentIsolationReport {
   readonly parentSessionEvents: number;
   /** True when the tangent prompt carries no parent history: no leaks, no fork copies, no parent events. */
   readonly isolated: boolean;
-}
-
-/** Whether an event carries the fork-copy origin tag (payload `_forkOrigin`). */
-function isForkCopied(event: SessionEvent): boolean {
-  return (
-    typeof event.payload === "object" &&
-    event.payload !== null &&
-    FORK_ORIGIN_KEY in (event.payload as Record<string, unknown>)
-  );
 }
 
 const contentsOf = (messages: readonly ChatMessage[]): string[] =>
@@ -71,7 +57,7 @@ export function tangentIsolationReport(args: {
   const leakedFromParent = contentsOf(parentPrompt).filter(
     (content) => tangentText.includes(content) && !(seed !== "" && seed.includes(content)),
   );
-  const forkCopiedEvents = args.tangentEvents.filter(isForkCopied).length;
+  const forkCopiedEvents = args.tangentEvents.filter(hasForkOrigin).length;
   const parentSessionEvents = args.tangentEvents.filter(
     (event) => event.sessionId === args.parentSessionId,
   ).length;

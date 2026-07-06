@@ -24,8 +24,10 @@ import type { PublishInput } from "./transport";
  */
 
 /** The reserved payload key a forked (copied) event carries to record its source. It is namespaced with a
- *  leading underscore so it cannot collide with a real event field; the store treats it as opaque payload. */
-const FORK_ORIGIN_KEY = "_forkOrigin";
+ *  leading underscore so it cannot collide with a real event field; the store treats it as opaque payload.
+ *  Exported as the one owner of the contract: consumers (e.g. the tangent-isolation check) read it through
+ *  {@link hasForkOrigin} rather than re-spelling the literal, so a rename is a compile change, not a leak. */
+export const FORK_ORIGIN_KEY = "_forkOrigin";
 
 /**
  * The durable conversation-state event types a fork copies: exactly what replay consumes to rebuild history
@@ -64,6 +66,19 @@ function selectForkPrefix(events: readonly SessionEvent[], forkSeq: number): Ses
   return events
     .filter((e) => e.seq <= forkSeq && isForkableEvent(e.type))
     .sort((a, b) => a.seq - b.seq);
+}
+
+/**
+ * Whether an event carries the fork-copy origin tag ({@link FORK_ORIGIN_KEY} in its payload) - i.e. it was
+ * copied into a child session by {@link planFork}, not authored there. The one predicate for the contract:
+ * the tangent-isolation check leans on it to assert a tangent copies zero parent events.
+ */
+export function hasForkOrigin(event: Pick<SessionEvent, "payload">): boolean {
+  return (
+    typeof event.payload === "object" &&
+    event.payload !== null &&
+    FORK_ORIGIN_KEY in (event.payload as Record<string, unknown>)
+  );
 }
 
 /** Copies one event into a fork seed, tagging it with its immediate-parent origin. */

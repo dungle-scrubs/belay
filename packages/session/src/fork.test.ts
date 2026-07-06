@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SessionEvent } from "./event";
-import { isForkReady, planFork } from "./fork";
+import { hasForkOrigin, isForkReady, planFork } from "./fork";
 import { PRODUCER_IDS } from "./identity";
 import { events } from "./protocol";
 import { decodeTrevorEvent } from "./protocol-decode";
@@ -213,5 +213,26 @@ describe("active model inherited by a fork", () => {
     });
 
     expect(plan.inheritedModel).toBeNull();
+  });
+});
+
+describe("hasForkOrigin", () => {
+  it("is false for an authored event, true for a fork-copied one", () => {
+    expect(hasForkOrigin(ev(1, "user.message", { text: "hi" }))).toBe(false);
+    expect(hasForkOrigin(ev(1, "user.message", { _forkOrigin: { sessionId: "p", seq: 1 } }))).toBe(
+      true,
+    );
+  });
+
+  it("recognizes every non-marker seed planFork produces (the writer + predicate agree)", () => {
+    const plan = planFork({
+      parentSessionId: "parent",
+      parentEvents: [ev(1, "user.message", { text: "seed" })],
+      forkSeq: 1,
+      childSessionId: "child",
+    });
+    // The copied seed carries the origin; the appended session.forkedFrom marker does not.
+    expect(hasForkOrigin(plan.events[0] as { payload: Record<string, unknown> })).toBe(true);
+    expect(hasForkOrigin(plan.events.at(-1) as { payload: Record<string, unknown> })).toBe(false);
   });
 });
