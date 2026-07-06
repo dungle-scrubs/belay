@@ -40,14 +40,14 @@
 - [ ] C-15: `apps/web/src/components/command-menu/use-command-menu.ts` - route keys through the shared `useAutocompleteMenuKeys`.
 - [x] C-16: node-side `resolveServiceUrl(name)` - own the `<SVC>_URL` override, close the CLI override gap.
 - [ ] C-21: `apps/agent-host/src/tools/shared.ts` - lift `clipLine`/`boundedText` host-wide; route ~8 re-implementations through it.
-- [ ] C-25: `apps/web` cap+ellipsis - collapse `derive.ts` `truncate` / `tool-args.ts` `truncateText` / `foldback.ts` inline copy to one.
+- [x] C-25: `apps/web` cap+ellipsis - collapse `derive.ts` `truncate` / `tool-args.ts` `truncateText` / `foldback.ts` inline copy to one.
 - [ ] C-26: `apps/agent-host/src/tools/video-inspect/errors.ts` - narrow the 7-class `Data.TaggedError` hierarchy to `VideoCancelledError` + `VideoDegraded`; delete the dead union.
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 10
-- Open candidates: 16
-- Current cutoff blockers: 16
+- Redesigned (done): 11
+- Open candidates: 15
+- Current cutoff blockers: 15
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 

@@ -1,4 +1,5 @@
 import type { TangentFoldMode } from "@trevor/session";
+import { truncate } from "@/derive";
 
 /**
  * Explicit tangent fold-back (plan 37, M8). Fold-back is deliberately NOT an automatic merge: a chosen
@@ -20,6 +21,5 @@ const PREVIEW_CAP = 200;
  * (observability only) - never the full tangent text, and never fed to a model.
  */
 export function foldBackPreview(text: string): string {
-  const oneLine = text.trim().replace(/\s+/g, " ");
-  return oneLine.length > PREVIEW_CAP ? `${oneLine.slice(0, PREVIEW_CAP)}…` : oneLine;
+  return truncate(text.trim().replace(/\s+/g, " "), PREVIEW_CAP);
 }

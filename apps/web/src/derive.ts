@@ -132,8 +132,12 @@ export function partitionArtifacts(artifacts: readonly ArtifactRef[]): {
   return { images, others };
 }
 
-/** Truncates `text` to `max` characters with an ellipsis. The one owner of the transcript's
- *  60-char cap idiom (the session-name preview and the tool summary share it). */
+/**
+ * Truncates `text` to `max` CONTENT characters plus a trailing ellipsis (so the result is up to `max+1`
+ * glyphs). The content-cap owner - the transcript's cap idiom, shared by the session-name preview, the
+ * tool summary, and the tangent fold-back preview. Distinct from `tool-args`' `truncateText`, which caps
+ * the TOTAL width (the ellipsis counts toward `max`) for labels that must fit exactly.
+ */
 export function truncate(text: string, max: number): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
