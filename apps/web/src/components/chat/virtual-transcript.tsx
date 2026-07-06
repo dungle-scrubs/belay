@@ -5,11 +5,13 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { isCompactEligible } from "@/components/chat/compact-display";
+import { compactLeadingGaps } from "@/components/chat/compact-spacing";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
 import { atBottomOf, liveEdgeOffset } from "@/scroll";
@@ -92,6 +94,16 @@ function estimateRowSize(
   return 76;
 }
 
+// The compact-mode trailing gap after a row (plan 58): rows sharing a type key sit flush (`pb-1`); a
+// type change opens exactly one blank line (`pb-6`). The px values mirror those Tailwind classes, and
+// `COMPACT_GAP_DELTA` is the extra height a gap-opening row adds to its size estimate so the pre-measure
+// layout tracks the rendered padding - kept arithmetic so it can't silently drift from the classes.
+const COMPACT_GAP_PB = "pb-6";
+const COMPACT_FLUSH_PB = "pb-1";
+const COMPACT_GAP_PX = 24;
+const COMPACT_FLUSH_PX = 4;
+const COMPACT_GAP_DELTA = COMPACT_GAP_PX - COMPACT_FLUSH_PX;
+
 export function VirtualTranscript({
   rows,
   scrollRef,
@@ -133,10 +145,21 @@ export function VirtualTranscript({
       return next;
     });
   }, []);
+  // The per-row leading-gap flags for compact mode (plan 58): `compactGaps[i]` is true when row `i` is a
+  // different type than row `i - 1`, so the gap AFTER row `i` is `compactGaps[i + 1]`. Null outside
+  // compact mode (the historical spacing applies then). Derived once per rows change.
+  const compactGaps = useMemo(() => (compact ? compactLeadingGaps(rows) : null), [compact, rows]);
+  // A row's content estimate plus its compact trailing gap (see `padClass` below). Not memoized: `rows`
+  // and `compactGaps` change every render (a new array per streamed token), so a `useCallback` here
+  // would rebuild every render anyway - the same shape the prior inline estimator had.
+  const estimateWithGap = (index: number): number => {
+    const base = estimateRowSize(rows[index], compact, expandedRows);
+    return compactGaps?.[index + 1] ? base + COMPACT_GAP_DELTA : base;
+  };
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: (index) => estimateRowSize(rows[index], compact, expandedRows),
+    estimateSize: estimateWithGap,
     getItemKey: (index) => {
       const row = rows[index];
       return row ? transcriptRowKey(row) : `missing:${index}`;
@@ -160,7 +183,7 @@ export function VirtualTranscript({
       if (!pinned) {
         return 0;
       }
-      const total = rows.reduce((sum, row) => sum + estimateRowSize(row, compact, expandedRows), 0);
+      const total = rows.reduce((sum, _row, index) => sum + estimateWithGap(index), 0);
       return Math.max(0, total - (testInitialRect?.height ?? 0));
     },
     initialRect: testInitialRect,
@@ -354,21 +377,25 @@ export function VirtualTranscript({
         if (!row) {
           return null;
         }
-        // Tight spacing for collapsed compact rows (so a compact transcript reads dense, not just
-        // stacked one-liners with full gaps) and for the existing consecutive-tool case.
-        const tight =
-          (compact &&
-            row.kind === "message" &&
-            isCompactEligible(row.message) &&
-            !expandedRows.has(row.message.id)) ||
-          (row.kind === "message" && row.compactAbove);
+        // The bottom gap after this row. In compact mode it is TYPE-AWARE (plan 58): a run of same-type
+        // rows sits flush (`pb-1`) and a type change opens exactly one blank line (`pb-6`), driven by
+        // `compactLeadingGaps` - so read-only tools group, same-name tools group, and MCP/other types
+        // each separate. Outside compact mode the historical spacing holds: a full gap, tightened only
+        // for the existing consecutive read-only tool case (`compactAbove`).
+        const padClass = compact
+          ? compactGaps?.[item.index + 1]
+            ? COMPACT_GAP_PB
+            : COMPACT_FLUSH_PB
+          : row.kind === "message" && row.compactAbove
+            ? "pb-2"
+            : "pb-8";
         return (
           <div
             key={item.key}
             ref={virtualizer.measureElement}
             data-index={item.index}
             data-transcript-virtual-row={row.kind}
-            className={cn("absolute top-0 left-0 flow-root w-full", tight ? "pb-2" : "pb-8")}
+            className={cn("absolute top-0 left-0 flow-root w-full", padClass)}
             style={{ transform: `translateY(${item.start}px)` }}
           >
             <TranscriptRowView
