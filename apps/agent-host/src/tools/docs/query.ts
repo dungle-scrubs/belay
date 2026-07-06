@@ -12,6 +12,7 @@
  * Not for: deciding when a corpus needs a refresh - freshness.ts.
  */
 
+import { idSlug } from "@trevor/session";
 import type { Page, PageView, QueryExcerpt } from "./corpus";
 
 /** Max characters of body text a single excerpt carries. */
@@ -99,14 +100,10 @@ function queryTerms(query: string): readonly string[] {
   return [...new Set(tokenize(query).filter((term) => term.length > 1 && !STOP_WORDS.has(term)))];
 }
 
-/** A filesystem/anchor-safe slug for a heading, used as the stable in-page citation locator. */
+/** A filesystem/anchor-safe slug for a heading (the stable in-page citation locator), via the shared
+ *  {@link idSlug} owner, capped to 60 chars. */
 function slug(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "")
-    .slice(0, 60);
+  return idSlug(input, "").slice(0, 60);
 }
 
 function isFence(line: string): boolean {

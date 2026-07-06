@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { shortHash } from "@trevor/session";
+import { idSlug, shortHash } from "@trevor/session";
 
 /**
  * The Trevor-managed worktree registry (D-091): persistent bookkeeping for worktrees Trevor
@@ -51,14 +51,9 @@ export function repoWorktreesDir(home: string, baseRepo: string): string {
   return join(home, ".worktrees", shortHash(baseRepo));
 }
 
-/** A filesystem-safe slug for a branch name (`feat/x` -> `feat-x`). */
+/** A filesystem-safe slug for a branch name (`feat/x` -> `feat-x`), via the shared slug owner. */
 export function branchSlug(branch: string): string {
-  return (
-    branch
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "wt"
-  );
+  return idSlug(branch, "wt");
 }
 
 /** The path a new worktree for `branch` in `baseRepo` with `id` lives at (grouped + slugged). */

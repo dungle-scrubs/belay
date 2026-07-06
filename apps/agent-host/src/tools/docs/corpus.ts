@@ -11,6 +11,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { idSlug } from "@trevor/session";
 
 /**
  * Schema/format version stamped on every persisted corpus and page. A future shape change bumps
@@ -216,14 +217,10 @@ export function canonicalUrl(raw: string): string {
   return url.toString();
 }
 
-/** A filesystem-safe, human-readable slug for an id prefix (lowercase alphanumeric, dash-separated). */
+/** A filesystem-safe, human-readable slug for an id prefix (lowercase alphanumeric, dash-separated),
+ *  via the shared {@link idSlug} owner, capped to 40 chars. */
 function slug(input: string): string {
-  return input
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/gu, "-")
-    .replace(/^-+|-+$/gu, "")
-    .slice(0, 40);
+  return idSlug(input, "").slice(0, 40);
 }
 
 /**
