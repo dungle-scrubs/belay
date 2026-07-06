@@ -31,6 +31,8 @@ export interface TranscriptRowConfig {
   readonly onMenuAction?: (command: string, args: string) => void;
   /** Opens the tool detail takeover for a detail-eligible row (plan 08). */
   readonly onOpenDetail?: (message: Message) => void;
+  /** Opens the inline-agent detail takeover for a child session (plan 09.4 M6). */
+  readonly onOpenAgent?: (childSessionId: string) => void;
   /** Compact transcript mode (plan 05): non-primary rows collapse to one line. Off by default. */
   readonly compact?: boolean;
 }
@@ -105,6 +107,7 @@ export function VirtualTranscript({
     onDoctorRefresh,
     onMenuAction,
     onOpenDetail,
+    onOpenAgent,
     compact = false,
   } = rowConfig;
   const lastRowIdRef = useRef<string | null>(null);
@@ -379,6 +382,7 @@ export function VirtualTranscript({
               expandedRows={expandedRows}
               onToggleRow={toggleRow}
               onOpenDetail={onOpenDetail}
+              onOpenAgent={onOpenAgent}
             />
           </div>
         );

@@ -20,6 +20,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { LiveAgentDetail } from "@/agent-detail/live-agent-detail";
 import { ArchiveBrowser } from "@/archive/archive-browser";
 import { buildArchiveRows } from "@/archive/archive-rows";
 import { useArchiveActions } from "@/archive/use-archive-actions";
@@ -784,6 +785,24 @@ export function App() {
   // takeover closes itself if its source row ever leaves the transcript (e.g. /clear).
   const [detailId, setDetailId] = useState<string | null>(null);
   const detail = useMemo(() => findDetailModel(transcript, detailId), [detailId, transcript]);
+  // The inline-agent detail takeover (plan 09.4 M6): hold the delegated CHILD session id, and resolve
+  // its agent name LIVE from the transcript's inline-agent block (like `detail` above) so the header
+  // stays correct and a `/clear` that drops the row can close the takeover.
+  const [agentDetailChild, setAgentDetailChild] = useState<string | null>(null);
+  const agentDetailName = useMemo(() => {
+    if (agentDetailChild === null) {
+      return undefined;
+    }
+    for (const message of transcript) {
+      if (message.kind === "inlineAgent") {
+        const entry = message.agents.find((a) => a.childSessionId === agentDetailChild);
+        if (entry) {
+          return entry.agent;
+        }
+      }
+    }
+    return undefined;
+  }, [transcript, agentDetailChild]);
   // A promoted background job's detail takeover (plan 09 M8): hold the job id and re-derive its detail
   // model from the live job snapshots, so the takeover updates as the host re-announces (run -> exit).
   const [jobDetailId, setJobDetailId] = useState<string | null>(null);
@@ -1271,6 +1290,7 @@ export function App() {
     setChooserOpen(false);
     modal.setArchiveOpen(false);
     setJobDetailId(null);
+    setAgentDetailChild(null);
     setDetailId(message.id);
   };
   // A promoted job's detail (plan 09 M8): the SAME tool-detail takeover, opened from a support-panel job
@@ -1279,8 +1299,19 @@ export function App() {
     setChooserOpen(false);
     modal.setArchiveOpen(false);
     setDetailId(null);
+    setAgentDetailChild(null);
     setJobDetailId(jobId);
   };
+  // Open the inline-agent detail takeover from a row click (plan 09.4 M6), closing any other center
+  // takeover first (only one at a time), mirroring onOpenDetail.
+  const onOpenAgent = (childSessionId: string) => {
+    setChooserOpen(false);
+    modal.setArchiveOpen(false);
+    setDetailId(null);
+    setJobDetailId(null);
+    setAgentDetailChild(childSessionId);
+  };
+  const closeAgentDetail = () => setAgentDetailChild(null);
   const onKillJob = (jobId: string) => void command("/jobs-stop", jobId);
   const closeJobDetail = () => setJobDetailId(null);
   const closeDetail = () => {
@@ -1309,6 +1340,15 @@ export function App() {
   const jobDetailView =
     jobDetail !== null ? (
       <ToolDetailView model={jobDetail} onBack={closeJobDetail} className="h-full" />
+    ) : undefined;
+  const agentDetailView =
+    agentDetailChild !== null ? (
+      <LiveAgentDetail
+        childSessionId={agentDetailChild}
+        {...(agentDetailName !== undefined ? { agent: agentDetailName } : {})}
+        onBack={closeAgentDetail}
+        onOpenPath={(path) => void openInEditor(path)}
+      />
     ) : undefined;
 
   // Tangents (plan 37). Opening a tangent (from a selection) or the discovery list closes any other
@@ -1510,6 +1550,7 @@ export function App() {
             onDoctorRefresh: () => void command("/doctor", "refresh"),
             onMenuAction: (cmd: string, args: string) => void command(cmd, args),
             onOpenDetail,
+            onOpenAgent,
             showThinking: showThinkingOn,
             compact,
           },
@@ -1621,6 +1662,7 @@ export function App() {
             tangentDiscoveryView ??
             jobDetailView ??
             detailView ??
+            agentDetailView ??
             archiveBrowser ??
             chooser)
           )

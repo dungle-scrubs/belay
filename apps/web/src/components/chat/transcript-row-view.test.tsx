@@ -838,3 +838,31 @@ test("09.4 M3: a background delegation still renders the linked block", () => {
   assert.ok(screen.getByText(/running in background/), "the async delegation verb");
   assert.ok(screen.getByText("scan the repo"));
 });
+
+test("09.4 M6: clicking an inline-agent row fires onOpenAgent with its child session id", () => {
+  let opened: string | null = null;
+  const row: TranscriptRow = {
+    kind: "message",
+    id: "message:ia1",
+    compactAbove: false,
+    message: {
+      kind: "inlineAgent",
+      id: "ia1",
+      parentRunId: "r1",
+      agents: [{ childSessionId: "s::sub::zzz", agent: "explorer", status: "done" }],
+    },
+  };
+  render(
+    <TranscriptRowView
+      row={row}
+      showThinking
+      onOpenPath={noop}
+      onDoctorRefresh={noop}
+      onOpenAgent={(id) => {
+        opened = id;
+      }}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button"));
+  assert.equal(opened, "s::sub::zzz");
+});

@@ -98,6 +98,8 @@ export interface TranscriptRowViewProps {
   /** Opens the tool detail takeover for a detail-eligible row (tool call / shell lane), plan 08. The
    *  inspect affordance is only shown on eligible rows, so non-eligible rows are never cluttered. */
   readonly onOpenDetail?: (message: Message) => void;
+  /** Opens the inline-agent detail takeover for a child session id (plan 09.4 M6). */
+  readonly onOpenAgent?: (childSessionId: string) => void;
 }
 
 export function TranscriptRowView({
@@ -112,6 +114,7 @@ export function TranscriptRowView({
   expandedRows,
   onToggleRow,
   onOpenDetail,
+  onOpenAgent,
 }: TranscriptRowViewProps) {
   // Compact mode collapses an eligible message row to a one-line CompactRow; its detail, when expanded,
   // is the SAME full renderer (a recursive render with compact off), so no renderer is duplicated. The
@@ -346,10 +349,10 @@ export function TranscriptRowView({
 
   if (message.kind === "inlineAgent") {
     // An inline delegation (plan 09.4): the compact inline-agent row(s), grouped when a turn spawned
-    // several. The onOpen drill-in to the child's live transcript is wired in M6.
+    // several. Clicking a row opens the child's live transcript takeover (M6) via onOpenAgent.
     return (
       <div className="pl-3.5">
-        <InlineAgentGroup agents={message.agents} />
+        <InlineAgentGroup agents={message.agents} onOpen={onOpenAgent} />
       </div>
     );
   }
