@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Server } from "node:http";
+import type { Server, ServerResponse } from "node:http";
 import { createService, json, type Route, readJson } from "@trevor/server-kit";
 import {
   DELETE_PATTERN,
@@ -19,7 +19,7 @@ import {
 import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
 import { WebSocketServer } from "ws";
 import { InventoryProjection } from "./inventory";
-import { SessionLog } from "./log";
+import { SessionLog, StoreCircuitOpenError } from "./log";
 import { SessionHub } from "./session-hub";
 
 /**
@@ -51,6 +51,21 @@ const HOST_RUNTIME = RUNTIME_KIND.host;
 const CORS_METHODS = "GET, POST, OPTIONS";
 const DIAG_PATH = "/diag";
 
+// WebSocket close code 1013 "Try Again Later" - the stream-side twin of the HTTP 503 below.
+const WS_TRY_AGAIN_LATER = 1013;
+
+/** Maps the log's typed circuit-breaker fast-fail to HTTP 503 (plan 45.2 M3): graceful degradation, not
+ *  a crash or a misleading 400/500. Returns whether the error was handled so route catch-alls can keep
+ *  owning their own domain errors. `/health` and `GET /sessions` (in-memory projection) and `/diag` never
+ *  touch the gated log, so liveness and the drift doctor stay answerable while the circuit is open. */
+function respondIfOverloaded(res: ServerResponse, error: unknown): boolean {
+  if (!(error instanceof StoreCircuitOpenError)) {
+    return false;
+  }
+  json(res, 503, { error: "store overloaded", retryAfterMs: error.retryAfterMs });
+  return true;
+}
+
 /**
  * The session-store's assembled parts: the HTTP+WS `server` plus the `log` (durable substrate) and the
  * `projection` (in-memory read model) it serves `GET /sessions` from. Exposed by {@link buildSessionStore}
@@ -68,11 +83,17 @@ export function createSessionStore(dbPath: string): Server {
   return buildSessionStore(dbPath).server;
 }
 
+/** Test-only injection points for {@link buildSessionStore}. */
+export interface SessionStoreOptions {
+  /** The clock the log times queries (and the breaker cooldown) with; defaults to `Date.now`. */
+  readonly now?: () => number;
+}
+
 /** Builds the session-store and returns its parts (server + log + read model), for wiring and for tests
  *  that assert on the durable query counter / projection state. `createSessionStore` is the server-only view. */
-export function buildSessionStore(dbPath: string): SessionStore {
+export function buildSessionStore(dbPath: string, options: SessionStoreOptions = {}): SessionStore {
   // Telemetry is off (NOOP) unless TREVOR_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
-  const log = new SessionLog(dbPath, createTelemetrySink("session-store"));
+  const log = new SessionLog(dbPath, createTelemetrySink("session-store"), options.now);
   const hub = new SessionHub();
 
   // The in-memory inventory read model (plan 45.1, D-002): warmed once here by a single durable scan,
@@ -126,7 +147,11 @@ export function buildSessionStore(dbPath: string): SessionStore {
             projection.ensure(sessionId, createdAt);
             json(res, 200, { session: { sessionId } });
           })
-          .catch(() => json(res, 400, { error: "invalid JSON body" })),
+          .catch((error) => {
+            if (!respondIfOverloaded(res, error)) {
+              json(res, 400, { error: "invalid JSON body" });
+            }
+          }),
     },
     {
       method: "POST",
@@ -154,14 +179,19 @@ export function buildSessionStore(dbPath: string): SessionStore {
             // reflects it without a scan; the stored event carries the seq/createdAt the projection needs.
             projection.recordAppend(stored);
             // The event "returns over the stream": fan out to every subscriber, including the
-            // publisher's own socket (matching the Tether round-trip). The log owns the wire
-            // framing (D-023); the server just fans out the frame.
-            for (const frame of log.readFrames(sessionId, stored.seq - 1)) {
-              hub.publish(sessionId, frame);
-            }
+            // publisher's own socket (matching the Tether round-trip). Framed with the same shared
+            // `frames.event` the log's replay framing (D-023) maps through - a log test pins the
+            // equivalence - rather than re-reading the log: the admitted write is ONE breaker scope
+            // (plan 45.2 M3), so a trip during the append's own statements can't strand a stored
+            // event behind a fast-failed re-read (a 503 for a write that actually landed).
+            hub.publish(sessionId, frames.event(stored));
             json(res, 201, { ok: true, seq: stored.seq });
           })
-          .catch(() => json(res, 400, { error: "invalid JSON body" }));
+          .catch((error) => {
+            if (!respondIfOverloaded(res, error)) {
+              json(res, 400, { error: "invalid JSON body" });
+            }
+          });
       },
     },
     {
@@ -172,20 +202,26 @@ export function buildSessionStore(dbPath: string): SessionStore {
       match: DELETE_PATTERN,
       handler: ({ res, params }) => {
         const sessionId = decodeURIComponent(params[0] as string);
-        const row = log.summaryRow(sessionId);
-        const verdict = permanentDeleteEligibility(row ? summarize(row) : null);
-        if (!verdict.ok) {
-          const status = verdict.reason === "not-found" ? 404 : 409;
-          json(res, status, {
-            ok: false,
-            reason: verdict.reason,
-            detail: verdict.detail,
-          } satisfies PermanentDeleteResult);
-          return;
+        try {
+          const row = log.summaryRow(sessionId);
+          const verdict = permanentDeleteEligibility(row ? summarize(row) : null);
+          if (!verdict.ok) {
+            const status = verdict.reason === "not-found" ? 404 : 409;
+            json(res, status, {
+              ok: false,
+              reason: verdict.reason,
+              detail: verdict.detail,
+            } satisfies PermanentDeleteResult);
+            return;
+          }
+          log.deleteSession(sessionId);
+          projection.remove(sessionId);
+          json(res, 200, { ok: true, sessionId } satisfies PermanentDeleteResult);
+        } catch (error) {
+          if (!respondIfOverloaded(res, error)) {
+            throw error;
+          }
         }
-        log.deleteSession(sessionId);
-        projection.remove(sessionId);
-        json(res, 200, { ok: true, sessionId } satisfies PermanentDeleteResult);
       },
     },
   ];
@@ -214,8 +250,19 @@ export function buildSessionStore(dbPath: string): SessionStore {
     // are all synchronous on the single event-loop thread, so no append can
     // interleave between the replay snapshot and joining the live fan-out. The log
     // owns the wire framing (D-023); the server just sends the frames verbatim.
-    for (const frame of log.readFrames(sessionId, afterSeq)) {
-      socket.send(JSON.stringify(frame));
+    // An open circuit (plan 45.2 M3) fast-fails the replay read: degrade by closing
+    // the socket with 1013 "Try Again Later" (the client reconnects after the
+    // cooldown) instead of crashing the whole store on an unhandled throw.
+    try {
+      for (const frame of log.readFrames(sessionId, afterSeq)) {
+        socket.send(JSON.stringify(frame));
+      }
+    } catch (error) {
+      if (error instanceof StoreCircuitOpenError) {
+        socket.close(WS_TRY_AGAIN_LATER, "store overloaded");
+        return;
+      }
+      throw error;
     }
     socket.send(JSON.stringify(frames.replayComplete()));
     hub.attach(

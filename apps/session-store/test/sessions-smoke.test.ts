@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type SessionEvent, streamTransport } from "@trevor/session";
 import { afterEach, beforeEach, test } from "vitest";
+import { WebSocket } from "ws";
+import { BREAKER_COOLDOWN_MS, QUERY_BUDGET_MS } from "../src/log";
 import { identity as id, inventoryById, startStore, waitForLiveHost } from "./support";
 
 /**
@@ -223,4 +225,73 @@ test("GET /diag returns the store diagnostic payload without changing /health", 
   const health = await fetch(`${store.url}/health`);
   assert.equal(health.status, 200);
   assert.deepEqual(await health.json(), { ok: true });
+});
+
+test("an open circuit degrades to typed 503s and a 1013 stream close; /health, /diag and GET /sessions stay up; the cooldown heals it", async () => {
+  await store.close(); // swap the default store for one whose query/breaker clock is hand-cranked
+  let time = 0;
+  let step = 0;
+  const now = () => {
+    const value = time;
+    time += step;
+    return value;
+  };
+  store = await startStore(":memory:", { now });
+
+  const transport = streamTransport(store.url);
+  await transport.ensureSession("cb");
+
+  // Trip the breaker: the next write's statements run over budget. The tripping write itself still
+  // lands (post-slow-query policy: an admitted operation always completes) - only later ops fast-fail.
+  step = QUERY_BUDGET_MS + 100;
+  await transport.publishEvent("cb", {
+    type: "user.message",
+    producerId: "web",
+    payload: { text: "trip" },
+  });
+  step = 0;
+
+  // While open: reads and writes through the gated log fast-fail as typed 503s - never a crash/400/500.
+  const create = await fetch(`${store.url}/sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: "rejected" }),
+  });
+  assert.equal(create.status, 503);
+  const overloaded = (await create.json()) as { error?: string; retryAfterMs?: number };
+  assert.equal(overloaded.error, "store overloaded");
+  assert.ok((overloaded.retryAfterMs ?? 0) > 0, "the 503 carries the remaining cooldown");
+
+  const publish = await fetch(`${store.url}/sessions/cb/events`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ type: "user.message", producerId: "web", payload: {} }),
+  });
+  assert.equal(publish.status, 503);
+
+  const purge = await fetch(`${store.url}/sessions/cb/delete`, { method: "POST" });
+  assert.equal(purge.status, 503);
+
+  // A joining stream replays through the gated log: refused gracefully with 1013 "Try Again Later".
+  const closedWith = await new Promise<number>((resolve, reject) => {
+    const socket = new WebSocket(`${store.url.replace("http", "ws")}/sessions/cb/stream`);
+    socket.on("close", (code) => resolve(code));
+    socket.on("error", reject);
+  });
+  assert.equal(closedWith, 1013);
+
+  // Liveness, the drift doctor, and the in-memory inventory never route through the gated log.
+  assert.equal((await fetch(`${store.url}/health`)).status, 200);
+  assert.equal((await fetch(`${store.url}/diag`)).status, 200);
+  assert.equal((await fetch(`${store.url}/sessions`)).status, 200);
+
+  // After the cooldown the half-open probe closes the circuit and normal service resumes.
+  time += BREAKER_COOLDOWN_MS;
+  const healed = await fetch(`${store.url}/sessions`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ sessionId: "healed" }),
+  });
+  assert.equal(healed.status, 200);
+  await transport.publishEvent("cb", { type: "user.message", producerId: "web", payload: {} });
 });

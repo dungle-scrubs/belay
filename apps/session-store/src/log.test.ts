@@ -6,9 +6,36 @@ import { frames } from "@trevor/session";
 import { NOOP_SINK, SPAN_NAMES } from "@trevor/session/telemetry";
 import { recordingTelemetrySink, tempDir } from "@trevor/test-kit";
 import { test } from "vitest";
-import { SESSION_LOG_SCHEMA_VERSION, SessionLog } from "./log";
+import {
+  BREAKER_COOLDOWN_MS,
+  QUERY_BUDGET_MS,
+  SESSION_LOG_SCHEMA_VERSION,
+  SessionLog,
+  StoreCircuitOpenError,
+} from "./log";
 
 const at = "2026-06-24T00:00:00.000Z";
+
+/** A hand-cranked clock for the breaker tests: each `now()` read returns the current time then advances
+ *  it by `step` (query() reads it twice, so one measured query spans exactly `step` ms), and `advance`
+ *  jumps the clock to elapse a cooldown without executing any query. */
+function testClock() {
+  let time = 0;
+  let step = 0;
+  return {
+    now: () => {
+      const value = time;
+      time += step;
+      return value;
+    },
+    setStep: (ms: number) => {
+      step = ms;
+    },
+    advance: (ms: number) => {
+      time += ms;
+    },
+  };
+}
 
 test("ensureSession is idempotent", () => {
   const log = new SessionLog(":memory:");
@@ -287,4 +314,215 @@ test("a fast synchronous query emits no store.slow_query span", () => {
   log.append("s1", { type: "user.message", producerId: "web", payload: {} }, "e1", at);
   log.inventory();
   assert.equal(recorder.named(SPAN_NAMES.storeSlowQuery).length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Plan 45.2 M3 - the circuit breaker over the bounded-query policy.
+// ---------------------------------------------------------------------------
+
+test("A-001 spike: node:sqlite's vdbeOp limit caps compiled program size at prepare - it cannot abort runtime scan work", () => {
+  const dir = tempDir("trevor-vdbe-spike-");
+  const path = join(dir, "spike.db");
+  try {
+    // Populate uncapped: 20k rows, enough that a full scan does real runtime work.
+    const setup = new DatabaseSync(path);
+    setup.exec("CREATE TABLE t (id INTEGER PRIMARY KEY, a INTEGER)");
+    setup.exec("BEGIN");
+    const insert = setup.prepare("INSERT INTO t (a) VALUES (?)");
+    for (let i = 0; i < 20_000; i += 1) {
+      insert.run(i);
+    }
+    setup.exec("COMMIT");
+    setup.close();
+
+    // The API half of A-001 holds: the cap is settable at construction and readable at runtime.
+    const db = new DatabaseSync(path, { limits: { vdbeOp: 60 } });
+    try {
+      assert.equal(db.limits.vdbeOp, 60);
+
+      // The cap acts at PREPARE: a statement whose compiled program exceeds it is rejected up front
+      // (SQLITE_NOMEM surfaced as ERR_SQLITE_ERROR "out of memory")...
+      const wide = `SELECT ${Array.from({ length: 80 }, (_, i) => `a + ${i}`).join(", ")} FROM t WHERE id = 1`;
+      assert.throws(
+        () => db.prepare(wide),
+        (error: unknown) => (error as { code?: string }).code === "ERR_SQLITE_ERROR",
+        "an over-cap compiled program is rejected at prepare",
+      );
+
+      // ...while an indexed point lookup compiles under it and runs fine...
+      const point = db.prepare("SELECT a FROM t WHERE id = 12345").get() as { a: number };
+      assert.equal(point.a, 12344);
+
+      // ...and the case M3 needed FAILS: a full scan compiles to a tiny looping program, so all 20k
+      // rows of runtime work COMPLETE under the 60-op cap. vdbeOp is SQLITE_LIMIT_VDBE_OP - a
+      // prepare-time bound on program LENGTH, not an executed-opcode budget - so it can never abort
+      // the wedge-class scan (2026-07-06). A-001 is REJECTED: the seam is breaker-only, per the
+      // plan's escape hatch, and the M2 watchdog is the backstop for a query already mid-flight.
+      const scan = db.prepare("SELECT COUNT(*) AS n FROM t WHERE a % 7 = 3").get() as { n: number };
+      assert.equal(scan.n, 2857, "the full scan ran to completion despite the tiny cap");
+    } finally {
+      db.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("the breaker opens on an over-budget query, fast-fails during the cooldown, then a half-open probe closes it", () => {
+  const recorder = recordingTelemetrySink();
+  const clock = testClock();
+  const log = new SessionLog(":memory:", recorder.sink, clock.now, null);
+  log.append("s1", { type: "user.message", producerId: "web", payload: {} }, "e1", at);
+
+  // One over-budget query trips the breaker; post-slow-query policy: it still returns its result.
+  clock.setStep(QUERY_BUDGET_MS + 100);
+  assert.equal(log.readAfter("s1", 0).length, 1, "the tripping query itself completes");
+  clock.setStep(0);
+
+  const opens = recorder.named(SPAN_NAMES.storeCircuitOpen);
+  assert.equal(opens.length, 1, "the trip emits one circuit_open span");
+  assert.equal(opens[0]?.attributes.query, "readAfter", "the span names the triggering query");
+  assert.equal(opens[0]?.attributes.budget_ms, QUERY_BUDGET_MS);
+  assert.equal(opens[0]?.attributes.cooldown_ms, BREAKER_COOLDOWN_MS);
+  assert.ok((opens[0]?.durationMs ?? 0) > QUERY_BUDGET_MS, "the span carries the slow duration");
+
+  // During the cooldown every operation fast-fails typed - without ever reaching SQLite.
+  const queriesBefore = log.queries;
+  assert.throws(
+    () => log.readAfter("s1", 0),
+    (error: unknown) =>
+      error instanceof StoreCircuitOpenError &&
+      error.sinceQuery === "readAfter" &&
+      error.retryAfterMs > 0 &&
+      error.retryAfterMs <= BREAKER_COOLDOWN_MS,
+    "reads fast-fail with the typed breaker error",
+  );
+  assert.equal(log.queries, queriesBefore, "a fast-fail executes zero statements");
+
+  // The drift/health surface is deliberately ungated: /diag keeps answering while the circuit is open.
+  assert.equal(log.diag().indexHealthy, true);
+
+  // After the cooldown the next operation is the single half-open probe; in budget, it closes the circuit.
+  clock.advance(BREAKER_COOLDOWN_MS);
+  assert.equal(log.readAfter("s1", 0).length, 1, "the half-open probe runs and returns");
+  const closes = recorder.named(SPAN_NAMES.storeCircuitClosed);
+  assert.equal(closes.length, 1, "closing emits one circuit_closed span");
+  assert.equal(
+    closes[0]?.attributes.query,
+    "readAfter",
+    "the close span names the query that tripped",
+  );
+  assert.ok(
+    (closes[0]?.durationMs ?? 0) >= BREAKER_COOLDOWN_MS,
+    "the close span carries the total open duration",
+  );
+  assert.equal(log.readAfter("s1", 0).length, 1, "the circuit is genuinely closed again");
+});
+
+test("an over-budget half-open probe re-opens the circuit for a fresh cooldown", () => {
+  const recorder = recordingTelemetrySink();
+  const clock = testClock();
+  const log = new SessionLog(":memory:", recorder.sink, clock.now, null);
+  log.append("s1", { type: "user.message", producerId: "web", payload: {} }, "e1", at);
+
+  clock.setStep(QUERY_BUDGET_MS + 100);
+  log.readAfter("s1", 0); // trips
+  clock.setStep(0);
+  clock.advance(BREAKER_COOLDOWN_MS);
+
+  // The probe itself is over budget: it completes (post-slow-query policy) but re-opens the circuit.
+  clock.setStep(QUERY_BUDGET_MS + 100);
+  assert.equal(log.readAfter("s1", 0).length, 1);
+  clock.setStep(0);
+
+  assert.equal(
+    recorder.named(SPAN_NAMES.storeCircuitOpen).length,
+    2,
+    "the failed probe emits a second circuit_open",
+  );
+  assert.equal(
+    recorder.named(SPAN_NAMES.storeCircuitClosed).length,
+    0,
+    "a failed probe never closes the circuit",
+  );
+  assert.throws(() => log.readAfter("s1", 0), StoreCircuitOpenError);
+});
+
+test("a tripped breaker rejects a write BEFORE any mutation - nothing durable, no seq consumed, dense after recovery", () => {
+  const dir = tempDir("trevor-breaker-write-");
+  const path = join(dir, "sessions.db");
+  try {
+    const clock = testClock();
+    const log = new SessionLog(path, NOOP_SINK, clock.now, null);
+    log.append("s1", { type: "user.message", producerId: "web", payload: {} }, "e1", at); // seq 1
+
+    clock.setStep(QUERY_BUDGET_MS + 100);
+    log.readAfter("s1", 0); // a slow READ trips the breaker
+    clock.setStep(0);
+
+    // Every write entrypoint fast-fails typed, and no statement reaches SQLite.
+    const queriesBefore = log.queries;
+    assert.throws(
+      () => log.append("s2", { type: "user.message", producerId: "web", payload: {} }, "e2", at),
+      StoreCircuitOpenError,
+    );
+    assert.throws(() => log.ensureSession("s2", at), StoreCircuitOpenError);
+    assert.throws(() => log.deleteSession("s1"), StoreCircuitOpenError);
+    assert.equal(log.queries, queriesBefore, "a rejected write executes zero statements");
+
+    // An independent connection proves the rejected writes left NOTHING half-applied in the durable log.
+    const raw = new DatabaseSync(path);
+    const sessions = raw
+      .prepare("SELECT COUNT(*) AS n FROM sessions WHERE sessionId = 's2'")
+      .get() as { n: number };
+    const events = raw.prepare("SELECT COUNT(*) AS n FROM events WHERE sessionId = 's2'").get() as {
+      n: number;
+    };
+    const s1Events = raw
+      .prepare("SELECT COUNT(*) AS n FROM events WHERE sessionId = 's1'")
+      .get() as { n: number };
+    raw.close();
+    assert.equal(sessions.n, 0, "the rejected append/ensure wrote no session row");
+    assert.equal(events.n, 0, "the rejected append wrote no event row");
+    assert.equal(s1Events.n, 1, "the rejected delete removed nothing");
+
+    // After the cooldown the write succeeds and MAX(seq)+1 is intact: seq stays dense, no gap.
+    clock.advance(BREAKER_COOLDOWN_MS);
+    const next = log.append(
+      "s1",
+      { type: "user.message", producerId: "web", payload: {} },
+      "e3",
+      at,
+    );
+    assert.equal(next.seq, 2, "seq is dense - the rejected write consumed no seq");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("a trip during an admitted write never half-applies it: the write completes, only the NEXT operation fast-fails", () => {
+  const clock = testClock();
+  const log = new SessionLog(":memory:", NOOP_SINK, clock.now, null);
+
+  // Every statement of this append is over budget: the FIRST one trips the breaker, but the already-
+  // admitted write still runs to completion (admission is per operation, never mid-operation) - the
+  // alternative would strand a durable session row with no event row and no read-model entry.
+  clock.setStep(QUERY_BUDGET_MS + 100);
+  const stored = log.append(
+    "s1",
+    { type: "user.message", producerId: "web", payload: {} },
+    "e1",
+    at,
+  );
+  clock.setStep(0);
+  assert.equal(stored.seq, 1, "the admitted write fully applied");
+
+  assert.throws(() => log.readAfter("s1", 0), StoreCircuitOpenError);
+
+  clock.advance(BREAKER_COOLDOWN_MS);
+  assert.deepEqual(
+    log.readAfter("s1", 0).map((e) => e.seq),
+    [1],
+    "the durable log holds exactly the completed write",
+  );
 });

@@ -24,6 +24,14 @@ import {
  * MAX(seq)+1 per session inside a single synchronous call, so it is dense and
  * gap-free with no races (node:sqlite is synchronous; one append never interleaves
  * with another). WAL mode lets a reader replay while a writer appends.
+ *
+ * Because every query runs synchronously on the one event-loop thread, this module
+ * also owns the store's bounded-query policy (plan 45.2 M3): the {@link SessionLog.query}
+ * seam measures each statement, observes it past {@link SLOW_QUERY_MS} (`store.slow_query`),
+ * and past {@link QUERY_BUDGET_MS} trips a circuit breaker that fast-fails subsequent
+ * operations (typed {@link StoreCircuitOpenError}, HTTP 503 at the server) for
+ * {@link BREAKER_COOLDOWN_MS} before half-open probing - so one wedge-class query can slow
+ * the store once, but cannot keep the loop pinned by a stampede of its siblings.
  */
 
 // A stored event is the shared SessionEvent, and the fields a publisher supplies
@@ -81,7 +89,59 @@ const typeLookupSql = (order: "ASC" | "DESC"): string =>
  * ~1.67s scan 45.1 removed, so the signal marks a real regression, not routine work.
  */
 const SLOW_QUERY_MS = 100;
+
+/**
+ * The circuit-breaker budget (plan 45.2 M3, D-002): a query completing PAST this opens the breaker and
+ * subsequent operations fast-fail for {@link BREAKER_COOLDOWN_MS}. 10x the slow-query OBSERVATION
+ * threshold - observation and action are deliberately split so a legit slow-but-necessary query (a cold
+ * startup warm scan, a big replay) is spanned but never tripped on, while the wedge-class scans this
+ * exists for (~1.67s each on 2026-07-06) always trip. Tuning is observable: every crossing of the lower
+ * threshold already emits `store.slow_query`, so the gap between the two is measured, not guessed.
+ */
+export const QUERY_BUDGET_MS = 1_000;
+
+/** How long an open circuit fast-fails before admitting one half-open probe. Long enough to shed a
+ *  stampede of wedge-class queries (each ~1.67s on 2026-07-06), short enough that one spurious trip
+ *  costs a blip: the first in-budget probe after the cooldown closes the circuit immediately. */
+export const BREAKER_COOLDOWN_MS = 5_000;
+
 export const SESSION_LOG_SCHEMA_VERSION = 1;
+
+/**
+ * The typed "store overloaded" fast-fail (plan 45.2 M3): thrown by an operation admitted while the
+ * circuit is open, BEFORE any statement runs - a rejected write never touches SQLite, the in-memory
+ * read model, or the `MAX(seq)+1` seq assignment. The server maps it to HTTP 503.
+ */
+export class StoreCircuitOpenError extends Error {
+  override readonly name = "StoreCircuitOpenError";
+
+  constructor(
+    /** The operation that was rejected at admission. */
+    readonly operation: string,
+    /** The query whose over-budget run opened the circuit. */
+    readonly sinceQuery: string,
+    /** Remaining cooldown before the next half-open probe is admitted. */
+    readonly retryAfterMs: number,
+  ) {
+    super(
+      `store overloaded: circuit opened by slow query "${sinceQuery}"; retry in ${retryAfterMs}ms`,
+    );
+  }
+}
+
+/**
+ * The breaker's state: `open` fast-fails admissions until the cooldown elapses, then the next admission
+ * becomes the single `half-open` probe - an in-budget probe query closes the circuit, an over-budget one
+ * re-opens it. `openedAtMs`/`sinceQuery` ride along so the close span can report how long the circuit
+ * was open and which query tripped it.
+ */
+type BreakerState =
+  | { readonly kind: "closed" }
+  | {
+      readonly kind: "open" | "half-open";
+      readonly openedAtMs: number;
+      readonly sinceQuery: string;
+    };
 
 /** A node-backed git runner scoped to `cwd`, using argv arrays with no shell parsing. */
 function nodeGitRunner(cwd: string): GitRunner {
@@ -132,6 +192,9 @@ export class SessionLog {
 
   /** Monotonically increasing count of statements that crossed the slow-query threshold. */
   private slowQueryCount = 0;
+
+  /** The circuit breaker over the bounded-query policy - see {@link admit} and {@link query}. */
+  private breaker: BreakerState = { kind: "closed" };
 
   /** Opens (creating if absent) the SQLite log at `path`, or `:memory:` for tests. Telemetry is off by
    *  default (NOOP_SINK); the append span carries only the event type, never the session id or payload.
@@ -187,17 +250,30 @@ export class SessionLog {
   }
 
   /**
-   * The single instrumentation seam every SQLite read/write in this class runs through (D-004): it bumps
-   * {@link queries} and times the call, emitting a `store.slow_query` span (query name + durationMs) when
-   * one synchronous query crosses {@link SLOW_QUERY_MS}. Centralizing it here is the transport-isolation
-   * guardrail - the event loop can't be monopolized by an unmeasured store query, and a regression shows
-   * up as a slow-query span rather than a silent stall. `name` is a fixed, low-cardinality query label.
+   * The single instrumentation seam every SQLite read/write in this class runs through (D-004), now the
+   * ONE bounded-query policy (plan 45.2 M3, D-002) composed of two thresholds on the same measurement:
+   * it bumps {@link queries} and times the call, emitting a `store.slow_query` span (query name +
+   * durationMs) when one synchronous query crosses {@link SLOW_QUERY_MS} (observe), and tripping the
+   * circuit breaker when it crosses {@link QUERY_BUDGET_MS} (act) - see {@link settleBreaker}.
+   * Centralizing it here is the transport-isolation guardrail: the event loop can't be monopolized by an
+   * unmeasured store query, and a regression shows up as a slow-query span rather than a silent stall.
+   * `name` is a fixed, low-cardinality query label.
+   *
+   * The policy is POST-slow-query and stays synchronous (45.1 D-007, no worker thread): a statement
+   * already mid-flight cannot be aborted in-thread, so the query that trips the breaker still completes
+   * and returns its result - only SUBSEQUENT operations fast-fail (at {@link admit}). The M2 supervisor
+   * watchdog is the backstop for the residual: one query so slow the process wedges before it returns.
+   * A per-statement hard cap was spiked and rejected (A-001): Node 24's `node:sqlite` `limits.vdbeOp` is
+   * SQLite's `SQLITE_LIMIT_VDBE_OP` - a prepare-time cap on COMPILED PROGRAM LENGTH, not executed
+   * opcodes - so a full-table scan (a tiny looping program) sails under any cap that lets legit
+   * statements compile; it can bound nothing at runtime.
    */
   private query<T>(name: string, run: () => T): T {
     this.queryCount += 1;
     const startedAt = this.now();
     const result = run();
-    const durationMs = this.now() - startedAt;
+    const endedAt = this.now();
+    const durationMs = endedAt - startedAt;
     if (durationMs > SLOW_QUERY_MS) {
       this.slowQueryCount += 1;
       safeEmitSpan(this.sink, {
@@ -207,11 +283,79 @@ export class SessionLog {
         durationMs,
       });
     }
+    this.settleBreaker(name, durationMs, endedAt);
     return result;
+  }
+
+  /**
+   * Admission for one PUBLIC operation - the breaker's fast-fail gate, called as the first line of every
+   * public read/write, always BEFORE any statement runs. Ordering is the write-path correctness property
+   * (plan 45.2 M3): a rejected `append`/`ensureSession`/`deleteSession` throws before its first mutation,
+   * so a trip can never half-apply the in-memory read model or consume a `MAX(seq)+1` seq.
+   *
+   * Admission is per OPERATION, not per statement: once admitted, a multi-statement operation (an append's
+   * ensure + max-seq + insert) always runs to completion even if one of its own statements trips the
+   * breaker mid-way - the trip only rejects the NEXT operation. Gating each inner statement instead could
+   * strand a write between its statements (session row durable, event row rejected), exactly the
+   * half-applied state this seam exists to prevent.
+   *
+   * `diag()` and `explainTypeLookup()` are deliberately NOT admitted: the drift/health surface keeps
+   * answering while the circuit is open.
+   */
+  private admit(operation: string): void {
+    if (this.breaker.kind !== "open") {
+      return;
+    }
+    const waitedMs = this.now() - this.breaker.openedAtMs;
+    if (waitedMs < BREAKER_COOLDOWN_MS) {
+      throw new StoreCircuitOpenError(
+        operation,
+        this.breaker.sinceQuery,
+        BREAKER_COOLDOWN_MS - waitedMs,
+      );
+    }
+    // Cooldown elapsed: this operation is the single half-open probe. Its first measured query decides -
+    // in-budget closes the circuit, over-budget re-opens it (both in settleBreaker).
+    this.breaker = { ...this.breaker, kind: "half-open" };
+  }
+
+  /** One measured query's breaker transition (the acting half of the bounded-query policy). Over budget:
+   *  `closed`/`half-open` trip to `open` (emitting `store.circuit_open` with the triggering query); an
+   *  already-open circuit just refreshes its cooldown clock (the remaining statements of the operation
+   *  that tripped it, still draining - no span spam). In budget: only a `half-open` probe transitions,
+   *  closing the circuit and emitting `store.circuit_closed` with the total open duration. */
+  private settleBreaker(name: string, durationMs: number, endedAtMs: number): void {
+    if (durationMs > QUERY_BUDGET_MS) {
+      const wasOpen = this.breaker.kind === "open";
+      this.breaker = { kind: "open", openedAtMs: endedAtMs, sinceQuery: name };
+      if (!wasOpen) {
+        safeEmitSpan(this.sink, {
+          name: SPAN_NAMES.storeCircuitOpen,
+          attributes: safeAttributes({
+            query: name,
+            budget_ms: QUERY_BUDGET_MS,
+            cooldown_ms: BREAKER_COOLDOWN_MS,
+          }),
+          status: "ok",
+          durationMs,
+        });
+      }
+      return;
+    }
+    if (this.breaker.kind === "half-open") {
+      safeEmitSpan(this.sink, {
+        name: SPAN_NAMES.storeCircuitClosed,
+        attributes: safeAttributes({ query: this.breaker.sinceQuery }),
+        status: "ok",
+        durationMs: endedAtMs - this.breaker.openedAtMs,
+      });
+      this.breaker = { kind: "closed" };
+    }
   }
 
   /** Creates the session if absent (idempotent); returns its id either way. */
   ensureSession(sessionId: string, nowIso: string): string {
+    this.admit("ensureSession");
     this.query("ensureSession", () =>
       this.db
         .prepare("INSERT OR IGNORE INTO sessions (sessionId, createdAt) VALUES (?, ?)")
@@ -220,8 +364,10 @@ export class SessionLog {
     return sessionId;
   }
 
-  /** Appends one event, assigning the next per-session seq; returns the stored row. */
+  /** Appends one event, assigning the next per-session seq; returns the stored row. The breaker is
+   *  checked here BEFORE the append span or any statement, so a rejected write mutates nothing. */
   append(sessionId: string, input: PublishInput, eventId: string, nowIso: string): SessionEvent {
+    this.admit("append");
     return withSpanSync(
       this.sink,
       SPAN_NAMES.storeAppend,
@@ -271,6 +417,7 @@ export class SessionLog {
    * the projection owns the live read model. Calling this per request is exactly the scan 45.1 removed.
    */
   inventory(): Omit<InventoryRow, "hostPresent">[] {
+    this.admit("inventory");
     const sessions = this.query(
       "inventory.aggregate",
       () =>
@@ -295,6 +442,7 @@ export class SessionLog {
    * session. Same projection, scoped by `sessionId` (bounded queries, no full-log/whole-table pass).
    */
   summaryRow(sessionId: string): Omit<InventoryRow, "hostPresent"> | null {
+    this.admit("summaryRow");
     const s = this.query(
       "summaryRow.aggregate",
       () =>
@@ -341,6 +489,7 @@ export class SessionLog {
    * rows are gone from the SQLite file, so the session never reappears after reload/reconnect.
    */
   deleteSession(sessionId: string): boolean {
+    this.admit("deleteSession");
     this.query("deleteSession.events", () =>
       this.db.prepare("DELETE FROM events WHERE sessionId = ?").run(sessionId),
     );
@@ -444,6 +593,7 @@ export class SessionLog {
 
   /** Every event for a session with seq > afterSeq, in seq order (the replay). */
   readAfter(sessionId: string, afterSeq: number): SessionEvent[] {
+    this.admit("readAfter");
     const rows = this.query(
       "readAfter",
       () =>
