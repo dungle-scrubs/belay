@@ -3,7 +3,7 @@
  * content - parsing the frame ArtifactRefs out of the result JSON, and (for a vision-capable
  * provider) resolving up to MAX_CONTINUATION_FRAMES of them to inline base64 images attached to
  * the tool message. A non-vision provider, an absent resolver, or any fetch failure degrades to
- * the text-only result (VideoContinuationError), never a turn failure.
+ * the text-only result, never a turn failure.
  *
  * Not for: frame extraction (processor.ts) or the tool envelope (tool.ts). The JSON result shape
  * this parses is the same shape the web transcript renderer parses - it is the cross-surface
@@ -11,7 +11,6 @@
  */
 import type { ChatImage, ChatMessage } from "@host/providers/index";
 import { type ArtifactRef, fetchBlobBytes } from "@trevor/session";
-import { VideoContinuationError } from "./errors";
 import type { VideoFrame } from "./types";
 
 /** Up to this many frames ride back to the model as images (V1 parity); the rest stay as text. */
@@ -108,10 +107,9 @@ export async function inlineVideoFrames(
   try {
     const images = await resolveFrames(refs);
     return images.length > 0 ? { ...withRefs, images } : withRefs;
-  } catch (error) {
-    // A catastrophic resolver failure is a typed continuation error we swallow: the model still
-    // reads the serialized result text and the transcript still shows the frame thumbnails.
-    void new VideoContinuationError({ detail: String(error) });
+  } catch {
+    // A catastrophic resolver failure is swallowed: the model still reads the serialized result text
+    // and the transcript still shows the frame thumbnails, so continuation degrades to text-only.
     return withRefs;
   }
 }

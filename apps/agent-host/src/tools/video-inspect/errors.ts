@@ -1,51 +1,16 @@
 /**
- * Responsible for: the typed failure vocabulary for video inspection - the classes that
- * classify every way probing, frame extraction, artifact writing, and provider continuation
- * can degrade or fail. Each carries a bounded `message` (never raw ffmpeg stderr spam), so a
- * failure surfaces as one readable warning line, never leaked binary/command output.
+ * Responsible for: the typed failure vocabulary for video inspection - the TWO outcomes the pipeline
+ * actually acts on: a cancellation that PROPAGATES (aborts the whole inspection) and a recoverable
+ * DEGRADATION that is folded into a warning line so inspection keeps going. Each carries a bounded
+ * message (never raw ffmpeg stderr spam), so a failure surfaces as one readable warning, never leaked
+ * binary/command output.
  *
  * Not for: the tool orchestration (tool.ts) or the extraction pipeline (processor.ts).
  */
 import { Data } from "effect";
 
-/** ffprobe and/or ffmpeg could not be found - the tool degrades to an unavailable result. */
-export class VideoBinaryMissingError extends Data.TaggedError("VideoBinaryMissingError")<{
-  readonly missing: readonly string[];
-}> {
-  override get message(): string {
-    return `Video processor unavailable: missing ${this.missing.join(" and ")}.`;
-  }
-}
-
-/** ffprobe failed or returned unparseable JSON; metadata degrades to what could be read. */
-export class VideoProbeError extends Data.TaggedError("VideoProbeError")<{
-  readonly detail: string;
-}> {
-  override get message(): string {
-    return `Video metadata probe failed: ${this.detail}`;
-  }
-}
-
-/** A single frame extraction exceeded its timeout budget. */
-export class VideoFrameTimeoutError extends Data.TaggedError("VideoFrameTimeoutError")<{
-  readonly frameIndex: number;
-  readonly timeoutMs: number;
-}> {
-  override get message(): string {
-    return `Frame ${this.frameIndex} extraction timed out after ${this.timeoutMs}ms.`;
-  }
-}
-
-/** The media had no decodable video stream (extraction produced nothing usable). */
-export class VideoUnsupportedMediaError extends Data.TaggedError("VideoUnsupportedMediaError")<{
-  readonly detail: string;
-}> {
-  override get message(): string {
-    return `Unsupported or non-video media: ${this.detail}`;
-  }
-}
-
-/** The inspection was cancelled (the turn was interrupted). Propagates - it never degrades. */
+/** The inspection was cancelled (the turn was interrupted). The ONE video failure that PROPAGATES - it
+ *  aborts the whole inspection rather than degrading a single piece of it. */
 export class VideoCancelledError extends Data.TaggedError("VideoCancelledError")<{
   readonly detail: string;
 }> {
@@ -54,30 +19,33 @@ export class VideoCancelledError extends Data.TaggedError("VideoCancelledError")
   }
 }
 
-/** Persisting an extracted frame to the blob store failed; that frame is dropped. */
-export class VideoArtifactWriteError extends Data.TaggedError("VideoArtifactWriteError")<{
-  readonly frameIndex: number;
-  readonly detail: string;
+/**
+ * A RECOVERABLE degradation during inspection (probe unreadable, a frame timed out, media unsupported,
+ * an artifact write failed): carries a bounded, pre-formatted `reason` the processor pushes onto its
+ * warnings and keeps going. ONE type, not one class per cause: the pipeline only ever branches on
+ * cancelled-vs-degraded - the specific cause never changed handling, only the warning string - so a
+ * `_tag` per cause modelled a distinction no caller made.
+ */
+export class VideoDegradedError extends Data.TaggedError("VideoDegradedError")<{
+  readonly reason: string;
 }> {
   override get message(): string {
-    return `Frame ${this.frameIndex} could not be stored: ${this.detail}`;
+    return this.reason;
   }
 }
 
-/** Encoding frame artifacts into provider continuation content failed; degrades to text-only. */
-export class VideoContinuationError extends Data.TaggedError("VideoContinuationError")<{
-  readonly detail: string;
-}> {
-  override get message(): string {
-    return `Video frame continuation failed: ${this.detail}`;
-  }
-}
-
-export type VideoInspectError =
-  | VideoBinaryMissingError
-  | VideoProbeError
-  | VideoFrameTimeoutError
-  | VideoUnsupportedMediaError
-  | VideoCancelledError
-  | VideoArtifactWriteError
-  | VideoContinuationError;
+/** The degradation messages, kept in one home so a probe/frame/artifact failure reads consistently and
+ *  never carries raw ffmpeg output - callers pass only a bounded detail. Each returns a {@link
+ *  VideoDegradedError} ready to throw or `.message` into a warning. */
+export const videoDegraded = {
+  probe: (detail: string): VideoDegradedError =>
+    new VideoDegradedError({ reason: `Video metadata probe failed: ${detail}` }),
+  frameTimeout: (frameIndex: number, timeoutMs: number): VideoDegradedError =>
+    new VideoDegradedError({
+      reason: `Frame ${frameIndex} extraction timed out after ${timeoutMs}ms.`,
+    }),
+  unsupported: (detail: string): VideoDegradedError =>
+    new VideoDegradedError({ reason: `Unsupported or non-video media: ${detail}` }),
+  artifactWrite: (frameIndex: number, detail: string): VideoDegradedError =>
+    new VideoDegradedError({ reason: `Frame ${frameIndex} could not be stored: ${detail}` }),
+};

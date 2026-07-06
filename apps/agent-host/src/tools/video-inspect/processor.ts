@@ -16,13 +16,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { ArtifactRef } from "@trevor/session";
-import {
-  VideoArtifactWriteError,
-  VideoCancelledError,
-  VideoFrameTimeoutError,
-  VideoProbeError,
-  VideoUnsupportedMediaError,
-} from "./errors";
+import { VideoCancelledError, VideoDegradedError, videoDegraded } from "./errors";
 import {
   DEFAULT_MAX_FRAMES,
   DEFAULT_SAMPLE_EVERY_MS,
@@ -97,11 +91,11 @@ export async function inspectVideoFile(
     if (error instanceof VideoCancelledError) {
       throw error;
     }
-    warnings.push(asProbeError(error).message);
+    warnings.push(degradedMessage(error, videoDegraded.probe(firstLine(messageOf(error)))));
     return { hasVideoStream: false };
   });
   if (!metadata.hasVideoStream) {
-    warnings.push(new VideoUnsupportedMediaError({ detail: "no video stream reported" }).message);
+    warnings.push(videoDegraded.unsupported("no video stream reported").message);
   }
 
   const maxFrames = boundedPositive(request.maxFrames, DEFAULT_MAX_FRAMES, MAX_FRAMES_CAP);
@@ -130,7 +124,12 @@ export async function inspectVideoFile(
         if (error instanceof VideoCancelledError) {
           throw error;
         }
-        warnings.push(asFrameError(error, index).message);
+        warnings.push(
+          degradedMessage(
+            error,
+            videoDegraded.unsupported(`frame ${index}: ${firstLine(messageOf(error))}`),
+          ),
+        );
         return null;
       });
       if (frame) {
@@ -142,9 +141,7 @@ export async function inspectVideoFile(
   }
 
   if (frames.length === 0 && frameCount > 0) {
-    warnings.push(
-      new VideoUnsupportedMediaError({ detail: "no frames could be extracted" }).message,
-    );
+    warnings.push(videoDegraded.unsupported("no frames could be extracted").message);
   }
 
   return {
@@ -193,13 +190,13 @@ async function extractOneFrame(input: {
   }
 
   const bytes = await readFile(transcodePath).catch(() => {
-    throw new VideoUnsupportedMediaError({ detail: `frame ${input.index} produced no output` });
+    throw videoDegraded.unsupported(`frame ${input.index} produced no output`);
   });
   let artifact: ArtifactRef;
   try {
     artifact = await input.putFrame(bytes, "image/png");
   } catch (error) {
-    throw new VideoArtifactWriteError({ frameIndex: input.index, detail: messageOf(error) });
+    throw videoDegraded.artifactWrite(input.index, messageOf(error));
   }
   return {
     frameIndex: input.index,
@@ -227,7 +224,7 @@ async function probeVideo(
     if (isAbort(error)) {
       throw new VideoCancelledError({ detail: "probe interrupted" });
     }
-    throw new VideoProbeError({ detail: firstLine(messageOf(error)) });
+    throw videoDegraded.probe(firstLine(messageOf(error)));
   }
 
   let parsed: {
@@ -237,7 +234,7 @@ async function probeVideo(
   try {
     parsed = JSON.parse(stdout);
   } catch {
-    throw new VideoProbeError({ detail: "ffprobe returned unparseable JSON" });
+    throw videoDegraded.probe("ffprobe returned unparseable JSON");
   }
 
   const videoStream = parsed.streams?.find((stream) => stream.codec_type === "video");
@@ -277,34 +274,22 @@ async function commandAvailable(
   }
 }
 
-/** Maps a raw execFile rejection into a typed frame failure (timeout vs unsupported vs cancel). */
+/** Maps a raw execFile rejection into a frame failure: a cancellation (propagates) or a degradation
+ *  (timeout vs unsupported), the two outcomes the extraction loop distinguishes. */
 function classifyExecError(error: unknown, index: number, timeoutMs: number): Error {
   if (isAbort(error)) {
     return new VideoCancelledError({ detail: `frame ${index} interrupted` });
   }
   if (isTimeout(error)) {
-    return new VideoFrameTimeoutError({ frameIndex: index, timeoutMs });
+    return videoDegraded.frameTimeout(index, timeoutMs);
   }
-  return new VideoUnsupportedMediaError({ detail: firstLine(messageOf(error)) });
+  return videoDegraded.unsupported(firstLine(messageOf(error)));
 }
 
-function asProbeError(error: unknown): VideoProbeError {
-  return error instanceof VideoProbeError
-    ? error
-    : new VideoProbeError({ detail: firstLine(messageOf(error)) });
-}
-
-function asFrameError(error: unknown, index: number): Error & { readonly message: string } {
-  if (
-    error instanceof VideoFrameTimeoutError ||
-    error instanceof VideoUnsupportedMediaError ||
-    error instanceof VideoArtifactWriteError
-  ) {
-    return error;
-  }
-  return new VideoUnsupportedMediaError({
-    detail: `frame ${index}: ${firstLine(messageOf(error))}`,
-  });
+/** The warning line for a caught NON-cancel failure: our own bounded degradation as-is, or an
+ *  unexpected raw error folded into the `fallback` degradation (so raw stderr can never reach a warning). */
+function degradedMessage(error: unknown, fallback: VideoDegradedError): string {
+  return (error instanceof VideoDegradedError ? error : fallback).message;
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {

@@ -41,13 +41,13 @@
 - [x] C-16: node-side `resolveServiceUrl(name)` - own the `<SVC>_URL` override, close the CLI override gap.
 - [ ] C-21: `apps/agent-host/src/tools/shared.ts` - lift `clipLine`/`boundedText` host-wide; route ~8 re-implementations through it.
 - [x] C-25: `apps/web` cap+ellipsis - collapse `derive.ts` `truncate` / `tool-args.ts` `truncateText` / `foldback.ts` inline copy to one.
-- [ ] C-26: `apps/agent-host/src/tools/video-inspect/errors.ts` - narrow the 7-class `Data.TaggedError` hierarchy to `VideoCancelledError` + `VideoDegraded`; delete the dead union.
+- [x] C-26: `apps/agent-host/src/tools/video-inspect/errors.ts` - narrow the 7-class `Data.TaggedError` hierarchy to `VideoCancelledError` + `VideoDegraded`; delete the dead union.
 
 ## Summary
 - Total candidates: 26
-- Redesigned (done): 11
-- Open candidates: 15
-- Current cutoff blockers: 15
+- Redesigned (done): 12
+- Open candidates: 14
+- Current cutoff blockers: 14
 - Accepted/deferred follow-up: 0
 - Superseded/obsolete checklist debt: 0
 
