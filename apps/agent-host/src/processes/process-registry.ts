@@ -117,6 +117,15 @@ export interface JobInfo {
   readonly ageMs: number;
 }
 
+export interface ClearCompletedResult {
+  readonly dismissed: number;
+}
+
+export interface DismissResult {
+  readonly id: string;
+  readonly status: "dismissed";
+}
+
 export class ProcessRegistry {
   private readonly processes = new Map<string, ManagedProcess>();
   private seq = 0;
@@ -130,6 +139,10 @@ export class ProcessRegistry {
     if (isVisible(proc)) {
       this.onChange?.();
     }
+  }
+
+  private changedVisible(): void {
+    this.onChange?.();
   }
 
   start(command: string, cwd: string, origin?: JobOrigin): { id: string; status: ProcessStatus } {
@@ -219,6 +232,38 @@ export class ProcessRegistry {
     if (proc) {
       this.changed(proc);
     }
+  }
+
+  dismiss(id: string): DismissResult {
+    const proc = this.processes.get(id);
+    if (!proc) {
+      throw new ProcessError({ detail: `no such process "${id}"` });
+    }
+    if (!isTerminal(proc)) {
+      throw new ProcessError({ detail: `cannot dismiss running process "${id}"; stop it first` });
+    }
+    const visible = isVisible(proc);
+    this.processes.delete(id);
+    if (visible) {
+      this.changedVisible();
+    }
+    return { id, status: "dismissed" };
+  }
+
+  clearCompleted(): ClearCompletedResult {
+    let dismissed = 0;
+    let changed = false;
+    for (const proc of this.processes.values()) {
+      if (isTerminal(proc)) {
+        dismissed += 1;
+        changed ||= isVisible(proc);
+        this.processes.delete(proc.id);
+      }
+    }
+    if (changed) {
+      this.changedVisible();
+    }
+    return { dismissed };
   }
 
   poll(
@@ -328,6 +373,10 @@ export class ProcessRegistry {
  *  re-announce hook both key off this, so a foreground command that never promotes stays hidden. */
 function isVisible(proc: ManagedProcess): boolean {
   return proc.origin.source === "process" || proc.promotedAt !== undefined;
+}
+
+function isTerminal(proc: ManagedProcess): boolean {
+  return proc.status !== "running";
 }
 
 /** The bounded combined-output tail a snapshot carries: stdout then stderr, capped to the last few KB. */

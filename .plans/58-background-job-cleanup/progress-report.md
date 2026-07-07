@@ -1,11 +1,11 @@
 # Background Job Cleanup - Progress Report
 
-Current focus: Phase 1 M1 - Registry Cleanup Primitives
+Current focus: Phase 2 M2 - Slash Commands
 
 ## Summary
 
-- **Current cutoff blockers:** 48
-- **Completed current cutoff:** 0
+- **Current cutoff blockers:** 38
+- **Completed current cutoff:** 10
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -13,19 +13,19 @@ Current focus: Phase 1 M1 - Registry Cleanup Primitives
 
 ### M1: Registry Cleanup Primitives
 
-- [ ] RED: Add `ProcessRegistry` tests showing `dismiss(id)` removes an exited job and triggers `onChange`.
-- [ ] GREEN: Implement `dismiss(id)` for terminal jobs.
-- [ ] RED: Add tests showing `dismiss(id)` refuses unknown ids and running jobs without removing them.
-- [ ] GREEN: Return typed/structured errors for unknown and running-job dismissal.
-- [ ] RED: Add tests showing `clearCompleted()` removes exited/killed jobs, keeps running jobs, and triggers one visible change.
-- [ ] GREEN: Implement `clearCompleted()`.
-- [ ] REFACTOR: Keep terminal detection in one helper shared by dismiss, clear, and later auto-prune.
+- [x] RED: Add `ProcessRegistry` tests showing `dismiss(id)` removes an exited job and triggers `onChange`.
+- [x] GREEN: Implement `dismiss(id)` for terminal jobs.
+- [x] RED: Add tests showing `dismiss(id)` refuses unknown ids and running jobs without removing them.
+- [x] GREEN: Return typed/structured errors for unknown and running-job dismissal.
+- [x] RED: Add tests showing `clearCompleted()` removes exited/killed jobs, keeps running jobs, and triggers one visible change.
+- [x] GREEN: Implement `clearCompleted()`.
+- [x] REFACTOR: Keep terminal detection in one helper shared by dismiss, clear, and later auto-prune.
 
 ### Gate 1 to 2
 
-- [ ] Registry cleanup tests pass.
-- [ ] Existing promotion/list/poll/kill behavior remains unchanged.
-- [ ] `snapshots()` only omits jobs after a successful cleanup operation.
+- [x] Registry cleanup tests pass.
+- [x] Existing promotion/list/poll/kill behavior remains unchanged.
+- [x] `snapshots()` only omits jobs after a successful cleanup operation.
 
 ## Phase 2: Command and Tool Surfaces
 

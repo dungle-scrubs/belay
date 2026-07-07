@@ -13,9 +13,17 @@ import { type JobOrigin, ProcessRegistry } from "./process-registry";
 
 const CWD = process.cwd();
 const reg = new ProcessRegistry();
-afterEach(() => reg.killAll());
+afterEach(() => {
+  reg.killAll();
+  reg.clearCompleted();
+  reg.onChange = undefined;
+});
 
 const bashOrigin: JobOrigin = { source: "bash", runId: "r1", callId: "c1" };
+
+async function waitForExit(id: string): Promise<void> {
+  await reg.awaitExit(id);
+}
 
 test("a direct process start defaults to source `process` with no origin ids", () => {
   const { id } = reg.start("true", CWD);
@@ -67,4 +75,60 @@ test("the model-facing list() read model is unchanged (id/command/status/exitCod
   const row = reg.list().find((j) => j.id === id);
   assert.deepEqual(Object.keys(row ?? {}).sort(), ["ageMs", "command", "exitCode", "id", "status"]);
   assert.equal(row?.command, "true");
+});
+
+test("dismiss removes an exited visible job and triggers one visible change", async () => {
+  const { id } = reg.start("true", CWD);
+  await waitForExit(id);
+  const changes: string[] = [];
+  reg.onChange = () => changes.push("changed");
+
+  const result = reg.dismiss(id);
+
+  assert.deepEqual(result, { id, status: "dismissed" });
+  assert.equal(
+    reg.snapshots().find((s) => s.id === id),
+    undefined,
+    "dismissed jobs leave the host.online snapshot",
+  );
+  assert.equal(
+    reg.list().find((j) => j.id === id),
+    undefined,
+    "dismissed jobs leave the model-facing list too",
+  );
+  assert.equal(changes.length, 1);
+});
+
+test("dismiss refuses unknown and running jobs without removing them", () => {
+  assert.throws(() => reg.dismiss("nope"), /no such process "nope"/u);
+
+  const { id } = reg.start("sleep 5", CWD);
+
+  assert.throws(() => reg.dismiss(id), /cannot dismiss running process "p\d+"; stop it first/u);
+  assert.equal(reg.list().find((j) => j.id === id)?.status, "running");
+  assert.equal(reg.snapshots().find((s) => s.id === id)?.status, "running");
+});
+
+test("clearCompleted removes terminal jobs, keeps running jobs, and triggers one visible change", async () => {
+  const exited = reg.start("true", CWD).id;
+  const killed = reg.start("sleep 5", CWD).id;
+  const running = reg.start("sleep 5", CWD).id;
+  reg.kill(killed);
+  await waitForExit(exited);
+  const changes: string[] = [];
+  reg.onChange = () => changes.push("changed");
+
+  const result = reg.clearCompleted();
+
+  assert.deepEqual(result, { dismissed: 2 });
+  assert.equal(
+    reg.list().find((j) => j.id === exited),
+    undefined,
+  );
+  assert.equal(
+    reg.list().find((j) => j.id === killed),
+    undefined,
+  );
+  assert.equal(reg.list().find((j) => j.id === running)?.status, "running");
+  assert.equal(changes.length, 1);
 });
