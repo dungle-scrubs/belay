@@ -21,6 +21,7 @@ function summary(over: Partial<SessionSummary> & { sessionId: string }): Session
     cwd: "~/dev/trevor",
     workspace: "~/dev/trevor",
     project: "trevor",
+    projectPath: "~/dev/trevor",
     branch: null,
     git: null,
     createdAt: "2026-06-20T00:00:00.000Z",

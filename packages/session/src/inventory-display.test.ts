@@ -17,6 +17,7 @@ function sessionSummary(over: Partial<SessionSummary> & { sessionId: string }): 
     cwd: null,
     workspace: null,
     project: "trevor",
+    projectPath: null,
     branch: null,
     git: null,
     createdAt: "2026-06-01T00:00:00.000Z",

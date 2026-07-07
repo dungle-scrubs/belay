@@ -444,6 +444,7 @@ export function sessionSummary(over?: Partial<SessionSummary>): SessionSummary {
     cwd: "~/dev/x",
     workspace: "~/dev/x",
     project: "x",
+    projectPath: "~/dev/x",
     branch: "main",
     git: null,
     createdAt: "2026-06-01T00:00:00.000Z",

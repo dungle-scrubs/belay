@@ -80,6 +80,8 @@ export class InventoryProjection {
       forkedFrom:
         event.type === INVENTORY_EVENT_TYPES.sessionForkedFrom ? event : current.forkedFrom,
       tangentOf: event.type === INVENTORY_EVENT_TYPES.sessionTangentOf ? event : current.tangentOf,
+      projectMarker:
+        event.type === INVENTORY_EVENT_TYPES.sessionProject ? event : current.projectMarker,
     });
   }
 
@@ -115,5 +117,6 @@ function emptyRow(sessionId: string, createdAt: string): Row {
     deleted: null,
     forkedFrom: null,
     tangentOf: null,
+    projectMarker: null,
   };
 }

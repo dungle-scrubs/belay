@@ -102,6 +102,7 @@ const UNROUTED: readonly string[] = [
   "session.launch.result",
   "session.archived",
   "session.deleted",
+  "session.project",
   "session.switch",
   "session.title",
   "shell.result",

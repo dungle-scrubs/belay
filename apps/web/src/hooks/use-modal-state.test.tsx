@@ -46,6 +46,7 @@ const session = (over: Partial<SessionSummary> = {}): SessionSummary => ({
   cwd: null,
   workspace: null,
   project: "trevor",
+  projectPath: null,
   branch: null,
   git: null,
   createdAt: "2026-06-28T00:00:00.000Z",

@@ -928,6 +928,16 @@ export const events = {
     },
   }),
   /**
+   * A durable, immutable PROJECT PATH marker for a session (plan 58 M3): the canonical absolute path of
+   * the project this session belongs to. Emitted ONCE on the session as its first event (or early), so
+   * the inventory can group sessions by project without relying on host.online workspace/cwd. Immutable
+   * once written - a fresh project-scoped session is created rather than moving an existing session.
+   */
+  sessionProject: (p: { path: string }): TrevorEventInput => ({
+    type: "session.project",
+    payload: { path: p.path },
+  }),
+  /**
    * An EXPLICIT tangent fold-back (plan 37, M8): the durable, auditable record that the user deliberately
    * carried a chosen piece of a tangent's outcome (a `quote`/`message`/`summary`) back toward the PARENT
    * session. It is NOT an automatic merge and NOT hidden context: the folded content is placed into the
@@ -1588,4 +1598,5 @@ export const INVENTORY_EVENT_TYPES = {
   sessionDeleted: "session.deleted",
   sessionForkedFrom: "session.forkedFrom",
   sessionTangentOf: "session.tangentOf",
+  sessionProject: "session.project",
 } as const satisfies Readonly<Record<string, DecodedEvent["type"]>>;

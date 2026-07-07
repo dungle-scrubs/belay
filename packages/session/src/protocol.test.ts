@@ -131,6 +131,7 @@ test("typed event constructors round-trip through the registry-backed decoder", 
     events.sessionDeleted({ deleted: true }),
     events.sessionForkedFrom({ parentSessionId: "parent", forkSeq: 2 }),
     events.sessionTangentOf({ parentSessionId: "parent", sourceMessageId: "msg", quote: "quote" }),
+    events.sessionProject({ path: "/Users/kevin/dev/trevor" }),
     events.tangentFoldedBack({
       tangentSessionId: "tangent",
       parentSessionId: "parent",
