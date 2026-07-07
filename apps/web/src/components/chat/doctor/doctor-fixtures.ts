@@ -645,7 +645,7 @@ export const storageOk: DoctorArea = {
     { label: "legacy", value: "~/.trevor · none", status: "not_checked" },
     { label: "temp", value: "/var/folders/4p/T", status: "ok" },
     { label: "external:pi", value: "~/.pi · external (read-only)", status: "ok" },
-    { label: "external:agents", value: "~/.agents · external (read-only)", status: "ok" },
+    { label: "external:agents", value: "~/.trevor · external (read-only)", status: "ok" },
   ],
 };
 

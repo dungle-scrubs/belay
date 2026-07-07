@@ -21,7 +21,7 @@ const GENERATED_FILE_PATTERNS: readonly RegExp[] = [
 
 const SKILL_FILE_PATTERNS: readonly RegExp[] = [
   /^\.claude\/skills\/[^/]+\/SKILL\.md$/,
-  /^\.agents\/skills\/[^/]+\/SKILL\.md$/,
+  /^\.trevor\/skills\/[^/]+\/SKILL\.md$/,
 ];
 
 export interface FilenameViolation {

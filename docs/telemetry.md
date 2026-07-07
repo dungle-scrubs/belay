@@ -59,7 +59,7 @@ design, so a checkout never ships traces off the machine by accident.
 > The OTLP wire exporter and a turnkey Docker Compose for Alloy/Tempo/Grafana are intentionally NOT
 > bundled (they need a running collector to verify and add operational burden); the local file lane is
 > the supported free path. If a persistent local collector port is ever introduced, register it in
-> `~/.agents/PORTS.md` in the same change.
+> `~/.trevor/PORTS.md` in the same change.
 
 ## Cost guardrails & free-tier posture
 

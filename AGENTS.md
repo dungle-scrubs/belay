@@ -99,7 +99,7 @@ explicitly adds a new root.
   `sessionStorage` for tab-scoped composer drafts and prompt history. Do not put
   browser drafts in the durable session log or host filesystem.
 - **External shared roots** are not Trevor storage: `~/.pi/auth.json` is the
-  pi-ai credential store, and `~/.agents` holds shared agents/skills. Trevor may
+  pi-ai credential store, and `~/.trevor` holds shared agents/skills. Trevor may
   read them when integrating with those tools, but new Trevor-owned data should
   not be written there.
 

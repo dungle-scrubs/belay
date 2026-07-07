@@ -16,8 +16,8 @@ import { Effect, Schema } from "effect";
  *
  * A skill is a `<root>/<id>/SKILL.md`: YAML frontmatter (name, description, optional `meta` with an
  * icon) followed by a markdown instruction body. Skills are discovered across an ORDERED list of
- * roots (D-087), highest precedence first: the PROJECT-LOCAL `<workspace>/.agents/skills`, then the
- * configured/global root (`TREVOR_SKILLS_DIR`, else `~/.agents/skills`). An enabled project-local
+ * roots (D-087), highest precedence first: the PROJECT-LOCAL `<workspace>/.trevor/skills`, then the
+ * configured/global root (`TREVOR_SKILLS_DIR`, else the shared agents/skills home). An enabled project-local
  * skill shadows a global one with the same id; a disabled project file is simply absent (it leaves no
  * tombstone, so the global skill of that id still surfaces).
  *
@@ -33,14 +33,14 @@ import { Effect, Schema } from "effect";
  * Not for: the `!command` interpolation trust gate - commands/interpolation.ts.
  */
 
-/** The configured/global skills root: TREVOR_SKILLS_DIR when set, else ~/.agents/skills. */
+/** The configured/global skills root: TREVOR_SKILLS_DIR when set, else the shared agents/skills home. */
 export const SKILLS_DIR = resolve(
-  process.env.TREVOR_SKILLS_DIR ?? join(homedir(), ".agents", "skills"),
+  process.env.TREVOR_SKILLS_DIR ?? join(homedir(), ".trevor", "skills"),
 );
 
-/** The project-local skills root: `<workspace>/.agents/skills`, the same workspace authority the
+/** The project-local skills root: `<workspace>/.trevor/skills`, the same workspace authority the
  *  file tools (read/write/bash, edit confinement) use. */
-export const PROJECT_SKILLS_DIR = resolve(WORKSPACE_ROOT, ".agents", "skills");
+export const PROJECT_SKILLS_DIR = resolve(WORKSPACE_ROOT, ".trevor", "skills");
 
 /** Skill shell-interpolation is opt-in (it runs commands when a skill is loaded). */
 export const SKILL_SHELL_INTERPOLATION =
@@ -56,7 +56,7 @@ export interface SkillRoot {
 }
 
 /**
- * The ordered skill roots, highest precedence first: the project-local `<workspace>/.agents/skills`,
+ * The ordered skill roots, highest precedence first: the project-local `<workspace>/.trevor/skills`,
  * then the configured/global root. Deduplicated by resolved dir - when the workspace IS the global
  * root, only one entry remains, so a root is never searched (or counted) twice.
  */

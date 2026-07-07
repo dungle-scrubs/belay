@@ -32,8 +32,8 @@ function roots(): { project: SkillRoot; global: SkillRoot; base: string } {
   temps.push(base);
   return {
     base,
-    project: { kind: "project", dir: join(base, "project", ".agents", "skills") },
-    global: { kind: "global", dir: join(base, "global", ".agents", "skills") },
+    project: { kind: "project", dir: join(base, "project", ".trevor", "skills") },
+    global: { kind: "global", dir: join(base, "global", ".trevor", "skills") },
   };
 }
 

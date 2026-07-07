@@ -180,10 +180,10 @@ export function resolveRootPolicy(
       label: "external:agents",
       ownership: "external",
       lifecycle: "config",
-      path: join(home, ".agents"),
+      path: join(home, ".trevor"),
       envOverride: null,
       writable: false,
-      description: "Shared agents and skills (~/.agents). Externally owned - read-only.",
+      description: "Shared agents and skills (~/.trevor). Externally owned - read-only.",
     },
   ];
 }

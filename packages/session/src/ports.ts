@@ -3,7 +3,7 @@
  * system. The launcher (trevor-cli) checks them, the stores bind them, the web dev server + /sessions
  * proxy and the host's blob client point at them. A port change edits only this object and propagates
  * to every surface; no literal shadows it. Per-callsite env-var overrides still win at runtime - this
- * is the fallback/default, not a hard binding. The human-facing registry is `~/.agents/PORTS.md`; this
+ * is the fallback/default, not a hard binding. The human-facing port registry document mirrors this; this
  * mirrors it for code.
  *
  * Deliberately a zero-dependency leaf module exposed via the `@trevor/session/ports` subpath so the

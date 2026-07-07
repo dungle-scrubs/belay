@@ -5,7 +5,7 @@ import { SESSIONS_PATH } from "@trevor/session/session-routes";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// RESERVED_PORTS.web is reserved for the Trevor web UI in ~/.agents/PORTS.md.
+// RESERVED_PORTS.web is reserved for the Trevor web UI in ~/.trevor/PORTS.md.
 // /sessions is proxied to the local session-store (REST + WebSocket, RESERVED_PORTS.store) so the
 // browser talks same-origin and avoids cross-origin (CORS) failures. Override VITE_SESSION_PROXY to point
 // at another backend; opt into Tether directly with VITE_TETHER_URL (see src/session/use-session.ts).
@@ -33,7 +33,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     // Bind IPv4 loopback explicitly. Vite's default host ("localhost") resolves to ::1 (IPv6) only on
-    // macOS, so a client hitting 127.0.0.1 (the reserved-port convention in ~/.agents/PORTS.md, what
+    // macOS, so a client hitting 127.0.0.1 (the reserved-port convention in ~/.trevor/PORTS.md, what
     // the `trevor` launcher opens, and what the proxy target uses) gets ECONNREFUSED even though Vite
     // is "up". Pinning 127.0.0.1 makes the bind address match every consumer.
     host: "127.0.0.1",

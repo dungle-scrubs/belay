@@ -85,7 +85,7 @@ test("legacy and external roots are read-only and correctly owned", () => {
   assert.equal(pi.ownership, "external");
   assert.equal(pi.writable, false);
 
-  assert.equal(rootCategory("external-agents", {}, "/Users/kevin").path, "/Users/kevin/.agents");
+  assert.equal(rootCategory("external-agents", {}, "/Users/kevin").path, "/Users/kevin/.trevor");
 });
 
 test("env overrides affect only the intended root", () => {
