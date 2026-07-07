@@ -1,4 +1,13 @@
-import { nodeFs, TREVOR_STATE_HOME } from "@trevor/launcher";
+import {
+  addProject,
+  listProjects,
+  nodeFs,
+  removeProject,
+  renameProject,
+  setCollapsed,
+  TREVOR_HOME,
+  TREVOR_STATE_HOME,
+} from "@trevor/launcher";
 import { createService, startServer } from "@trevor/server-kit";
 import {
   errorMessage,
@@ -53,6 +62,25 @@ const deps: SupervisorDeps = {
   // The registry read lives under TREVOR_STATE_HOME (the launcher's projects.json), read through the
   // launcher's own map loader so there is one reader.
   listProjects: () => readRecents(nodeFs, TREVOR_STATE_HOME),
+  // The canonical project registry (plan 58): path-keyed metadata with CRUD over the real node fs
+  // + state home. `add` passes TREVOR_HOME so `displayPath` is home-abbreviated.
+  projectRegistry: {
+    add: (path, now) => {
+      const r = addProject(nodeFs, TREVOR_STATE_HOME, path, now, TREVOR_HOME);
+      return { path: r.path, displayName: r.displayName };
+    },
+    rename: (path, displayName, now) => {
+      const r = renameProject(nodeFs, TREVOR_STATE_HOME, path, displayName, now);
+      return r ? { path: r.path, displayName: r.displayName } : null;
+    },
+    setCollapsed: (path, collapsed, now) => {
+      const r = setCollapsed(nodeFs, TREVOR_STATE_HOME, path, collapsed, now);
+      return r ? { path: r.path, collapsed: r.collapsed } : null;
+    },
+    remove: (path) => removeProject(nodeFs, TREVOR_STATE_HOME, path),
+    list: () => listProjects(nodeFs, TREVOR_STATE_HOME),
+  },
+  now: () => new Date().toISOString(),
   // MUST be the same identity `emit` stamps, or self-echo suppression breaks (the supervisor would act
   // on its own published results).
   selfProducerId: PRODUCER_IDS.supervisor,

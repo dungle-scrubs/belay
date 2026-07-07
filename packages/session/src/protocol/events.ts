@@ -1144,6 +1144,95 @@ export const events = {
       })),
     },
   }),
+  // --- Project registry operations (plan 58 M2) ---
+  //
+  // The browser asks the supervisor to add/rename/collapse/remove a project in the canonical
+  // path-keyed registry; each `result` carries the updated fields or an error. `add` first pops
+  // the native folder picker (so `add.requested` reuses the same pickFolder path as folder.pick).
+  projectAddRequested: (p: { requestId: string }): TrevorEventInput => ({
+    type: "project.add.requested",
+    payload: { requestId: p.requestId },
+  }),
+  projectAddResult: (p: {
+    requestId: string;
+    path?: string;
+    displayName?: string;
+    cancelled: boolean;
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "project.add.result",
+    payload: {
+      requestId: p.requestId,
+      cancelled: p.cancelled,
+      ...(p.path ? { path: p.path } : {}),
+      ...(p.displayName ? { displayName: p.displayName } : {}),
+      ...(p.error ? { error: p.error } : {}),
+    },
+  }),
+  projectRenameRequested: (p: {
+    requestId: string;
+    path: string;
+    displayName: string;
+  }): TrevorEventInput => ({
+    type: "project.rename.requested",
+    payload: { requestId: p.requestId, path: p.path, displayName: p.displayName },
+  }),
+  projectRenameResult: (p: {
+    requestId: string;
+    path?: string;
+    displayName?: string;
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "project.rename.result",
+    payload: {
+      requestId: p.requestId,
+      ...(p.path ? { path: p.path } : {}),
+      ...(p.displayName ? { displayName: p.displayName } : {}),
+      ...(p.error ? { error: p.error } : {}),
+    },
+  }),
+  projectCollapseRequested: (p: {
+    requestId: string;
+    path: string;
+    collapsed: boolean;
+  }): TrevorEventInput => ({
+    type: "project.collapse.requested",
+    payload: { requestId: p.requestId, path: p.path, collapsed: p.collapsed },
+  }),
+  projectCollapseResult: (p: {
+    requestId: string;
+    path?: string;
+    collapsed: boolean;
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "project.collapse.result",
+    payload: {
+      requestId: p.requestId,
+      collapsed: p.collapsed,
+      ...(p.path ? { path: p.path } : {}),
+      ...(p.error ? { error: p.error } : {}),
+    },
+  }),
+  projectRemoveRequested: (p: { requestId: string; path: string }): TrevorEventInput => ({
+    type: "project.remove.requested",
+    payload: { requestId: p.requestId, path: p.path },
+  }),
+  projectRemoveResult: (p: {
+    requestId: string;
+    path?: string;
+    removed: boolean;
+    blockedBy?: readonly string[];
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "project.remove.result",
+    payload: {
+      requestId: p.requestId,
+      removed: p.removed,
+      ...(p.path ? { path: p.path } : {}),
+      ...(p.blockedBy ? { blockedBy: [...p.blockedBy] } : {}),
+      ...(p.error ? { error: p.error } : {}),
+    },
+  }),
   /**
    * The whole task checklist after a change - a snapshot the UI renders and the host restores from.
    * `rev` is the registry's monotonic revision at emit time; a stale snapshot (lower rev arriving

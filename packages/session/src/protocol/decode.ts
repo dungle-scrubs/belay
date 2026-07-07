@@ -767,6 +767,50 @@ export type DecodedEvent =
       readonly requestId: string;
       readonly projects: readonly SupervisorProject[];
     }
+  | { readonly type: "project.add.requested"; readonly requestId: string }
+  | {
+      readonly type: "project.add.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly displayName?: string;
+      readonly cancelled: boolean;
+      readonly error?: string;
+    }
+  | {
+      readonly type: "project.rename.requested";
+      readonly requestId: string;
+      readonly path: string;
+      readonly displayName: string;
+    }
+  | {
+      readonly type: "project.rename.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly displayName?: string;
+      readonly error?: string;
+    }
+  | {
+      readonly type: "project.collapse.requested";
+      readonly requestId: string;
+      readonly path: string;
+      readonly collapsed: boolean;
+    }
+  | {
+      readonly type: "project.collapse.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly collapsed: boolean;
+      readonly error?: string;
+    }
+  | { readonly type: "project.remove.requested"; readonly requestId: string; readonly path: string }
+  | {
+      readonly type: "project.remove.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly removed: boolean;
+      readonly blockedBy?: readonly string[];
+      readonly error?: string;
+    }
   | {
       readonly type: "tasks.current";
       readonly tasks: readonly TaskSnapshot[];
@@ -1290,6 +1334,77 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
         requestId: str(p.requestId, event.eventId),
         projects: decodeSupervisorProjects(p.projects),
       };
+    case "project.add.requested":
+      return { type: "project.add.requested", requestId: str(p.requestId, event.eventId) };
+    case "project.add.result": {
+      const path = optStr(p.path);
+      const displayName = optStr(p.displayName);
+      const error = optStr(p.error);
+      return {
+        type: "project.add.result",
+        requestId: str(p.requestId, event.eventId),
+        cancelled: p.cancelled === true,
+        ...(path ? { path } : {}),
+        ...(displayName ? { displayName } : {}),
+        ...(error ? { error } : {}),
+      };
+    }
+    case "project.rename.requested":
+      return {
+        type: "project.rename.requested",
+        requestId: str(p.requestId, event.eventId),
+        path: str(p.path),
+        displayName: str(p.displayName),
+      };
+    case "project.rename.result": {
+      const path = optStr(p.path);
+      const displayName = optStr(p.displayName);
+      const error = optStr(p.error);
+      return {
+        type: "project.rename.result",
+        requestId: str(p.requestId, event.eventId),
+        ...(path ? { path } : {}),
+        ...(displayName ? { displayName } : {}),
+        ...(error ? { error } : {}),
+      };
+    }
+    case "project.collapse.requested":
+      return {
+        type: "project.collapse.requested",
+        requestId: str(p.requestId, event.eventId),
+        path: str(p.path),
+        collapsed: p.collapsed === true,
+      };
+    case "project.collapse.result": {
+      const path = optStr(p.path);
+      const error = optStr(p.error);
+      return {
+        type: "project.collapse.result",
+        requestId: str(p.requestId, event.eventId),
+        collapsed: p.collapsed === true,
+        ...(path ? { path } : {}),
+        ...(error ? { error } : {}),
+      };
+    }
+    case "project.remove.requested":
+      return {
+        type: "project.remove.requested",
+        requestId: str(p.requestId, event.eventId),
+        path: str(p.path),
+      };
+    case "project.remove.result": {
+      const path = optStr(p.path);
+      const error = optStr(p.error);
+      const blockedBy = strList(p.blockedBy);
+      return {
+        type: "project.remove.result",
+        requestId: str(p.requestId, event.eventId),
+        removed: p.removed === true,
+        ...(path ? { path } : {}),
+        ...(blockedBy.length > 0 ? { blockedBy } : {}),
+        ...(error ? { error } : {}),
+      };
+    }
     case "tasks.current":
       return { type: "tasks.current", tasks: coerceTasks(p.tasks), rev: num(p.rev) };
     case "tool.started":
@@ -1521,6 +1636,14 @@ const sessionFamily: EventFamily = {
     "folder.pick.result",
     "projects.list.requested",
     "projects.list.result",
+    "project.add.requested",
+    "project.add.result",
+    "project.rename.requested",
+    "project.rename.result",
+    "project.collapse.requested",
+    "project.collapse.result",
+    "project.remove.requested",
+    "project.remove.result",
   ],
 };
 
