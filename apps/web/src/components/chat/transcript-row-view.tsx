@@ -47,6 +47,64 @@ function toConcurrentTool(
   };
 }
 
+function canExpandCompact(message: Message): boolean {
+  if (message.kind === "tool" || message.kind === "shell" || message.kind === "inlineAgent") {
+    return false;
+  }
+  const display = compactDisplayFor(message);
+  return display?.hasDetail === true;
+}
+
+function compactInlineAgentAction(
+  message: Extract<Message, { kind: "inlineAgent" }>,
+  onOpenAgent: ((childSessionId: string) => void) | undefined,
+): (() => void) | undefined {
+  if (!onOpenAgent || message.agents.length !== 1) {
+    return undefined;
+  }
+  const [agent] = message.agents;
+  return agent ? () => onOpenAgent(agent.childSessionId) : undefined;
+}
+
+function compactRowAction(
+  message: Message,
+  onOpenAgent: ((childSessionId: string) => void) | undefined,
+  onOpenArtifact: ((artifact: ArtifactRef) => void) | undefined,
+): (() => void) | undefined {
+  if (message.kind === "inlineAgent") {
+    return compactInlineAgentAction(message, onOpenAgent);
+  }
+  if (message.kind === "lucid" && onOpenArtifact) {
+    return () => onOpenArtifact(message.artifact);
+  }
+  return undefined;
+}
+
+function TranscriptBlock({ children, id }: { readonly children: ReactNode; readonly id: string }) {
+  return (
+    <div data-message-id={id} className="pl-3.5">
+      {children}
+    </div>
+  );
+}
+
+function compactExpandedDetail(message: Message): ReactNode | null {
+  if (message.kind === "assistant" && message.thinking.trim()) {
+    return <MarkdownBody text={message.thinking} muted />;
+  }
+  if (message.kind === "result" && message.text.trim()) {
+    return (
+      <pre className="overflow-x-auto whitespace-pre-wrap border-l border-border pl-3 text-sm text-muted-foreground">
+        {message.text}
+      </pre>
+    );
+  }
+  if (message.kind === "delegation" && message.result?.trim()) {
+    return <MarkdownBody text={message.result} muted />;
+  }
+  return null;
+}
+
 function stopTitle(cause: string): string {
   switch (cause) {
     case "context_pressure":
@@ -100,6 +158,8 @@ export interface TranscriptRowViewProps {
   readonly onOpenDetail?: (message: Message) => void;
   /** Opens the inline-agent detail takeover for a child session id (plan 09.4 M6). */
   readonly onOpenAgent?: (childSessionId: string) => void;
+  /** Compact-only presentation: hide the repeated icon + label for consecutive same-tool rows. */
+  readonly suppressCompactPrimary?: boolean;
 }
 
 export function TranscriptRowView({
@@ -115,6 +175,7 @@ export function TranscriptRowView({
   onToggleRow,
   onOpenDetail,
   onOpenAgent,
+  suppressCompactPrimary = false,
 }: TranscriptRowViewProps) {
   // Compact mode collapses an eligible message row to a one-line CompactRow; its detail, when expanded,
   // is the SAME full renderer (a recursive render with compact off), so no renderer is duplicated. The
@@ -123,40 +184,76 @@ export function TranscriptRowView({
     const display = compactDisplayFor(row.message);
     if (display) {
       const expanded = expandedRows?.has(row.message.id) ?? false;
-      // Carry the selection segment id on the wrapper only while COLLAPSED; when expanded, the recursive
-      // full render below owns it, so exactly one element holds each message id (a duplicate would split
-      // the transcript-selection capture vs. resolve and misplace the persistent highlight). The inspect
-      // affordance wraps the collapsed row too, so a tool/shell can be inspected without first expanding.
+      const expandedDetail = expanded ? compactExpandedDetail(row.message) : null;
+      const onExpand =
+        canExpandCompact(row.message) && onToggleRow
+          ? () => onToggleRow(row.message.id)
+          : undefined;
+      const onAction = compactRowAction(row.message, onOpenAgent, onOpenArtifact);
+      // Carry the selection segment id on the compact wrapper unless a recursive full render below owns
+      // it, so exactly one element holds each message id (a duplicate would split the transcript-selection
+      // capture vs. resolve and misplace the persistent highlight). The inspect affordance wraps the
+      // collapsed row too, so a tool/shell can be inspected without first expanding.
+      // The `pl-3.5` indent lives on this OUTER wrapper (not on WithInspect's className) so EVERY
+      // compact row shares it and their leading icons line up - WithInspect drops its className for a
+      // non-eligible row, so passing the indent there only indented tool/shell rows. It matches the
+      // `pl-3.5` the tool_batch + full rows use, so a batch, a tool, and a marker all align.
       return (
-        <WithInspect message={row.message} onOpenDetail={onOpenDetail} className="pl-3.5">
-          <div data-message-id={expanded ? undefined : row.message.id}>
-            <CompactRow
-              display={display}
-              expanded={expanded}
-              onToggle={
-                display.hasDetail && onToggleRow ? () => onToggleRow(row.message.id) : undefined
-              }
-            >
-              {expanded ? (
-                <TranscriptRowView
-                  row={row}
-                  compact={false}
-                  showThinking={showThinking}
-                  onOpenPath={onOpenPath}
-                  onOpenArtifact={onOpenArtifact}
-                  onDoctorRefresh={onDoctorRefresh}
-                  onMenuAction={onMenuAction}
-                  questionsOneLine={questionsOneLine}
-                />
-              ) : null}
-            </CompactRow>
-          </div>
-        </WithInspect>
+        <div className="pl-3.5">
+          <WithInspect message={row.message} onOpenDetail={onOpenDetail}>
+            <div data-message-id={expanded && !expandedDetail ? undefined : row.message.id}>
+              <CompactRow
+                display={display}
+                expanded={expanded}
+                onToggle={onExpand}
+                onAction={onAction}
+                suppressPrimary={suppressCompactPrimary}
+              >
+                {expanded
+                  ? (expandedDetail ?? (
+                      <TranscriptRowView
+                        row={row}
+                        compact={false}
+                        showThinking={showThinking}
+                        onOpenPath={onOpenPath}
+                        onOpenArtifact={onOpenArtifact}
+                        onDoctorRefresh={onDoctorRefresh}
+                        onMenuAction={onMenuAction}
+                        questionsOneLine={questionsOneLine}
+                      />
+                    ))
+                  : null}
+              </CompactRow>
+            </div>
+          </WithInspect>
+        </div>
       );
     }
   }
 
   if (row.kind === "tool_batch") {
+    if (compact) {
+      return (
+        <div className="flex flex-col pl-3.5">
+          {row.tools.map((tool, index) => {
+            const display = compactDisplayFor(tool);
+            if (!display) {
+              return null;
+            }
+            return (
+              <WithInspect key={tool.id} message={tool} onOpenDetail={onOpenDetail}>
+                <div data-message-id={tool.id}>
+                  <CompactRow
+                    display={display}
+                    suppressPrimary={index > 0 && tool.name === row.tools[index - 1]?.name}
+                  />
+                </div>
+              </WithInspect>
+            );
+          })}
+        </div>
+      );
+    }
     return (
       <div className="pl-3.5">
         <ConcurrentTools tools={row.tools.map((tool) => toConcurrentTool(tool, onOpenPath))} />
@@ -193,7 +290,7 @@ export function TranscriptRowView({
 
   if (message.kind === "result") {
     return (
-      <div data-message-id={message.id} className="pl-3.5">
+      <TranscriptBlock id={message.id}>
         {message.menu ? (
           <div className="overflow-hidden rounded-md border border-border">
             <CommandMenu
@@ -211,7 +308,7 @@ export function TranscriptRowView({
         ) : (
           <CommandResult command={message.command} text={message.text} ok={message.ok} />
         )}
-      </div>
+      </TranscriptBlock>
     );
   }
 
@@ -226,14 +323,14 @@ export function TranscriptRowView({
   if (message.kind === "shell") {
     return (
       <WithInspect message={message} onOpenDetail={onOpenDetail}>
-        <div data-message-id={message.id}>
+        <TranscriptBlock id={message.id}>
           <ShellBlock
             command={message.command}
             output={message.output}
             done={message.done}
             ok={message.ok}
           />
-        </div>
+        </TranscriptBlock>
       </WithInspect>
     );
   }
@@ -497,13 +594,14 @@ export function TranscriptRowView({
 
   if (message.kind === "user") {
     return (
-      <UserMessage
-        id={message.id}
-        text={message.text}
-        artifacts={message.artifacts}
-        pastes={message.pastes}
-        onOpenArtifact={onOpenArtifact}
-      />
+      <TranscriptBlock id={message.id}>
+        <UserMessage
+          text={message.text}
+          artifacts={message.artifacts}
+          pastes={message.pastes}
+          onOpenArtifact={onOpenArtifact}
+        />
+      </TranscriptBlock>
     );
   }
 

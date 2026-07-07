@@ -23,6 +23,7 @@ function renderRow(
   over?: {
     compact?: boolean;
     expandedRows?: ReadonlySet<string>;
+    onOpenDetail?: (message: Message) => void;
     onToggleRow?: (id: string) => void;
   },
 ) {
@@ -34,6 +35,7 @@ function renderRow(
       onDoctorRefresh={noop}
       compact={over?.compact ?? false}
       expandedRows={over?.expandedRows}
+      onOpenDetail={over?.onOpenDetail}
       onToggleRow={over?.onToggleRow}
     />,
   );
@@ -48,15 +50,38 @@ const toolMsg: Message = {
   result: "total 0\nfile.txt",
 };
 
-test("compact mode collapses an eligible row to a one-line row with an expand affordance", () => {
+const thoughtMsg: Message = {
+  kind: "assistant",
+  id: "a-thought",
+  runId: "r1",
+  text: "",
+  thinking: "Inspect the files before editing.\nThen run tests.",
+  done: true,
+  warm: false,
+  model: "glm",
+};
+
+const resultMsg: Message = {
+  kind: "result",
+  id: "r1",
+  command: "doctor",
+  text: "all green\n3 checks passed",
+  ok: true,
+};
+
+test("compact mode collapses a tool row to one line and uses detail inspection, not inline expansion", () => {
+  const opened: Message[] = [];
   const { getByRole, getByText } = renderRow(messageRow(toolMsg), {
     compact: true,
     expandedRows: new Set(),
-    onToggleRow: noop,
+    onOpenDetail: (message) => opened.push(message),
+    onToggleRow: () => {
+      throw new Error("tool rows should not inline-expand in compact mode");
+    },
   });
   getByText("bash");
-  // Detail-eligible (it has a result) -> the compact row is an expand button.
-  getByRole("button");
+  fireEvent.click(getByRole("button", { name: /inspect tool detail/i }));
+  assert.deepEqual(opened, [toolMsg]);
 });
 
 test("user prompts and final assistant responses stay full in compact mode (no compact row)", () => {
@@ -85,32 +110,43 @@ test("user prompts and final assistant responses stay full in compact mode (no c
 });
 
 test("expanding a compact row reveals the same full renderer as the detail", () => {
-  const collapsed = renderRow(messageRow(toolMsg), {
+  const collapsed = renderRow(messageRow(resultMsg), {
     compact: true,
     expandedRows: new Set(),
     onToggleRow: noop,
   });
-  // Collapsed: the full tool output is not shown.
-  assert.equal(collapsed.queryByText(/file\.txt/), null);
+  // Collapsed: only the one-line summary is shown.
+  assert.equal(collapsed.queryByText(/3 checks passed/), null);
 
-  const expanded = renderRow(messageRow(toolMsg), {
+  const expanded = renderRow(messageRow(resultMsg), {
     compact: true,
-    expandedRows: new Set(["t1"]),
+    expandedRows: new Set(["r1"]),
     onToggleRow: noop,
   });
-  // Expanded: the recursive full ToolRenderer renders the output.
-  assert.ok(expanded.queryByText(/file\.txt/));
+  // Expanded: the recursive full renderer shows the full command output.
+  assert.ok(expanded.queryByText(/3 checks passed/));
 });
 
 test("toggling a compact row calls onToggleRow with the message id", () => {
   const toggled: string[] = [];
-  const { getByRole } = renderRow(messageRow(toolMsg), {
+  const { getByRole } = renderRow(messageRow(thoughtMsg), {
     compact: true,
     expandedRows: new Set(),
     onToggleRow: (id) => toggled.push(id),
   });
   fireEvent.click(getByRole("button"));
-  assert.deepEqual(toggled, ["t1"]);
+  assert.deepEqual(toggled, ["a-thought"]);
+});
+
+test("expanding a compact thinking row reveals one detail depth without nesting another thinking trigger", () => {
+  const expanded = renderRow(messageRow(thoughtMsg), {
+    compact: true,
+    expandedRows: new Set(["a-thought"]),
+    onToggleRow: noop,
+  });
+  assert.equal(expanded.getAllByText("Thought").length, 1);
+  assert.equal(expanded.queryByText("thinking"), null);
+  assert.ok(expanded.queryByText(/Then run tests\./));
 });
 
 test("compact mode is display-only: it does not mutate the message", () => {
@@ -133,20 +169,20 @@ test("the row's message id (key) is the same whether compact or not", () => {
 });
 
 test("exactly one element carries the message id in every compact state (selection integrity)", () => {
-  const row = messageRow(toolMsg);
+  const row = messageRow(thoughtMsg);
   const collapsed = renderRow(row, { compact: true, expandedRows: new Set(), onToggleRow: noop });
   assert.equal(
-    collapsed.container.querySelectorAll('[data-message-id="t1"]').length,
+    collapsed.container.querySelectorAll('[data-message-id="a-thought"]').length,
     1,
     "collapsed: one id (the compact wrapper)",
   );
   const expanded = renderRow(row, {
     compact: true,
-    expandedRows: new Set(["t1"]),
+    expandedRows: new Set(["a-thought"]),
     onToggleRow: noop,
   });
   assert.equal(
-    expanded.container.querySelectorAll('[data-message-id="t1"]').length,
+    expanded.container.querySelectorAll('[data-message-id="a-thought"]').length,
     1,
     "expanded: one id (the inner full render, not a duplicate)",
   );

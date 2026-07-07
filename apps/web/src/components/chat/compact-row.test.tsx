@@ -11,6 +11,18 @@ test("renders the primary label and secondary summary on one line", () => {
   getByText("ls -la /tmp");
 });
 
+test("can suppress a repeated primary label while keeping the summary visible", () => {
+  const { container, getByText } = render(
+    <CompactRow
+      display={display({ primary: "edit", secondary: "src/second.ts" })}
+      suppressPrimary
+    />,
+  );
+  getByText("src/second.ts");
+  assert.equal(container.querySelector("svg"), null);
+  assert.equal(container.querySelector(".sr-only")?.textContent, "edit");
+});
+
 test("a detail-eligible row with onToggle is a button that toggles and reports expansion", () => {
   let toggles = 0;
   const { getByRole, rerender } = render(

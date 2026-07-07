@@ -94,6 +94,16 @@ function estimateRowSize(
   return 76;
 }
 
+function repeatsPreviousTool(row: TranscriptRow, previous: TranscriptRow | undefined): boolean {
+  return (
+    row.kind === "message" &&
+    previous?.kind === "message" &&
+    row.message.kind === "tool" &&
+    previous.message.kind === "tool" &&
+    row.message.name === previous.message.name
+  );
+}
+
 // The compact-mode trailing gap after a row (plan 58): rows sharing a type key sit flush (`pb-1`); a
 // type change opens exactly one blank line (`pb-6`). The px values mirror those Tailwind classes, and
 // `COMPACT_GAP_DELTA` is the extra height a gap-opening row adds to its size estimate so the pre-measure
@@ -410,6 +420,7 @@ export function VirtualTranscript({
               onToggleRow={toggleRow}
               onOpenDetail={onOpenDetail}
               onOpenAgent={onOpenAgent}
+              suppressCompactPrimary={compact && repeatsPreviousTool(row, rows[item.index - 1])}
             />
           </div>
         );

@@ -70,7 +70,7 @@ function Frame({
 
 /** Every transcript item type in its compact form, in resting/settled states. */
 export const Catalog: Story = {
-  render: () => <Frame rows={CATALOG_ROWS} height={720} />,
+  render: () => <Frame rows={CATALOG_ROWS} height={1320} />,
 };
 
 /** Every transcript item type in its FULL (non-compact) render - a full mock transcript of the taxonomy. */

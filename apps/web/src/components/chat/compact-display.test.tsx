@@ -1,5 +1,21 @@
 import assert from "node:assert/strict";
-import { LoaderIcon, Sparkles, TriangleAlert, Wrench } from "lucide-react";
+import { lucidArtifactRef } from "@trevor/session";
+import {
+  BookOpenText,
+  Brain,
+  Compass,
+  FilePlus,
+  FolderSearch,
+  LoaderIcon,
+  Package,
+  PencilLine,
+  SearchCode,
+  Stethoscope,
+  Terminal,
+  TriangleAlert,
+  Workflow,
+  Wrench,
+} from "lucide-react";
 import { test } from "vitest";
 import type { AssistantMessage, Message } from "../../transcript";
 import { compactDisplayFor, isCompactEligible, staysFullInCompact } from "./compact-display";
@@ -50,7 +66,7 @@ test("a streaming thinking-only segment compacts to a running 'Thinking' row", (
   const d = compactDisplayFor(seg);
   assert.ok(d);
   assert.equal(d.status, "running");
-  assert.equal(d.icon, LoaderIcon);
+  assert.equal(d.icon, Brain);
   assert.equal(d.primary, "Thinking");
   assert.equal(d.secondary, "weighing options");
   assert.equal(d.hasDetail, true);
@@ -60,7 +76,7 @@ test("a settled thought (no final text) compacts to an info 'Thought' row", () =
   const d = compactDisplayFor(assistant({ text: "", thinking: "hmm", done: true }));
   assert.ok(d);
   assert.equal(d.status, "info");
-  assert.equal(d.icon, Sparkles);
+  assert.equal(d.icon, Brain);
   assert.equal(d.primary, "Thought");
 });
 
@@ -100,11 +116,21 @@ test("a completed tool is done with detail; a failed/aborted tool is an error", 
   const done = compactDisplayFor(tool({ done: true, result: "total 0" }));
   assert.ok(done);
   assert.equal(done.status, "done");
-  assert.equal(done.icon, Wrench);
+  assert.equal(done.icon, Terminal);
   assert.equal(done.hasDetail, true);
 
   assert.equal(compactDisplayFor(tool({ done: true, result: "error: nope" }))?.status, "error");
   assert.equal(compactDisplayFor(tool({ done: false, aborted: true }))?.status, "error");
+});
+
+test("common compact tool rows use distinct semantic icons", () => {
+  assert.equal(compactDisplayFor(tool({ name: "read" }))?.icon, BookOpenText);
+  assert.equal(compactDisplayFor(tool({ name: "glob" }))?.icon, FolderSearch);
+  assert.equal(compactDisplayFor(tool({ name: "grep" }))?.icon, SearchCode);
+  assert.equal(compactDisplayFor(tool({ name: "edit" }))?.icon, PencilLine);
+  assert.equal(compactDisplayFor(tool({ name: "write" }))?.icon, FilePlus);
+  assert.equal(compactDisplayFor(tool({ name: "bash" }))?.icon, Terminal);
+  assert.equal(compactDisplayFor(tool({ name: "mcp" }))?.icon, Wrench);
 });
 
 test("command and shell results carry ok/error status and a first-line summary", () => {
@@ -117,6 +143,7 @@ test("command and shell results carry ok/error status and a first-line summary",
   });
   assert.ok(ok);
   assert.equal(ok.status, "done");
+  assert.equal(ok.icon, Stethoscope);
   assert.equal(ok.primary, "doctor");
   assert.equal(ok.secondary, "all green");
 
@@ -208,6 +235,56 @@ test("a delegation row reflects its child status, and a question row is detail-e
   });
   assert.equal(q?.primary, "Asked");
   assert.equal(q?.hasDetail, true);
+});
+
+test("an inline-agent row uses an exploration icon", () => {
+  const inlineAgent = compactDisplayFor({
+    kind: "inlineAgent",
+    id: "ia1",
+    parentRunId: "r1",
+    agents: [
+      {
+        childSessionId: "child",
+        agent: "explorer",
+        model: "qwen3-coder-30b",
+        reasoningLevel: "thinking",
+        status: "done",
+        tokens: 1240,
+      },
+    ],
+  });
+  assert.equal(inlineAgent?.icon, Compass);
+});
+
+test("lucid artifacts and hooks use artifact/hook-specific icons", () => {
+  const lucid = compactDisplayFor({
+    kind: "lucid",
+    id: "l1",
+    lucidId: "roadmap",
+    title: "Q3 Roadmap",
+    version: 1,
+    artifact: lucidArtifactRef({
+      htmlHash: "sha256-roadmap",
+      size: 0,
+      meta: {
+        lucidId: "roadmap",
+        version: 1,
+        provenance: "agent",
+        reviewStatus: "open",
+      },
+    }),
+  });
+  assert.equal(lucid?.icon, Package);
+
+  const hook = compactDisplayFor({
+    kind: "hookDecision",
+    id: "h1",
+    hookId: "user:policy",
+    event: "PreToolUse",
+    decision: "deny",
+    toolName: "bash",
+  });
+  assert.equal(hook?.icon, Workflow);
 });
 
 test("every non-primary kind is compact-eligible; user/response are not", () => {

@@ -32,6 +32,10 @@ function toolRow(id: string, name: string, result?: string): TranscriptRow {
   return messageRow(message);
 }
 
+function resultRow(id: string, text: string): TranscriptRow {
+  return messageRow({ kind: "result", id, command: "doctor", text, ok: true });
+}
+
 const userRow = messageRow({ kind: "user", id: "u1", text: "hi", artifacts: [], pastes: [] });
 
 function Harness({ rows }: { rows: readonly TranscriptRow[] }) {
@@ -132,29 +136,29 @@ describe("compact type-aware spacing", () => {
 
   test("expanding a compact row does not change its siblings' spacing", async () => {
     const rows = [
-      toolRow("x-edit1", "edit", "applied 1 edit"), // tool:edit (has detail -> expandable)
-      toolRow("x-edit2", "edit", "applied 1 edit"), // tool:edit (flush after edit1)
-      toolRow("x-bash", "bash", "ok"), // tool:bash (gap after edit2)
+      resultRow("x-result1", "all green\n3 checks passed"), // result (has inline detail)
+      resultRow("x-result2", "all green\n3 checks passed"), // result (flush after result1)
+      toolRow("x-bash", "bash", "ok"), // tool:bash (gap after result2)
     ];
     const { container } = render(<Harness rows={rows} />);
     await waitFor(() => {
       assert.ok(container.querySelector('[data-index="2"]'), "all rows mounted");
     });
 
-    // Before expansion: edit1 sits flush before edit2; edit2 opens a gap before bash.
+    // Before expansion: result1 sits flush before result2; result2 opens a gap before bash.
     assert.equal(padOf(container, 0), "flush");
     assert.equal(padOf(container, 1), "gap");
 
-    // Expand edit1 (its compact row is a button because it has detail).
+    // Expand result1 (command results still inline-expand; tool rows drill into detail instead).
     const button = container.querySelector('[data-index="0"] button');
-    assert.ok(button, "edit1 should be an expandable compact row");
+    assert.ok(button, "result1 should be an expandable compact row");
     fireEvent.click(button);
 
     // The type keys are unchanged, so the gaps are unchanged - expansion is internal to the row.
     await waitFor(() => {
       assert.ok(container.querySelector('[data-index="0"]'));
     });
-    assert.equal(padOf(container, 0), "flush", "expanding edit1 must not open a gap after it");
-    assert.equal(padOf(container, 1), "gap", "edit2 -> bash gap is unchanged");
+    assert.equal(padOf(container, 0), "flush", "expanding result1 must not open a gap after it");
+    assert.equal(padOf(container, 1), "gap", "result2 -> bash gap is unchanged");
   });
 });

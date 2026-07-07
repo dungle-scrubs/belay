@@ -304,6 +304,33 @@ test("a shell row is a selectable transcript segment", () => {
   assert.ok(container.querySelector('[data-message-id="shell1"]'));
 });
 
+test("user, shell, and command-result rows share the same transcript block alignment", () => {
+  const cases: Array<readonly [string, TranscriptRow]> = [
+    ["user1", messageRow({ kind: "user", id: "user1", text: "hello", artifacts: [], pastes: [] })],
+    ["res1", messageRow({ kind: "result", id: "res1", command: "/help", text: "ok", ok: true })],
+    [
+      "shell1",
+      messageRow({
+        kind: "shell",
+        id: "shell1",
+        requestId: "rq1",
+        command: "git status",
+        done: true,
+        output: "clean",
+        ok: true,
+      }),
+    ],
+  ];
+
+  for (const [id, row] of cases) {
+    const view = renderRow(row);
+    const block = view.container.querySelector(`[data-message-id="${id}"]`);
+    assert.ok(block, `${id} should have a selectable transcript block`);
+    assert.ok(block.classList.contains("pl-3.5"), `${id} should use the shared left inset`);
+    view.unmount();
+  }
+});
+
 test("02.17: a checkpoint breadcrumb renders quietly, not as the alarming step_backstop card", () => {
   const { container } = renderRow(
     messageRow({

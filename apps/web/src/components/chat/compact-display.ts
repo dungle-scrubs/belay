@@ -1,12 +1,21 @@
 import {
+  BookOpenText,
+  Brain,
   ChevronRight,
   CircleX,
+  Compass,
   CornerDownRight,
+  FilePlus,
+  FolderSearch,
   LoaderIcon,
   MessageCircleQuestion,
-  Sparkles,
+  Package,
+  PencilLine,
+  SearchCode,
+  Stethoscope,
   Terminal,
   TriangleAlert,
+  Workflow,
   Wrench,
 } from "lucide-react";
 import type { ElementType } from "react";
@@ -84,9 +93,15 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
   switch (message.kind) {
     case "user":
       return null;
-    // A Lucid artifact card (plan 27) is already a compact one-liner; it stays fully rendered.
     case "lucid":
-      return null;
+      return {
+        kind: "lucid",
+        status: "info",
+        icon: Package,
+        primary: message.title,
+        secondary: `Lucid artifact · v${message.version} · review in the panel`,
+        hasDetail: true,
+      };
     case "assistant":
       return message.text.trim().length > 0 ? null : assistantCompact(message);
     case "tool": {
@@ -94,7 +109,7 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
       return {
         kind: "tool",
         status,
-        icon: runningIcon(status, Wrench),
+        icon: runningIcon(status, compactToolIcon(message.name)),
         primary: message.name,
         secondary: compactToolSummary(message.name, message.args),
         hasDetail: Boolean(message.result),
@@ -104,7 +119,10 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
       return {
         kind: "result",
         status: message.ok ? "done" : "error",
-        icon: ChevronRight,
+        icon:
+          message.command === "doctor" || message.command === "/doctor"
+            ? Stethoscope
+            : ChevronRight,
         primary: message.command,
         secondary: firstLine(message.text),
         hasDetail: message.text.trim().length > 0,
@@ -136,7 +154,10 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
     case "guardrail":
       return compactFromDescriptor(messageKindDescriptor(message));
     case "hookDecision":
-      return compactFromDescriptor(messageKindDescriptor(message));
+      return {
+        ...compactFromDescriptor(messageKindDescriptor(message)),
+        icon: Workflow,
+      };
     case "compacting":
       return {
         kind: "compacting",
@@ -146,9 +167,8 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         secondary: `${message.tokens}/${message.budget} tokens`,
         hasDetail: false,
       };
-    // An inline-agent row/group (plan 09.4) is already a compact one-liner; keep it fully rendered.
     case "inlineAgent":
-      return null;
+      return inlineAgentCompact(message);
     case "delegation": {
       const status =
         message.status === "running" ? "running" : message.status === "failed" ? "error" : "done";
@@ -175,6 +195,35 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
     case "limit":
       return compactFromDescriptor(messageKindDescriptor(message));
   }
+}
+
+function inlineAgentCompact(message: Extract<Message, { kind: "inlineAgent" }>): CompactDisplay {
+  const running = message.agents.some((agent) => agent.status === "running");
+  const failed = message.agents.some((agent) => agent.status === "failed");
+  const interrupted = message.agents.some((agent) => agent.status === "interrupted");
+  const [first] = message.agents;
+  const primary =
+    message.agents.length === 1 && first ? first.agent : `${message.agents.length} agents`;
+  const secondary =
+    message.agents.length === 1 && first
+      ? [first.model, first.reasoningLevel, first.tokens ? `down ${first.tokens} tokens` : null]
+          .filter((part): part is string => Boolean(part))
+          .join(" · ")
+      : truncate(
+          message.agents
+            .map((agent) => agent.agent)
+            .filter(Boolean)
+            .join(" · "),
+          80,
+        );
+  return {
+    kind: "inlineAgent",
+    status: running ? "running" : failed ? "error" : interrupted ? "info" : "done",
+    icon: Compass,
+    primary,
+    secondary: secondary || null,
+    hasDetail: message.agents.length > 0,
+  };
 }
 
 /** The compact row for a text-less assistant segment: an error, a terminal non-answer, or thinking. */
@@ -212,11 +261,31 @@ function assistantCompact(message: AssistantMessage): CompactDisplay {
   return {
     kind: "assistant",
     status: message.done ? "info" : "running",
-    icon: message.done ? Sparkles : LoaderIcon,
+    icon: Brain,
     primary: message.done ? "Thought" : "Thinking",
     secondary: firstLine(message.thinking),
     hasDetail: message.thinking.trim().length > 0,
   };
+}
+
+function compactToolIcon(name: string): ElementType {
+  switch (name) {
+    case "read":
+      return BookOpenText;
+    case "glob":
+      return FolderSearch;
+    case "grep":
+      return SearchCode;
+    case "bash":
+      return Terminal;
+    case "edit":
+    case "multi_edit":
+      return PencilLine;
+    case "write":
+      return FilePlus;
+    default:
+      return Wrench;
+  }
 }
 
 /** A quiet status marker (recovered / continued / guardrail): info-toned, no expandable detail. */
