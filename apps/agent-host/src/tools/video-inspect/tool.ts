@@ -8,7 +8,7 @@
  */
 import { createHash } from "node:crypto";
 import { debug } from "@host/transport/log";
-import { type ArtifactRef, artifactRef, putBlob } from "@trevor/session";
+import { type ArtifactRef, createArtifactRuntime } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
 import { Schema } from "effect";
 import { simpleTool } from "../shared";
@@ -32,9 +32,9 @@ const Params = Schema.Struct({
 
 /** Stores one frame PNG in the content-addressed blob store and returns its ArtifactRef. */
 function livePutFrame(blobStoreUrl: string): PutFrame {
+  const artifacts = createArtifactRuntime({ blobStoreUrl });
   return async (bytes, mimeType) => {
-    const result = await putBlob(blobStoreUrl, bytes, mimeType);
-    return artifactRef(result, "image");
+    return artifacts.createFrameArtifact(bytes, mimeType);
   };
 }
 

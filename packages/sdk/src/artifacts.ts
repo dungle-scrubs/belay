@@ -1,11 +1,8 @@
 import {
   type ArtifactRef,
-  artifactRef,
   type BlobMetaProbe,
-  fetchBlobBytes,
+  createArtifactRuntime,
   HEX64,
-  headBlob,
-  putBlob,
 } from "@trevor/session";
 import type { TrevorClient } from "./client";
 
@@ -32,8 +29,10 @@ export function uploadArtifact(
 ): Promise<ArtifactRef> {
   return client.blobOp("uploadArtifact", async () => {
     const blobUrl = client.requireBlobUrl("uploadArtifact");
-    const result = await putBlob(blobUrl, source, mimeType);
-    return artifactRef(result, options?.kind ?? "file", options?.name);
+    return createArtifactRuntime({ blobStoreUrl: blobUrl }).upload(source, mimeType, {
+      kind: options?.kind ?? "file",
+      name: options?.name,
+    });
   });
 }
 
@@ -48,13 +47,13 @@ export function downloadArtifact(
     if (!HEX64.test(hash)) {
       throw new Error(`not a valid blob hash: ${hash}`);
     }
-    return fetchBlobBytes(blobUrl, hash);
+    return createArtifactRuntime({ blobStoreUrl: blobUrl }).download(hash);
   });
 }
 
 /** Probes an artifact's size + content type by hash (HEAD), or null when the blob is absent. */
 export function headArtifact(client: TrevorClient, hash: string): Promise<BlobMetaProbe | null> {
   return client.blobOp("headArtifact", async () =>
-    headBlob(client.requireBlobUrl("headArtifact"), hash),
+    createArtifactRuntime({ blobStoreUrl: client.requireBlobUrl("headArtifact") }).head(hash),
   );
 }

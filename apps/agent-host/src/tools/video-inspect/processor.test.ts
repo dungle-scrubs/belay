@@ -10,7 +10,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { ArtifactRef } from "@trevor/session";
+import { createArtifactRuntime } from "@trevor/session";
+import type { PutBlobResult } from "@trevor/session/blob-contract";
 import { describe, expect, it } from "vitest";
 import { VideoCancelledError } from "./errors";
 import { inspectVideoFile, type PutFrame } from "./processor";
@@ -30,11 +31,16 @@ async function ffmpegAvailable(): Promise<boolean> {
 /** A hermetic, content-addressed blob store: frames are stored under their sha256, none escape. */
 function memoryStore(): { readonly blobs: Map<string, Uint8Array>; readonly putFrame: PutFrame } {
   const blobs = new Map<string, Uint8Array>();
-  const putFrame: PutFrame = async (bytes, mimeType) => {
-    const hash = createHash("sha256").update(bytes).digest("hex");
-    blobs.set(hash, bytes);
-    return { kind: "image", mimeType, size: bytes.byteLength, hash } satisfies ArtifactRef;
-  };
+  const artifacts = createArtifactRuntime({
+    blobStoreUrl: "mem://video-frames",
+    put: async (_baseUrl, body, mimeType): Promise<PutBlobResult> => {
+      const bytes = body instanceof Uint8Array ? body : new Uint8Array(await body.arrayBuffer());
+      const hash = createHash("sha256").update(bytes).digest("hex");
+      blobs.set(hash, bytes);
+      return { hash, size: bytes.byteLength, mimeType, deduped: false };
+    },
+  });
+  const putFrame: PutFrame = (bytes, mimeType) => artifacts.createFrameArtifact(bytes, mimeType);
   return { blobs, putFrame };
 }
 

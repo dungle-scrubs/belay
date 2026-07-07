@@ -4,10 +4,10 @@
 
 - Original audit candidate total: 8
 - Implementation milestones: 10
-- Completed milestones: 7
-- Active blockers: 3
-- Current status: Cross-service workflow drivers are complete and verified.
-Current focus: M7. Deepen blob and artifact IO into a shared artifact runtime.
+- Completed milestones: 8
+- Active blockers: 2
+- Current status: Cross-service harness and artifact runtime boundaries are complete and verified.
+Current focus: M8. Deepen CLI command dispatch into a command table and router.
 
 ## Audit Passes
 
@@ -34,7 +34,7 @@ Current focus: M7. Deepen blob and artifact IO into a shared artifact runtime.
 ## Phase 3 - Cross-Service Harness And Artifact Policy
 
 - [x] M6. Deepen cross-service test harnesses into workflow drivers.
-- [ ] M7. Deepen blob and artifact IO into a shared artifact runtime.
+- [x] M7. Deepen blob and artifact IO into a shared artifact runtime.
 
 ## Phase 4 - CLI Command Surface
 
@@ -49,7 +49,7 @@ Current focus: M7. Deepen blob and artifact IO into a shared artifact runtime.
 - [x] Gate 0->1. Planner state passes `check-progress`, docs are registered, and plan docs are committed to `main`.
 - [x] Gate 1->2. Protocol and web read-model validation passes.
 - [x] Gate 2->3. Host session, tool, provider, and hermetic e2e validation passes.
-- [ ] Gate 3->4. Test-kit, artifact, integration, and e2e validation passes.
+- [x] Gate 3->4. Test-kit, artifact, integration, and e2e validation passes.
 - [ ] Gate 4->5. CLI typecheck, CLI unit tests, and CLI e2e flows pass.
 - [ ] Final Gate. Lint, typecheck, all Vitest projects, browser e2e status, and planner checks pass.
 

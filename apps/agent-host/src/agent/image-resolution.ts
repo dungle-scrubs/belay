@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { ChatImage, ChatMessage } from "@host/providers/index";
-import { type ArtifactRef, fetchBlobBytes } from "@trevor/session";
+import { createArtifactRuntime } from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
 
 const execAsync = promisify(exec);
@@ -21,11 +21,6 @@ const execAsync = promisify(exec);
  */
 
 const BLOB_STORE_URL = process.env.BLOB_STORE_URL ?? serviceUrl("blob");
-
-/** Image formats vision models reliably accept; anything else (e.g. HEIC) is not inlined. */
-const MODEL_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
-const isModelImage = (a: ArtifactRef): boolean =>
-  a.kind === "image" && MODEL_IMAGE_MIMES.has(a.mimeType.toLowerCase());
 
 const CACHE_MAX = 32;
 
@@ -68,48 +63,43 @@ export function createHistoryImageResolver({
   // history that re-sends the same image on every step never refetches or re-encodes it.
   // Bounded (FIFO) so a long-lived host doesn't accumulate every image it has ever seen.
   const cache = new Map<string, ChatImage>();
-  /** Hashes whose bytes don't decode as an image - skipped so they can't blank a vision turn. */
-  const undecodable = new Set<string>();
+  const artifacts = createArtifactRuntime({ blobStoreUrl, validateImage: decodes });
 
-  const resolveImage = async (ref: ArtifactRef): Promise<ChatImage | null> => {
-    if (undecodable.has(ref.hash)) {
-      return null;
-    }
+  const resolveImage = async (
+    ref: NonNullable<ChatMessage["artifacts"]>[number],
+  ): Promise<ChatImage | null> => {
     const hit = cache.get(ref.hash);
     if (hit) {
       return hit;
     }
-    try {
-      const bytes = await fetchBlobBytes(blobStoreUrl, ref.hash);
-      if (!(await decodes(bytes))) {
-        undecodable.add(ref.hash);
-        return null;
-      }
+    const resolved = await artifacts.tryResolveModelImage(ref);
+    if (resolved) {
       const image: ChatImage = {
-        hash: ref.hash,
-        mimeType: ref.mimeType,
-        data: Buffer.from(bytes).toString("base64"),
+        hash: resolved.hash,
+        mimeType: resolved.mimeType,
+        data: Buffer.from(resolved.bytes).toString("base64"),
       };
       cache.set(ref.hash, image);
       if (cache.size > cacheMax) {
         cache.delete(cache.keys().next().value as string);
       }
       return image;
-    } catch {
-      // Store unreachable or blob gone: skip the image rather than fail the turn - the model
-      // still gets the text and the non-image artifact note.
-      return null;
     }
+    // Store unreachable, blob gone, unsupported mime, or corrupt image bytes: skip the image rather
+    // than fail the turn - the model still gets the text and the non-image artifact note.
+    return null;
   };
 
   return async (history) => {
-    const hasImages = history.some((m) => m.role === "user" && m.artifacts?.some(isModelImage));
+    const hasImages = history.some(
+      (m) => m.role === "user" && m.artifacts?.some(artifacts.isModelImage),
+    );
     if (!hasImages) {
       return history;
     }
     return Promise.all(
       history.map(async (message) => {
-        const imageRefs = message.artifacts?.filter(isModelImage) ?? [];
+        const imageRefs = message.artifacts?.filter(artifacts.isModelImage) ?? [];
         if (message.role !== "user" || imageRefs.length === 0) {
           return message;
         }

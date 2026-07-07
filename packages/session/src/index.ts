@@ -1,4 +1,5 @@
 export * from "./approval";
+export * from "./artifact-runtime";
 export * from "./blob";
 export * from "./breakdown";
 export * from "./capability-manifest";

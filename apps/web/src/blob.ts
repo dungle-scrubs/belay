@@ -1,4 +1,9 @@
-import { type ArtifactRef, artifactRef, blobUrl, errorMessage, putBlob } from "@trevor/session";
+import {
+  type ArtifactRef,
+  classifyArtifactKind,
+  createArtifactRuntime,
+  errorMessage,
+} from "@trevor/session";
 import { serviceUrl } from "@trevor/session/ports";
 import { SPAN_NAMES, type TelemetrySink, withSpan } from "@trevor/session/telemetry";
 import { telemetrySink } from "./telemetry";
@@ -10,16 +15,7 @@ import { telemetrySink } from "./telemetry";
  * directly (it serves permissive CORS); the host later fetches the same bytes by hash.
  */
 const BLOB_STORE_URL = import.meta.env.VITE_BLOB_STORE_URL ?? serviceUrl("blob");
-
-function kindOf(mimeType: string): ArtifactRef["kind"] {
-  if (mimeType.startsWith("image/")) {
-    return "image";
-  }
-  if (mimeType === "application/pdf" || mimeType.startsWith("text/")) {
-    return "document";
-  }
-  return "file";
-}
+const artifactRuntime = createArtifactRuntime({ blobStoreUrl: BLOB_STORE_URL });
 
 /** Uploads a picked File to the blob store, returning its ArtifactRef for a user.message. The upload is a
  *  `trevor.blob.io` span carrying the artifact KIND + byte size only - never the file name or bytes. */
@@ -28,12 +24,11 @@ export async function uploadArtifact(
   sink: TelemetrySink = telemetrySink(),
 ): Promise<ArtifactRef> {
   const mimeType = file.type || "application/octet-stream";
-  const kind = kindOf(mimeType);
+  const kind = classifyArtifactKind(mimeType);
   return withSpan(sink, SPAN_NAMES.blobIo, { op: "upload", kind, bytes: file.size }, async () => {
     try {
       // The File is a Blob - pass it straight through (no arrayBuffer/Uint8Array copy).
-      const result = await putBlob(BLOB_STORE_URL, file, mimeType);
-      return artifactRef(result, kind, file.name || undefined);
+      return artifactRuntime.upload(file, mimeType, { kind, name: file.name || undefined });
     } catch (cause) {
       // A network/fetch failure here almost always means the store isn't running; turn the
       // opaque "Failed to fetch" into something actionable so the composer can show it.
@@ -44,5 +39,5 @@ export async function uploadArtifact(
 
 /** The GET url for a stored artifact - usable directly as an `<img>` src. */
 export function artifactSrc(hash: string): string {
-  return blobUrl(BLOB_STORE_URL, hash);
+  return artifactRuntime.artifactUrl(hash);
 }
