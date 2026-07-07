@@ -34,7 +34,6 @@ export function SupportPanel({
   subagents,
   jobs,
   stale = false,
-  onClearTasks,
   onOpenJobDetail,
   onKillJob,
   onDismissJob,
@@ -44,7 +43,6 @@ export function SupportPanel({
   readonly subagents: readonly SupportSubagent[];
   readonly jobs: readonly PanelJob[];
   readonly stale?: boolean;
-  readonly onClearTasks?: () => void;
   readonly onOpenJobDetail?: (jobId: string) => void;
   readonly onKillJob?: (jobId: string) => void;
   readonly onDismissJob?: (jobId: string) => void;
@@ -59,7 +57,7 @@ export function SupportPanel({
       <div className={cn("flex flex-col gap-3", panel.twoColumn && "@md:flex-row @md:gap-6")}>
         {panel.hasTasks ? (
           <div className="min-w-0 @md:flex-1">
-            <TasksPanel tasks={tasks} stale={stale} onClear={onClearTasks} />
+            <TasksPanel tasks={tasks} stale={stale} />
           </div>
         ) : null}
         {panel.hasBackground ? (

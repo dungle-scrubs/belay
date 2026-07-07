@@ -17,7 +17,7 @@ const meta: Meta<typeof SupportPanel> = {
   title: "SupportPanel/SupportPanel",
   component: SupportPanel,
   parameters: { layout: "fullscreen" },
-  args: { onOpenJobDetail: () => {}, onKillJob: () => {}, onClearTasks: () => {} },
+  args: { onOpenJobDetail: () => {}, onKillJob: () => {} },
 };
 export default meta;
 type Story = StoryObj<typeof SupportPanel>;

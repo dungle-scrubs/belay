@@ -246,8 +246,6 @@ export function PanelHost(props: {
   };
   /** The checklist is stale (the user spoke after the model last touched it); drives the panel badge. */
   tasksStale?: boolean;
-  /** Dismiss the whole checklist (the abandoned-list escape hatch). */
-  onClearTasks?: () => void;
   /** Background subagents (running delegations) for the support panel (plan 09). */
   subagents?: readonly SupportSubagent[];
   /** Promoted background jobs for the support panel (plan 09). */
@@ -296,7 +294,6 @@ export function PanelHost(props: {
     tasks,
     loopInventory,
     tasksStale,
-    onClearTasks,
     subagents,
     jobs,
     onOpenJobDetail,
@@ -457,7 +454,6 @@ export function PanelHost(props: {
           subagents={subagents ?? []}
           jobs={jobs ?? []}
           stale={tasksStale}
-          onClearTasks={onClearTasks}
           onOpenJobDetail={onOpenJobDetail}
           onKillJob={onKillJob}
           onDismissJob={onDismissJob}

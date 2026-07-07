@@ -93,13 +93,10 @@ function GroupRow({
 export function TasksPanel({
   tasks,
   stale = false,
-  onClear,
 }: {
   tasks: readonly TaskSnapshot[];
   /** The checklist is behind the conversation (user spoke after the model last touched it). */
   stale?: boolean;
-  /** Dismiss the whole checklist (the abandoned-list escape hatch); omitted = no dismiss control. */
-  onClear?: () => void;
 }) {
   if (tasks.length === 0) {
     return null;
@@ -121,17 +118,6 @@ export function TasksPanel({
           >
             stale
           </span>
-        ) : null}
-        {onClear ? (
-          <button
-            type="button"
-            onClick={onClear}
-            aria-label="Dismiss task checklist"
-            title="Dismiss this checklist"
-            className="ml-auto rounded px-1 leading-none text-muted-foreground/50 hover:text-foreground"
-          >
-            ✕
-          </button>
         ) : null}
       </div>
       <div className="flex flex-col gap-0.5">

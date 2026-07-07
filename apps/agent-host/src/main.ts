@@ -858,15 +858,6 @@ const programmaticCommands = createProgrammaticCommandDispatcher({
     { name: "/serial-next", run: (args) => runSerialNext(args) },
     { name: "/serial-dispose", run: (args) => runSerialDispose(args) },
     { name: "/clip", run: (args) => runClip(args) },
-    {
-      name: "/tasks-clear",
-      run: () => {
-        // The task panel's dismiss control (09.1): retire a checklist the model abandoned on a topic
-        // change. The empty tasks.current snapshot emitted via taskRegistry.onChange is the
-        // confirmation (the panel hides itself when the list is empty).
-        taskRegistry.clear();
-      },
-    },
   ],
   // A file-loaded custom command (plan 44.5) takes the SUBMIT branch: expand its body and publish it as
   // the turn's prompt. Everything else (built-in immediate commands) keeps the command.result lane with

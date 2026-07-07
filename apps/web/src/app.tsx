@@ -1550,7 +1550,6 @@ export function App() {
         tasks={tasks}
         loopInventory={{ rows: loopInventoryRows, onControl: onLoopControl }}
         tasksStale={staleTasks}
-        onClearTasks={() => void command("/tasks-clear", "")}
         subagents={subagents}
         jobs={jobs}
         onOpenJobDetail={onOpenJobDetail}
