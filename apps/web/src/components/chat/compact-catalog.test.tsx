@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { render } from "@testing-library/react";
 import { test } from "vitest";
+import { reconnectActionLabel } from "@/action-label";
 import { readOnlyToolBatches } from "../../transcript";
 import { buildTranscriptRows } from "../../transcript-rows";
 import { CATALOG_KINDS, catalogActive, catalogTranscript } from "./compact-catalog-fixtures";
@@ -126,6 +127,14 @@ test("resting and active states are both represented", () => {
     active.some((m) => m.kind === "delegation" && m.status === "running"),
     "expected a running delegation",
   );
+});
+
+test("58.1 M4: catalog includes the latest-attempt reconnecting state without raw markup", () => {
+  const reconnecting = catalogActive().find((m) => m.kind === "reconnecting");
+  assert.ok(reconnecting, "expected an active reconnecting fixture");
+  const display = compactDisplayFor(reconnecting);
+  assert.equal(display?.secondary, `${reconnectActionLabel(2, 10)} · 502 Bad Gateway`);
+  assert.doesNotMatch(display?.secondary ?? "", /<html>|<body>|ZenZG/);
 });
 
 test("the catalog's read-only run batches while same-name and distinct tools group by type", () => {

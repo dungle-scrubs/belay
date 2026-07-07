@@ -170,7 +170,13 @@ export function catalogTranscript(): Message[] {
       reclaimed: 2048,
     },
     { kind: "continued", id: "cont1", steps: 12, pressure: 0.4, detail: "headroom + progress" },
-    { kind: "reconnecting", id: "rc1", attempt: 2, maxAttempts: 3, detail: "stream dropped" },
+    {
+      kind: "reconnecting",
+      id: "reconnecting:r-catalog",
+      attempt: 2,
+      maxAttempts: 10,
+      detail: "502 Bad Gateway",
+    },
     { kind: "guardrail", id: "g1", tool: "bash", action: "blocked", reason: "repeat", count: 3 },
     { kind: "compacting", id: "cm1", foldId: "f1", tokens: 400, budget: 1000 },
     {
@@ -239,7 +245,13 @@ export function catalogActive(): Message[] {
       mode: "async",
       status: "running",
     },
-    { kind: "reconnecting", id: "rc-run", attempt: 1, maxAttempts: 3, detail: "stream dropped" },
+    {
+      kind: "reconnecting",
+      id: "reconnecting:r-run",
+      attempt: 2,
+      maxAttempts: 10,
+      detail: "<html><body><h1>502 Bad Gateway</h1><p>ZenZG tunnel unavailable</p></body></html>",
+    },
     { kind: "compacting", id: "cm-run", foldId: "f2", tokens: 250, budget: 1000 },
   ];
 }

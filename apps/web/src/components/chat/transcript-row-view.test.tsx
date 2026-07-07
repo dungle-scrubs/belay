@@ -659,6 +659,21 @@ test("fix: the reconnecting row falls back to the legacy attempt budget via the 
   assert.ok(text.includes(reconnectActionLabel(1, 3)), "falls back to LEGACY_RECONNECT_ATTEMPTS=3");
 });
 
+test("58.1 M1: the reconnecting row does not render raw gateway markup", () => {
+  const { container } = renderRow(
+    messageRow({
+      kind: "reconnecting",
+      id: "rc-html",
+      attempt: 2,
+      maxAttempts: 10,
+      detail: "<html><body><h1>502 Bad Gateway</h1><p>ZenZG tunnel unavailable</p></body></html>",
+    }),
+  );
+  const text = container.textContent ?? "";
+  assert.match(text, /502 Bad Gateway/);
+  assert.doesNotMatch(text, /<html>|<body>|ZenZG/);
+});
+
 test("fix: the recovered row renders via the shared RECOVERY_ACTION_LABEL constant", () => {
   const { container } = renderRow(
     messageRow({

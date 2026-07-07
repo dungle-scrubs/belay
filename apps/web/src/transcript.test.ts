@@ -954,6 +954,74 @@ test("02.15: a reconnecting marker carries the threaded maxAttempts denominator"
   assert.equal(marker?.maxAttempts, 10, "the row renders attempt 2/10, not a hardcoded /3");
 });
 
+test("58.1 M1: same-run reconnect attempts update one stable marker and keep recovered output below", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "go", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(
+      3,
+      events.assistantReconnecting({
+        runId: "r1",
+        attempt: 1,
+        maxAttempts: 10,
+        detail: "first websocket close",
+      }),
+    ),
+    ev(
+      4,
+      events.assistantReconnecting({
+        runId: "r1",
+        attempt: 2,
+        maxAttempts: 10,
+        detail: "second websocket close",
+      }),
+    ),
+    ev(5, events.assistantDelta({ runId: "r1", text: "recovered answer" })),
+    ev(6, events.assistantCompleted({ runId: "r1", text: "recovered answer" })),
+  ];
+
+  const messages = toTranscript(log);
+  const reconnecting = messages.filter(
+    (m): m is Extract<Message, { kind: "reconnecting" }> => m.kind === "reconnecting",
+  );
+  assert.equal(reconnecting.length, 1, "same-run reconnect attempts update one marker");
+  assert.deepEqual(
+    reconnecting.map((m) => ({ id: m.id, attempt: m.attempt, maxAttempts: m.maxAttempts })),
+    [{ id: "reconnecting:r1", attempt: 2, maxAttempts: 10 }],
+  );
+  assert.match(reconnecting[0]?.detail ?? "", /second websocket close/);
+  assert.deepEqual(
+    messages.map((m) => m.kind),
+    ["user", "reconnecting", "assistant"],
+    "the recovered answer stays below the single reconnect marker",
+  );
+});
+
+test("58.1 M2: reconnect markers stay distinct across runs and same-run updates keep first placement", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "go", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(3, events.assistantReconnecting({ runId: "r1", attempt: 1, detail: "first r1" })),
+    ev(4, events.assistantStarted({ runId: "r2", warm: true, model: "m", provider: "qwen" })),
+    ev(5, events.assistantReconnecting({ runId: "r2", attempt: 1, detail: "first r2" })),
+    ev(6, events.assistantReconnecting({ runId: "r1", attempt: 2, detail: "latest r1" })),
+  ];
+
+  const reconnecting = toTranscript(log).filter(
+    (m): m is Extract<Message, { kind: "reconnecting" }> => m.kind === "reconnecting",
+  );
+
+  assert.deepEqual(
+    reconnecting.map((m) => ({ id: m.id, attempt: m.attempt, detail: m.detail })),
+    [
+      { id: "reconnecting:r1", attempt: 2, detail: "latest r1" },
+      { id: "reconnecting:r2", attempt: 1, detail: "first r2" },
+    ],
+    "a later r1 retry updates the first r1 marker without moving it below r2",
+  );
+  assert.equal(reconnecting[0]?.maxAttempts, undefined, "legacy reconnects keep no maxAttempts");
+});
+
 test("a host-reaped orphan is marked interrupted, not cancelled (host restart is not a user ESC)", () => {
   // reapOrphans closes a turn left dangling by a host restart/crash with interrupted:true - it must
   // NOT render as the red user "cancelled", so a hot-reload never looks like the user pressed ESC.

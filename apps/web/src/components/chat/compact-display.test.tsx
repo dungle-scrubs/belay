@@ -17,6 +17,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { test } from "vitest";
+import { reconnectActionLabel } from "@/action-label";
 import type { AssistantMessage, Message } from "../../transcript";
 import { compactDisplayFor, isCompactEligible, staysFullInCompact } from "./compact-display";
 
@@ -182,6 +183,18 @@ test("status markers (recovered / continued / reconnecting / guardrail / compact
   }
   assert.equal(compactDisplayFor(cases[2] as Message)?.status, "running");
   assert.equal(compactDisplayFor(cases[3] as Message)?.primary, "Guardrail: bash");
+});
+
+test("58.1 M3: reconnecting compact rows use the shared attempt label and sanitized reason", () => {
+  const display = compactDisplayFor({
+    kind: "reconnecting",
+    id: "rc",
+    attempt: 2,
+    maxAttempts: 10,
+    detail: "<html><body><h1>502 Bad Gateway</h1><p>ZenZG tunnel unavailable</p></body></html>",
+  });
+  assert.equal(display?.primary, "Reconnecting");
+  assert.equal(display?.secondary, `${reconnectActionLabel(2, 10)} · 502 Bad Gateway`);
 });
 
 test("44.4: a usage-limit marker compacts to an info row labelled by status + window", () => {

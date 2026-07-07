@@ -331,6 +331,37 @@ export function limitMarkerSummary(message: LimitMessage, nowMs: number): string
   }
   return parts.join(" · ");
 }
+
+const RECONNECT_DETAIL_MAX = 96;
+const RECONNECT_STATUS_PHRASE =
+  /\b(?:HTTP\s*)?(?:502 Bad Gateway|503 Service Unavailable|504 Gateway Timeout|500 Internal Server Error|Bad Gateway|connection reset|websocket closed)\b/i;
+
+function capReconnectDetail(text: string): string {
+  return text.length <= RECONNECT_DETAIL_MAX
+    ? text
+    : `${text.slice(0, RECONNECT_DETAIL_MAX - 3).trimEnd()}...`;
+}
+
+export function reconnectDisplayDetail(detail: string): string {
+  const withoutBlocks = detail
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ");
+  const hadTags = /<\/?[a-z][^>]*>/i.test(withoutBlocks);
+  const plain = withoutBlocks
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (hadTags) {
+    return plain.match(RECONNECT_STATUS_PHRASE)?.[0] ?? "connection dropped";
+  }
+  return capReconnectDetail(plain || "connection dropped");
+}
 export type Message =
   | {
       kind: "user";
@@ -536,6 +567,8 @@ export function toTranscript(
   // advanced running -> terminal in place (the grouped analogue of the delegation block above).
   const inlineAgentByParent = new Map<string, InlineAgentMessage>();
   const inlineAgentEntryByChild = new Map<string, InlineAgent>();
+  // Retry attempts update in place so a transient provider outage does not flood the transcript.
+  const reconnectingByRun = new Map<string, ReconnectingMessage>();
   // One terminal block per shell-lane run (D-082), keyed by requestId: the `user.shell` spawns a
   // pending block, the `shell.result` fills it in place (so it shows `$ command` then the output,
   // never two rows). A `shell.result` with no prior request (the request was compacted out of the
@@ -841,13 +874,25 @@ export function toTranscript(
           open.done = true;
           openByRun.delete(decoded.runId);
         }
-        messages.push({
-          kind: "reconnecting",
-          id: event.eventId,
-          attempt: decoded.attempt,
-          ...(decoded.maxAttempts != null ? { maxAttempts: decoded.maxAttempts } : {}),
-          detail: decoded.detail,
-        });
+        const marker = reconnectingByRun.get(decoded.runId);
+        const detail = reconnectDisplayDetail(decoded.detail);
+        if (marker) {
+          marker.attempt = decoded.attempt;
+          if (decoded.maxAttempts != null) {
+            marker.maxAttempts = decoded.maxAttempts;
+          }
+          marker.detail = detail;
+        } else {
+          const next: ReconnectingMessage = {
+            kind: "reconnecting",
+            id: `reconnecting:${decoded.runId}`,
+            attempt: decoded.attempt,
+            ...(decoded.maxAttempts != null ? { maxAttempts: decoded.maxAttempts } : {}),
+            detail,
+          };
+          reconnectingByRun.set(decoded.runId, next);
+          messages.push(next);
+        }
         break;
       }
       case "delegated.to": {

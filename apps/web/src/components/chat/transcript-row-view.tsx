@@ -25,6 +25,7 @@ import { toolSummary } from "../../tool-args";
 import {
   LEGACY_RECONNECT_ATTEMPTS,
   type Message,
+  reconnectDisplayDetail,
   type ToolMessage as ToolMessageData,
 } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
@@ -433,7 +434,7 @@ export function TranscriptRowView({
     return (
       <div className="pl-3.5">
         <ToneAlert tone="blue" icon={RotateCw} title="connection dropped">
-          {message.detail} ·{" "}
+          {reconnectDisplayDetail(message.detail)} ·{" "}
           {reconnectActionLabel(message.attempt, message.maxAttempts ?? LEGACY_RECONNECT_ATTEMPTS)}
         </ToneAlert>
       </div>

@@ -19,9 +19,15 @@ import {
   Wrench,
 } from "lucide-react";
 import type { ElementType } from "react";
+import { reconnectActionLabel } from "@/action-label";
 import { truncate } from "../../derive";
 import { parseToolArgs, salientToolArg } from "../../tool-args";
-import type { AssistantMessage, Message } from "../../transcript";
+import {
+  type AssistantMessage,
+  LEGACY_RECONNECT_ATTEMPTS,
+  type Message,
+  reconnectDisplayDetail,
+} from "../../transcript";
 import { messageKindDescriptor } from "./message-kind-descriptor";
 import {
   shellMessageStatus,
@@ -148,7 +154,10 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         status: "running",
         icon: LoaderIcon,
         primary: "Reconnecting",
-        secondary: `attempt ${message.attempt}${message.maxAttempts ? `/${message.maxAttempts}` : ""}`,
+        secondary: `${reconnectActionLabel(
+          message.attempt,
+          message.maxAttempts ?? LEGACY_RECONNECT_ATTEMPTS,
+        )} · ${reconnectDisplayDetail(message.detail)}`,
         hasDetail: false,
       };
     case "guardrail":
