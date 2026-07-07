@@ -4,10 +4,10 @@
 
 - Original audit candidate total: 8
 - Implementation milestones: 10
-- Completed milestones: 9
-- Active blockers: 1
-- Current status: CLI command routing is table-driven and verified.
-Current focus: M9. Remove boundary drift and finish the repository-wide cutover.
+- Completed milestones: 10
+- Active blockers: 0
+- Current status: Repository-wide boundary cutover is complete and verified.
+Current focus: Complete.
 
 ## Audit Passes
 
@@ -42,7 +42,7 @@ Current focus: M9. Remove boundary drift and finish the repository-wide cutover.
 
 ## Phase 5 - Repository-Wide Cutover And Verification
 
-- [ ] M9. Remove boundary drift and finish the repository-wide cutover.
+- [x] M9. Remove boundary drift and finish the repository-wide cutover.
 
 ## Gates
 
@@ -51,7 +51,7 @@ Current focus: M9. Remove boundary drift and finish the repository-wide cutover.
 - [x] Gate 2->3. Host session, tool, provider, and hermetic e2e validation passes.
 - [x] Gate 3->4. Test-kit, artifact, integration, and e2e validation passes.
 - [x] Gate 4->5. CLI typecheck, CLI unit tests, and CLI e2e flows pass.
-- [ ] Final Gate. Lint, typecheck, all Vitest projects, browser e2e status, and planner checks pass.
+- [x] Final Gate. Lint, typecheck, all Vitest projects, browser e2e status, and planner checks pass.
 
 ## Deferred Follow-Up
 

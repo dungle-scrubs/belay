@@ -7,16 +7,14 @@
  * Not for: extraction (processor.ts) or provider continuation (continuation.ts).
  */
 import { createHash } from "node:crypto";
+import { createHostArtifactRuntime, HOST_BLOB_STORE_URL } from "@host/artifacts/runtime";
 import { debug } from "@host/transport/log";
-import { type ArtifactRef, createArtifactRuntime } from "@trevor/session";
-import { serviceUrl } from "@trevor/session/ports";
+import type { ArtifactRef } from "@trevor/session";
 import { Schema } from "effect";
 import { simpleTool } from "../shared";
 import type { Tool } from "../types";
 import { inspectVideoFile, type PutFrame } from "./processor";
 import { VIDEO_INSPECT_TOOL_NAME } from "./types";
-
-const BLOB_STORE_URL = process.env.BLOB_STORE_URL ?? serviceUrl("blob");
 
 const Params = Schema.Struct({
   path: Schema.String.annotations({
@@ -32,7 +30,7 @@ const Params = Schema.Struct({
 
 /** Stores one frame PNG in the content-addressed blob store and returns its ArtifactRef. */
 function livePutFrame(blobStoreUrl: string): PutFrame {
-  const artifacts = createArtifactRuntime({ blobStoreUrl });
+  const artifacts = createHostArtifactRuntime(blobStoreUrl);
   return async (bytes, mimeType) => {
     return artifacts.createFrameArtifact(bytes, mimeType);
   };
@@ -49,7 +47,7 @@ export interface VideoInspectToolDeps {
 }
 
 export function buildVideoInspectTool(deps: VideoInspectToolDeps = {}): Tool<typeof Params.Type> {
-  const blobStoreUrl = deps.blobStoreUrl ?? BLOB_STORE_URL;
+  const blobStoreUrl = deps.blobStoreUrl ?? HOST_BLOB_STORE_URL;
   const putFrame = deps.putFrame ?? livePutFrame(blobStoreUrl);
   return simpleTool({
     name: VIDEO_INSPECT_TOOL_NAME,

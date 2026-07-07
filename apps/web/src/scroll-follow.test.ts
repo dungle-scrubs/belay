@@ -209,6 +209,33 @@ describe("scroll-follow: write arbitration + self-write bookkeeping", () => {
     assert.equal(allowed.reason, "anchor-allowed");
   });
 
+  test("while unpinned, an anchor-compensation that moves toward the live edge is denied", () => {
+    const c = createScrollFollowController();
+    c.gesture("up");
+    c.scrolled(geo(600)); // establishes the unpinned baseline the compensation must preserve
+
+    const tug = geo(520);
+    const denied = c.requestWrite("anchor-compensation", {
+      writer: "virtualizer",
+      resultingOffset: tug.scrollTop,
+      scrollHeight: tug.scrollHeight,
+      clientHeight: tug.clientHeight,
+    });
+    assert.equal(denied.allowed, false);
+    assert.equal(denied.reason, "anchor-denied-moves-toward-edge");
+
+    const stationary = geo(600);
+    assert.equal(
+      c.requestWrite("anchor-compensation", {
+        writer: "virtualizer",
+        resultingOffset: stationary.scrollTop,
+        scrollHeight: stationary.scrollHeight,
+        clientHeight: stationary.clientHeight,
+      }).allowed,
+      true,
+    );
+  });
+
   test("an approved write is recognized on the next scroll event, not misread as user movement", () => {
     const c = createScrollFollowController();
     c.gesture("up");

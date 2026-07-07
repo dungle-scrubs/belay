@@ -36,6 +36,8 @@ edge, replay dispatch, the command lane, and turn dispatch together.
 - `agent/` - the agent loop and turn machinery: composing provider streams with tool execution,
   turn publication (`turn.ts`), preflight context checks, history compaction and recall
   (`recall/`), and turn-time image resolution for vision models.
+- `artifacts/` - host-side binding for the shared artifact runtime: the blob-store URL owner and
+  artifact runtime factory used by turn-time image resolution and video frame storage.
 - `providers/` - model providers and their shared contracts: the pi-ai adapters, LM Studio
   client/native adapters, auth, model metadata, capabilities, and the system prompt.
 - `project-context/` - project instruction discovery: AGENTS.md/CLAUDE.md registry, scoping,

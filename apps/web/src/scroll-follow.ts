@@ -12,7 +12,7 @@
  *     transit through the band never re-pins.
  *   - Write arbitration. While pinned, follow-class writes are allowed; while unpinned every
  *     follow-class write is denied, and anchor-compensation writes (which keep the viewport visually
- *     stationary) pass UNLESS they would land at the live edge - that is a follow in disguise.
+ *     stationary) pass UNLESS they would land at the live edge or move toward it.
  *   - Self-write bookkeeping, so a scroll event caused by a write this controller approved is not
  *     misread as user movement. An edge-targeting write is also recognized by LANDING at the edge,
  *     because its exact offset can clamp/drift a few px as the column re-measures in flight.
@@ -23,7 +23,7 @@
  * bottom-distance math - that stays in `scroll.ts` and is imported here (never re-derived).
  */
 
-import { atBottomOf, type ScrollGeometry } from "./scroll";
+import { atBottomOf, distanceFromBottom, type ScrollGeometry } from "./scroll";
 
 /** Why the pin state last changed - surfaced in the debug snapshot and (as a data attribute) the DOM. */
 export type PinReason =
@@ -39,7 +39,8 @@ export type PinReason =
  *   - `follow`: go to the live edge (append follow, streaming growth, the settle loop, the pinned rAF).
  *     Allowed only while pinned.
  *   - `anchor-compensation`: adjust scrollTop to keep the viewport VISUALLY STATIONARY while content
- *     above re-measures. Allowed while unpinned too - unless it would land at the live edge.
+ *     above re-measures. Allowed while unpinned too - unless it would land at the live edge or move
+ *     toward it.
  */
 export type WriteClass = "follow" | "anchor-compensation";
 
@@ -58,7 +59,8 @@ export type WriteReason =
   | "pinned-allows-follow"
   | "unpinned-denies-follow"
   | "anchor-allowed"
-  | "anchor-denied-lands-at-edge";
+  | "anchor-denied-lands-at-edge"
+  | "anchor-denied-moves-toward-edge";
 
 export interface DeniedWrite {
   readonly writeClass: WriteClass;
@@ -276,6 +278,16 @@ export function createScrollFollowController(
       clientHeight !== undefined &&
       scrollHeight > clientHeight &&
       atBottomOf({ scrollHeight, clientHeight, scrollTop: resultingOffset });
+    const movesTowardEdge =
+      writeClass === "anchor-compensation" &&
+      !pinned &&
+      resultingOffset !== undefined &&
+      scrollHeight !== undefined &&
+      clientHeight !== undefined &&
+      scrollHeight > clientHeight &&
+      lastScrollTop !== null &&
+      distanceFromBottom({ scrollHeight, clientHeight, scrollTop: resultingOffset }) <
+        distanceFromBottom({ scrollHeight, clientHeight, scrollTop: lastScrollTop }) - EPSILON_PX;
 
     if (writeClass === "follow" && !pinned) {
       if (DEV) {
@@ -302,6 +314,16 @@ export function createScrollFollowController(
         lastDeniedWrite = { writeClass, writer };
       }
       return { allowed: false, reason: "anchor-denied-lands-at-edge" };
+    }
+
+    // A real anchor compensation keeps the user's viewport visually stationary. If the requested
+    // landing would shrink bottom-distance while unpinned, it is still a downward tug even when it does
+    // not reach the edge.
+    if (movesTowardEdge) {
+      if (DEV) {
+        lastDeniedWrite = { writeClass, writer };
+      }
+      return { allowed: false, reason: "anchor-denied-moves-toward-edge" };
     }
 
     // Approved: record the landing so the resulting scroll event reads as a self-write.

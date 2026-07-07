@@ -3,9 +3,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { HOST_BLOB_STORE_URL } from "@host/artifacts/runtime";
 import type { ChatImage, ChatMessage } from "@host/providers/index";
 import { createArtifactRuntime } from "@trevor/session";
-import { serviceUrl } from "@trevor/session/ports";
 
 const execAsync = promisify(exec);
 
@@ -19,8 +19,6 @@ const execAsync = promisify(exec);
  * Responsible for: fetching image artifact bytes from the blob store and inlining them as
  * base64 onto history messages for vision-capable providers.
  */
-
-const BLOB_STORE_URL = process.env.BLOB_STORE_URL ?? serviceUrl("blob");
 
 const CACHE_MAX = 32;
 
@@ -53,7 +51,7 @@ async function decodes(bytes: Uint8Array): Promise<boolean> {
 }
 
 export function createHistoryImageResolver({
-  blobStoreUrl = BLOB_STORE_URL,
+  blobStoreUrl = HOST_BLOB_STORE_URL,
   cacheMax = CACHE_MAX,
 }: {
   readonly blobStoreUrl?: string;

@@ -4,6 +4,7 @@ import {
   type AdmissionTurnReporter,
   admissionStatusEvent,
 } from "@host/admission/turn-ref";
+import { HOST_BLOB_STORE_URL } from "@host/artifacts/runtime";
 import type { StopContext } from "@host/hooks/runtime";
 import { BreakdownAccumulator, logUsageBreakdown } from "@host/metrics/breakdown";
 import {
@@ -26,7 +27,6 @@ import {
   type TrevorEventInput,
   type TurnStop,
 } from "@trevor/session";
-import { serviceUrl } from "@trevor/session/ports";
 import {
   METRIC_NAMES,
   NOOP_SINK,
@@ -599,9 +599,7 @@ export function publishTurn(
         // post-video pass shows the model the frames. Non-vision turns leave frames as text.
         ...(caps.images
           ? {
-              resolveFrames: createVideoFrameResolver(
-                process.env.BLOB_STORE_URL ?? serviceUrl("blob"),
-              ),
+              resolveFrames: createVideoFrameResolver(HOST_BLOB_STORE_URL),
             }
           : {}),
       }),

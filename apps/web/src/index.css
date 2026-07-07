@@ -254,6 +254,7 @@
    signals position without competing with content, and darkens to muted-foreground on a hover-capable
    pointer. */
 [data-transcript-scroll] {
+  overflow-anchor: none;
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--smui-surface-3)) transparent;
 }
