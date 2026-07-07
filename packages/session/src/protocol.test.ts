@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
 import { MAX_FILE_INDEX } from "./file-mention";
+import * as sessionRoot from "./index";
 import {
   decodeTrevorEvent,
   events,
@@ -32,6 +33,240 @@ const stored = (input: TrevorEventInput, over: Partial<SessionEvent> = {}): Sess
   type: input.type,
   payload: input.payload as Record<string, unknown>,
   ...over,
+});
+
+test("typed event constructors round-trip through the registry-backed decoder", () => {
+  const hash = "a".repeat(64);
+  const questionContract: ProviderQuestionContract = {
+    schemaVersion: 1,
+    questions: [
+      {
+        id: "q1",
+        question: "Pick one",
+        answerShape: "single_choice",
+        multiSelect: false,
+        requiresReason: false,
+        allowDefer: false,
+        choices: [{ id: "a", label: "A" }],
+      },
+    ],
+  };
+  const questionAnswer: ProviderQuestionAnswer = { action: "decline" };
+  const constructed: readonly TrevorEventInput[] = [
+    events.userMessage({
+      text: "hi",
+      provider: "qwen",
+      artifacts: [{ kind: "image", mimeType: "image/png", size: 1, hash }],
+      pastes: [{ text: "paste" }],
+    }),
+    events.assistantStarted({ runId: "r", warm: true, model: "m", provider: "p" }),
+    events.assistantDelta({ runId: "r", text: "delta" }),
+    events.assistantThinking({ runId: "r", text: "thinking" }),
+    events.assistantOverflow({ runId: "r", reason: "large" }),
+    events.assistantRecovered({ runId: "r", action: "trim", detail: "trimmed", reclaimed: 10 }),
+    events.assistantContinued({ runId: "r", steps: 2, pressure: 0.4, threshold: 4, detail: "go" }),
+    events.modelSwitched({
+      runId: "r",
+      from: { model: "a" },
+      to: { model: "b", reasoning: "high" },
+      initiator: "manual",
+      outcome: "applied",
+    }),
+    events.assistantLimit({ provider: "anthropic", status: "approaching", scope: "five_hour" }),
+    events.assistantReconnecting({ runId: "r", attempt: 1, detail: "retry" }),
+    events.delegatedTo({
+      runId: "r",
+      childSessionId: "child",
+      agent: "general",
+      task: "task",
+      mode: "inline",
+      status: "running",
+    }),
+    events.workflowStarted({ runId: "r", workflow: "wf", args: { ok: true } }),
+    events.workflowPhase({ runId: "r", title: "phase" }),
+    events.workflowAgent({
+      runId: "r",
+      ordinal: [0, 1],
+      fingerprint: "fp",
+      status: "completed",
+      usage: { input: 1, output: 2 },
+      result: { value: 1 },
+    }),
+    events.workflowLeafFailed({
+      runId: "r",
+      kind: "agent",
+      cause: "typed-failure",
+      childSessionId: "child",
+      detail: { code: "x" },
+    }),
+    events.workflowLog({ runId: "r", message: "log" }),
+    events.workflowCompleted({ runId: "r", ok: true, leaves: 2 }),
+    events.contextCompacted({
+      foldId: "fold",
+      throughSeq: 2,
+      summary: "summary",
+      manifest: { turnRange: { fromSeq: 1, toSeq: 2 }, files: [], tools: [], topics: [] },
+      tokensBefore: 10,
+      tokensAfter: 4,
+      model: "m",
+    }),
+    events.contextCompacting({ foldId: "fold", tokens: 1, budget: 10 }),
+    events.assistantProgress({
+      runId: "r",
+      usage: { input: 1, output: 2, contextWindow: 100, genMs: 20 },
+    }),
+    events.assistantCompleted({ runId: "r", text: "done" }),
+    events.userCancel({ runId: "r" }),
+    events.userSupersede({ supersedes: ["ev-a"], reason: "unqueue" }),
+    events.modelSwitchRequested({
+      runId: "r",
+      model: { sourceId: "lmstudio", modelId: "qwen", reasoning: null },
+      initiator: "manual",
+    }),
+    events.userCommand({ command: "doctor", args: "" }),
+    events.commandResult({ command: "doctor", text: "ok", ok: true }),
+    events.sessionSwitch({ sessionId: "next", reason: "clear" }),
+    events.sessionArchived({ archived: true }),
+    events.sessionTitle({ title: "Title" }),
+    events.sessionDeleted({ deleted: true }),
+    events.sessionForkedFrom({ parentSessionId: "parent", forkSeq: 2 }),
+    events.sessionTangentOf({ parentSessionId: "parent", sourceMessageId: "msg", quote: "quote" }),
+    events.tangentFoldedBack({
+      tangentSessionId: "tangent",
+      parentSessionId: "parent",
+      mode: "quote",
+      preview: "preview",
+    }),
+    events.lucidPublished({ lucidId: "lucid", version: 1, htmlHash: hash, provenance: "agent" }),
+    events.lucidFeedback({ lucidId: "lucid", version: 1, cursor: 1, annotations: [] }),
+    events.lucidReview({ lucidId: "lucid", resolved: true, cursor: 1 }),
+    events.userShell({ requestId: "req", command: "pwd" }),
+    events.shellResult({ requestId: "req", command: "pwd", output: "/", ok: true }),
+    events.editorOpen({ path: "README.md", line: 1, column: 1 }),
+    events.fileIndexRequested({ requestId: "req" }),
+    events.fileIndexResult({ requestId: "req", files: [{ path: "README.md" }], truncated: false }),
+    events.sessionLaunchRequested({ requestId: "req", root: "/tmp/repo" }),
+    events.sessionLaunchResult({ requestId: "req", sessionId: "s2", status: "launched" }),
+    events.folderPickRequested({ requestId: "req" }),
+    events.folderPickResult({ requestId: "req", path: "/tmp", cancelled: false }),
+    events.projectsListRequested({ requestId: "req" }),
+    events.projectsListResult({
+      requestId: "req",
+      projects: [{ root: "/tmp/repo", sessionId: "s", updatedAt: "2026-01-01T00:00:00.000Z" }],
+    }),
+    events.tasksCurrent({
+      rev: 1,
+      tasks: [
+        {
+          id: "t",
+          subject: "Do it",
+          activeForm: "Doing it",
+          status: "pending",
+          blockedBy: [],
+          blocks: [],
+        },
+      ],
+    }),
+    events.toolStarted({ runId: "r", callId: "c", name: "read", arguments: "{}" }),
+    events.toolCompleted({ runId: "r", callId: "c", name: "read", result: "ok" }),
+    events.toolGuardrail({
+      runId: "r",
+      callId: "c",
+      name: "read",
+      action: "warn",
+      reason: "no_progress",
+      count: 1,
+      argsFingerprint: "args",
+    }),
+    events.hookDecision({
+      runId: "r",
+      hookId: "local:hook",
+      event: "PreToolUse",
+      decision: "context",
+    }),
+    events.hostBeat({ instanceId: "host" }),
+    events.hostHello({ instanceId: "host" }),
+    events.hostRole({ instanceId: "host", role: "leader" }),
+    events.hostInternet({
+      snapshot: {
+        status: "online",
+        checking: false,
+        checkedAt: "2026-01-01T00:00:00.000Z",
+        error: null,
+        targetClass: "dns+https",
+      },
+    }),
+    events.hostSourceAuth({ state: { sourceId: "anthropic", phase: "complete" } }),
+    events.admissionStatus({
+      runId: "r",
+      phase: "queued",
+      provider: "lmstudio",
+      model: "qwen",
+      priority: "foreground",
+    }),
+    events.hostOnline({
+      providers: ["lmstudio"],
+      default: "lmstudio",
+      models: {
+        lmstudio: {
+          label: "LM Studio",
+          model: "qwen",
+          reasoningLevels: [],
+          defaultReasoning: "",
+          kind: "local",
+        },
+      },
+      instanceId: "host",
+      cwd: "/tmp/repo",
+      workspace: "/tmp/repo",
+      commands: [],
+      agents: [],
+    }),
+    events.providerQuestionRequested({
+      questionId: "q",
+      runId: "r",
+      toolCallId: "tool",
+      toolName: "ask_user",
+      adapter: "ask_user",
+      contract: questionContract,
+    }),
+    events.providerQuestionAnswer({ questionId: "q", answer: questionAnswer }),
+    events.providerQuestionResolved({
+      questionId: "q",
+      runId: "r",
+      toolCallId: "tool",
+      outcome: "declined",
+      summary: "declined",
+    }),
+    events.handoffRequested({ handoffId: "h", mode: "direct", sourceSessionId: "s", prompt: "go" }),
+    events.handoffGenerating({ handoffId: "h", detail: "generating" }),
+    events.handoffGenerated({ handoffId: "h", prompt: "go", summary: "summary" }),
+    events.handoffApproved({ handoffId: "h", prompt: "go" }),
+    events.handoffRejected({ handoffId: "h", reason: "no" }),
+    events.handoffFailed({ handoffId: "h", code: "error", detail: "failed" }),
+    events.handoffAccepted({ handoffId: "h", targetSessionId: "target", prompt: "go" }),
+    events.loopStatus({
+      snapshot: {
+        completed: 0,
+        durability: "session",
+        loopId: "loop",
+        runner: "current_session_prompt",
+        status: "draft",
+        summary: "loop",
+      },
+    }),
+  ];
+
+  for (const input of constructed) {
+    const decoded = decodeTrevorEvent(stored(input));
+    assert.notEqual(decoded, null, input.type);
+    assert.equal(decoded?.type, input.type);
+  }
+});
+
+test("protocol registry internals are not exported from the package root", () => {
+  assert.equal(Object.hasOwn(sessionRoot, "createProtocolRegistry"), false);
+  assert.equal(Object.hasOwn(sessionRoot, "trevorEventRegistry"), false);
 });
 
 test("events.admissionStatus round-trips queued + refused admission status (plan 11 M7)", () => {

@@ -228,7 +228,11 @@ test("a host cwd outside the trevor repo never yields a spurious store code-drif
   // launcher spawns the host into (cwd = project root, not the trevor checkout).
   const projectDir = mkdtempSync(join(tmpdir(), "trevor-project-"));
   const savedCwd = process.cwd();
-  const gitEnv = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" };
+  const gitEnv = {
+    ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+  };
   const git = (args: readonly string[]) =>
     execFileSync("git", [...args], { cwd: projectDir, encoding: "utf8", env: gitEnv }).trim();
   const diagServer = await startDiagServer((_req, res) => {

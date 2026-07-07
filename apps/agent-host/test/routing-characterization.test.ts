@@ -19,7 +19,7 @@ import { fakeProvider, runTurn } from "./support/fake-provider";
 const HOST_ROOT = join(import.meta.dirname, "..");
 const MAIN = readFileSync(join(HOST_ROOT, "src", "main.ts"), "utf8");
 const PROTOCOL_DECODE = readFileSync(
-  join(HOST_ROOT, "..", "..", "packages", "session", "src", "protocol-decode.ts"),
+  join(HOST_ROOT, "..", "..", "packages", "session", "src", "protocol", "decode.ts"),
   "utf8",
 );
 
@@ -106,6 +106,14 @@ const UNROUTED: readonly string[] = [
   "session.title",
   "shell.result",
   "tool.guardrail",
+  // Workflow journal events are host-emitted by the workflow engine and consumed by resume/projection
+  // helpers, not by the main session ingress router.
+  "workflow.agent",
+  "workflow.completed",
+  "workflow.leaf-failed",
+  "workflow.log",
+  "workflow.phase",
+  "workflow.started",
 ];
 
 /** The `handleEvent` function body, extracted by brace counting from its declaration. */
@@ -125,7 +133,7 @@ function handleEventBody(): string {
 
 test("the characterized protocol snapshot matches decodeTrevorEvent's actual event kinds", () => {
   const actual = new Set(
-    [...PROTOCOL_DECODE.matchAll(/type: "([a-z][a-z.]*[a-z])"/g)].map((m) => m[1] as string),
+    [...PROTOCOL_DECODE.matchAll(/type: "([a-z][a-z.-]*[a-z])"/g)].map((m) => m[1] as string),
   );
   const characterized = new Set([...ROUTED, ...UNROUTED]);
 
