@@ -325,6 +325,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description: "Project-root to session-id mapping.",
   },
   {
+    name: "project-registry",
+    category: "state",
+    relativePath: "project-registry.json",
+    description:
+      "Project registry: canonical-path-keyed project metadata (display name, collapsed, timestamps).",
+  },
+  {
     name: "logs",
     category: "state",
     relativePath: "logs",
