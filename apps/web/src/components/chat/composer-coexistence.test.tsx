@@ -95,12 +95,14 @@ function type(value: string) {
 }
 
 describe("composer @-mention coexistence", () => {
-  test("typing @ opens the file menu; ArrowDown + Enter inserts the mention (no submit)", () => {
+  test("typing @ opens the file menu; ArrowUp + Enter inserts the mention (no submit)", () => {
     render(<ComposerHarness />);
     const input = type("@app");
     expect(screen.getByRole("listbox", { name: "Workspace files" })).toBeTruthy();
 
-    fireEvent.keyDown(input, { key: "ArrowDown" });
+    // The list is worst-first (fuzzy at top, best at the bottom); the default highlight is the best
+    // match (app.tsx) at the bottom. ArrowUp moves to the next match up the list (use-composer.ts).
+    fireEvent.keyDown(input, { key: "ArrowUp" });
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect((input as HTMLTextAreaElement).value).toBe("@apps/web/src/hooks/use-composer.ts ");

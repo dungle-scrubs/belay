@@ -60,12 +60,22 @@ function keyEvent(
   };
 }
 
-test("opens on an active @ token and exposes the query + matches", () => {
+test("opens on an active @ token; matches are reversed (fuzzy top, best bottom) and the highlight starts at the last (best) row", () => {
   const { result } = renderHook(() => useHarness("@app", 4));
   assert.equal(result.current.menuOpen, true);
   assert.equal(result.current.query, "app");
   assert.equal(result.current.matches.length, 3);
-  assert.equal(result.current.menuIndex, 0);
+  // The list is presented worst-first, so RESULTS is reversed for display.
+  assert.deepEqual(
+    result.current.matches.map((m) => m.path),
+    [
+      "packages/session/src/app-config.ts",
+      "apps/web/src/hooks/use-composer.ts",
+      "apps/web/src/app.tsx",
+    ],
+  );
+  // The default highlight is the LAST row (the best match, nearest the composer).
+  assert.equal(result.current.menuIndex, 2);
 });
 
 test("stays closed when no @ token is active", () => {
@@ -79,27 +89,30 @@ test("stays closed when suppressed (e.g. the caret is on a /loop line)", () => {
   assert.equal(result.current.menuOpen, false);
 });
 
-test("ArrowDown / ArrowUp move and wrap the highlight, consuming the key", () => {
+test("ArrowDown / ArrowUp move and wrap the highlight from the bottom-start default, consuming the key", () => {
   const { result } = renderHook(() => useHarness("@app", 4));
-  const down = keyEvent("ArrowDown");
-  act(() => assert.equal(result.current.onMenuKeyDown(down), true));
-  assert.equal(down.prevented(), true);
-  assert.equal(result.current.menuIndex, 1);
-
+  // Default highlight is the last row (index 2). ArrowUp moves toward the top (worse matches).
   const up = keyEvent("ArrowUp");
   act(() => assert.equal(result.current.onMenuKeyDown(up), true));
+  assert.equal(up.prevented(), true);
+  assert.equal(result.current.menuIndex, 1);
+
+  const upAgain = keyEvent("ArrowUp");
+  act(() => assert.equal(result.current.onMenuKeyDown(upAgain), true));
   assert.equal(result.current.menuIndex, 0);
 
+  // ArrowUp at the top wraps to the bottom (the best match).
   const wrap = keyEvent("ArrowUp");
   act(() => assert.equal(result.current.onMenuKeyDown(wrap), true));
   assert.equal(result.current.menuIndex, 2);
 });
 
-test("Tab accepts the highlighted file, replacing the token with a mention + trailing space", () => {
+test("Tab accepts the highlighted (best, bottom) file, replacing the token with a mention + trailing space", () => {
   const { result } = renderHook(() => useHarness("@app", 4));
   const tab = keyEvent("Tab");
   act(() => assert.equal(result.current.onMenuKeyDown(tab), true));
   assert.equal(tab.prevented(), true);
+  // The default highlight is the best match (app.tsx), which is the last row after the reversal.
   assert.equal(result.current.draft, "@apps/web/src/app.tsx ");
   assert.equal(result.current.caret, "@apps/web/src/app.tsx ".length);
   // The trailing space closes the token, so the menu no longer opens at the parked caret.
@@ -108,9 +121,10 @@ test("Tab accepts the highlighted file, replacing the token with a mention + tra
 
 test("Enter accepts the highlighted file; Shift+Enter is not owned", () => {
   const { result } = renderHook(() => useHarness("@use", 4));
-  // "use" highlights index 0 by list order; move to the use-composer match then accept.
-  const down = keyEvent("ArrowDown");
-  act(() => result.current.onMenuKeyDown(down));
+  // Reversed list: [app-config.ts, use-composer.ts, app.tsx]; default highlight is app.tsx (index 2).
+  // Arrow up once to land on use-composer.ts (index 1), then accept.
+  const up = keyEvent("ArrowUp");
+  act(() => result.current.onMenuKeyDown(up));
   const enter = keyEvent("Enter");
   act(() => assert.equal(result.current.onMenuKeyDown(enter), true));
   assert.equal(result.current.draft, "@apps/web/src/hooks/use-composer.ts ");

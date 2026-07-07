@@ -146,15 +146,17 @@ describe("live @-file-mention integration", () => {
     expect(listbox.id).toBe("file-mention-menu");
     // The composer points aria-activedescendant/aria-controls at the highlighted option.
     expect(input.getAttribute("aria-controls")).toBe("file-mention-menu");
+    // The list is presented worst-first (fuzzy at top, best at the bottom near the composer), and the
+    // default highlight is the best match = the last option.
     const activeId = input.getAttribute("aria-activedescendant");
-    expect(activeId).toBe("file-mention-menu-opt-0");
+    expect(activeId).toBe("file-mention-menu-opt-1");
     const active = activeId ? document.getElementById(activeId) : null;
     expect(active?.getAttribute("role")).toBe("option");
     expect(active?.getAttribute("aria-selected")).toBe("true");
 
-    // Arrowing down moves the active descendant to the next option.
-    fireEvent.keyDown(input, { key: "ArrowDown" });
-    expect(input.getAttribute("aria-activedescendant")).toBe("file-mention-menu-opt-1");
+    // Arrowing up moves the active descendant to the previous (worse) option at the top.
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    expect(input.getAttribute("aria-activedescendant")).toBe("file-mention-menu-opt-0");
   });
 
   test("mouse pick inserts the mention without losing composer focus", () => {

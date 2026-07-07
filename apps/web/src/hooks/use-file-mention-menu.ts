@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { activeMention } from "@/composer/active-mention";
@@ -61,15 +62,27 @@ export function useFileMentionMenu({
     [suppressed, draft, caret],
   );
   const query = mention?.query ?? null;
-  const matches = mention ? results : [];
+  // The menu opens UPWARD over the composer, so the LAST row sits closest to the input. Present the
+  // matches WORST-FIRST (fuzzy at the top, best at the bottom): the best match lands next to the
+  // composer where arrow-down starts, and the default highlight (below) selects it. `searchWorkspaceFiles`
+  // ranks best-first; this reversal is presentation-only, so the host's file-search tool keeps its
+  // best-first ordering.
+  const matches = useMemo(() => (mention ? [...results].reverse() : []), [mention, results]);
   // A per-token dismiss key: Escape stays dismissed for this exact `@…` span, but re-opens once the
   // token text or position changes (more typing, a new token).
   const dismissKey = mention ? `${mention.start}:${draft.slice(mention.start, mention.end)}` : null;
   const menuOpen = mention !== null && dismissKey !== dismissedFor;
-  const boundedMenuIndex = Math.min(menuIndex, Math.max(0, matches.length - 1));
+  const last = matches.length - 1;
+  const lastRef = useRef(last);
+  lastRef.current = last;
+  const boundedMenuIndex = Math.min(menuIndex, Math.max(0, last));
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset the highlight when the query changes.
-  useEffect(() => setMenuIndex(0), [query]);
+  // Reset the highlight to the LAST row (the best match, at the bottom near the composer) whenever the
+  // query changes. `last` is read through a ref so `query` stays the sole reset trigger (a query that
+  // narrows without changing the match count still re-selects the best match); the ref always holds the
+  // latest count by the time the post-render effect fires.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: query is the intentional reset trigger.
+  useEffect(() => setMenuIndex(lastRef.current), [query]);
 
   const acceptFile = useCallback(
     (path: string) => {
