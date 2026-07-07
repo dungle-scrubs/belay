@@ -4,10 +4,10 @@
 
 - Original audit candidate total: 8
 - Implementation milestones: 10
-- Completed milestones: 2
-- Active blockers: 8
-- Current status: M1 protocol boundary complete; web read-model implementation is next.
-Current focus: M2. Deepen web event-log projection into session read models and selectors.
+- Completed milestones: 3
+- Active blockers: 7
+- Current status: Phase 1 protocol and web read-model boundaries complete; host runtime boundaries are next.
+Current focus: M3. Deepen host session-worker composition for main sessions and tangents.
 
 ## Audit Passes
 
@@ -23,7 +23,7 @@ Current focus: M2. Deepen web event-log projection into session read models and 
 ## Phase 1 - Protocol And Read-Model Foundations
 
 - [x] M1. Deepen `@trevor/session` protocol into a registry-backed event grammar.
-- [ ] M2. Deepen web event-log projection into session read models and selectors.
+- [x] M2. Deepen web event-log projection into session read models and selectors.
 
 ## Phase 2 - Host Runtime Boundaries
 
@@ -47,7 +47,7 @@ Current focus: M2. Deepen web event-log projection into session read models and 
 ## Gates
 
 - [x] Gate 0->1. Planner state passes `check-progress`, docs are registered, and plan docs are committed to `main`.
-- [ ] Gate 1->2. Protocol and web read-model validation passes.
+- [x] Gate 1->2. Protocol and web read-model validation passes.
 - [ ] Gate 2->3. Host session, tool, provider, and hermetic e2e validation passes.
 - [ ] Gate 3->4. Test-kit, artifact, integration, and e2e validation passes.
 - [ ] Gate 4->5. CLI typecheck, CLI unit tests, and CLI e2e flows pass.
