@@ -1,11 +1,11 @@
 # Background Job Cleanup - Progress Report
 
-Current focus: Verification
+Current focus: Complete
 
 ## Summary
 
-- **Current cutoff blockers:** 5
-- **Completed current cutoff:** 43
+- **Current cutoff blockers:** 0
+- **Completed current cutoff:** 48
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -97,8 +97,8 @@ None.
 
 ## Verification
 
-- [ ] `pnpm --filter @trevor/agent-host test`
-- [ ] `pnpm --filter @trevor/web test -- --project web`
-- [ ] `pnpm test -- --project unit --project web`
-- [ ] `pnpm lint`
-- [ ] `pnpm typecheck`
+- [x] `pnpm --filter @trevor/agent-host test`
+- [x] `pnpm --filter @trevor/web test -- --project web`
+- [x] `pnpm test -- --project unit --project web`
+- [x] `pnpm lint`
+- [x] `pnpm typecheck`
