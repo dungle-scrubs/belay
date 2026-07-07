@@ -54,6 +54,8 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
+import { useProjectSidebar } from "@/sidebar/use-project-sidebar";
+import { useSidebarSupervisor } from "@/sidebar/use-sidebar-supervisor";
 import {
   jobDismissEligible,
   jobToDetailModel,
@@ -100,11 +102,9 @@ import {
 } from "./session/selectors";
 import {
   archiveSession,
-  deleteSession,
   ensureSession,
   permanentlyDeleteSession,
   recordTangentFoldBack,
-  renameSession,
   sessionTransport,
   useSession,
   useSessionActions,
@@ -474,6 +474,22 @@ export function App() {
       resetSessionLaunch();
     }
   }, [target, resetSessionLaunch]);
+  // The project sidebar (plan 58 M6): a persistent supervisor subscription that fetches the project
+  // registry list and dispatches project actions (add/rename/collapse/remove) whenever the sidebar is
+  // open. Separate from the picker's useSupervisor (which gates on picker-open + owns the launch
+  // machine) because the sidebar needs the project list on its own open gate.
+  const sidebarSupervisor = useSidebarSupervisor({ active: modal.sidebarOpen });
+  // The sidebar's read model: groups sessions under projects, owns local collapsed/show-more/search
+  // state, and exposes the project/session action callbacks. Session selection navigates; New Session
+  // per-project reuses the M4 fresh-session launch; Archive publishes session.archived.
+  const projectSidebar = useProjectSidebar({
+    sessions: modal.inventory.sessions,
+    projects: sidebarSupervisor.projects,
+    onProjectAction: sidebarSupervisor.onProjectAction,
+    onNewSession: (projectKey) => startFreshProjectSession(projectKey),
+    onArchiveSession: (sessionId) => void archiveSession(sessionId),
+  });
+
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
   const archived = readModel.archived;
@@ -1649,18 +1665,22 @@ export function App() {
           open: modal.sidebarOpen,
           onOpen: () => modal.setSidebarOpen(true),
           onClose: () => modal.setSidebarOpen(false),
-          sessions: modal.inventory.sessions,
-          currentSessionId: target,
-          currentProject: modal.currentProject,
+          groups: projectSidebar.groups,
+          searchQuery: projectSidebar.searchQuery,
+          onSearch: projectSidebar.onSearch,
+          onToggleProject: projectSidebar.onToggleProject,
           // Same safe switch path as `/resume` (D-093 M4): navigateToSession syncs `?session=` and
           // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
           // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
           // the durable log and replay on return); the row's activity bar shows it from the other view.
           onSelect: navigateToSession,
-          onRename: (id, title) => void renameSession(id, title),
-          onArchive: (id) => void archiveSession(id),
-          onDelete: (id) => void deleteSession(id),
-          onNewSession: openNewSession,
+          onShowMore: projectSidebar.onShowMore,
+          onAddProject: projectSidebar.onAddProject,
+          onNewSession: projectSidebar.onNewSession,
+          onArchiveSession: projectSidebar.onArchiveSession,
+          onRenameProject: projectSidebar.onRenameProject,
+          onRemoveProject: projectSidebar.onRemoveProject,
+          currentSessionId: target,
           liveActivity: modal.sidebarLiveActivity,
           nowMs: now,
         }}

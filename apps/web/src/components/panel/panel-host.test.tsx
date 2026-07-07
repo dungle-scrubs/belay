@@ -147,19 +147,23 @@ function PanelHostHarness(props: {
       }}
       sessionName="session"
       sidebar={{
-        currentProject: null,
+        groups: [],
+        searchQuery: "",
+        onSearch: vi.fn(),
+        onToggleProject: vi.fn(),
+        onSelect: vi.fn(),
+        onShowMore: vi.fn(),
+        onAddProject: vi.fn(),
+        onNewSession: vi.fn(),
+        onArchiveSession: vi.fn(),
+        onRenameProject: vi.fn(),
+        onRemoveProject: vi.fn(),
         currentSessionId: "s",
         liveActivity: new Map(),
         nowMs: 1_800_000_000_000,
-        onArchive: vi.fn(),
         onClose: vi.fn(),
-        onDelete: vi.fn(),
-        onNewSession: vi.fn(),
         onOpen: vi.fn(),
-        onRename: vi.fn(),
-        onSelect: vi.fn(),
         open: false,
-        sessions: [],
       }}
       stream={stream}
       tasks={tasks ?? []}

@@ -8,7 +8,6 @@ import type {
   LoopInventoryRow,
   ProviderQuestionAnswer,
   SessionActivity,
-  SessionSummary,
   TaskSnapshot,
   WorktreeSummary,
 } from "@trevor/session";
@@ -40,7 +39,6 @@ import { TurnStatusHeader } from "@/components/chat/turn-status-header";
 import { type TranscriptRowConfig, VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { RowChooserModal } from "@/components/command-modal";
 import { HandoffApprovalSurface } from "@/components/handoff/handoff-approval-surface";
-import { SessionSidebar } from "@/components/panel/session-sidebar";
 import { DrawerToggle } from "@/components/panel/side-drawer";
 import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/panel/side-panel";
 import { QuestionSurface } from "@/components/question";
@@ -49,6 +47,8 @@ import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
 import type { ScrollFollowController } from "@/scroll-follow";
 import type { SessionStream } from "@/session/use-session";
+import { ProjectSidebar } from "@/sidebar/project-sidebar";
+import type { ProjectGroup } from "@/sidebar/project-sidebar-model";
 import type {
   HostStatus,
   PendingHandoff,
@@ -198,27 +198,41 @@ export interface ChooserBinding {
 }
 
 /**
- * The session navigation sidebar binding (D-093): the left-hand session list. App owns the open
- * state, the current-project inventory, the live-activity overlay, and the guarded switch action;
- * PanelHost renders the rail (when open) and the upper-left dashboard toggle (when closed).
+ * The project sidebar binding (plan 58 M6): the left-hand project-first navigation rail. App owns
+ * the open state, the project/session inventory, the live-activity overlay, and the project/session
+ * actions; PanelHost renders the rail (when open) and the upper-left dashboard toggle (when closed).
+ * The grouped read model + search/collapse/show-more state come from useProjectSidebar; this binding
+ * adds the open toggle, the current session id (for row highlight), and the live-activity map.
  */
 export interface SidebarBinding {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
-  readonly sessions: readonly SessionSummary[];
-  readonly currentSessionId: string;
-  readonly currentProject: string | null;
+  /** The grouped, filtered read model from useProjectSidebar. */
+  readonly groups: readonly ProjectGroup[];
+  /** The active search query (echoed into the search field). */
+  readonly searchQuery: string;
+  /** Set the search query. */
+  readonly onSearch: (query: string) => void;
+  /** Toggle a project's collapsed state (persists via the supervisor). */
+  readonly onToggleProject: (key: string) => void;
+  /** Select (navigate to) a session. */
   readonly onSelect: (sessionId: string) => void;
-  /** Durably rename a session row (editable session titles). */
-  readonly onRename: (sessionId: string, title: string) => void;
-  /** Archive a session row (right-click → Archive): hides it from the sidebar/resume. */
-  readonly onArchive: (sessionId: string) => void;
-  /** Soft-delete a session row (right-click → Delete, confirmed): hides it from every view. */
-  readonly onDelete: (sessionId: string) => void;
-  /** Open the New-session picker (plan 44.2, D-001): renders the pinned `＋ New session` header
-   *  affordance, sharing one open-picker entry with the `/new` command. */
-  readonly onNewSession: () => void;
+  /** Reveal more sessions under a project (past SESSION_CAP). */
+  readonly onShowMore: (key: string) => void;
+  /** Add a project (opens the OS folder picker via the supervisor). */
+  readonly onAddProject: () => void;
+  /** Launch a fresh project-scoped session (M4). */
+  readonly onNewSession: (projectKey: string) => void;
+  /** Archive a session from the sidebar. */
+  readonly onArchiveSession: (sessionId: string) => void;
+  /** Rename a project (persisted via the supervisor). */
+  readonly onRenameProject: (key: string, name: string) => void;
+  /** Remove a project (persisted via the supervisor; blocked by active sessions). */
+  readonly onRemoveProject: (key: string) => void;
+  /** The currently selected session id (for row highlight). */
+  readonly currentSessionId: string;
+  /** Live run state per session, layered over each row's durable activity. */
   readonly liveActivity: ReadonlyMap<string, SessionActivity>;
   readonly nowMs: number;
 }
@@ -321,20 +335,18 @@ export function PanelHost(props: {
 
   return (
     <div className="flex h-svh">
-      {/* The session navigation sidebar (D-093): a collapsible left rail listing the current
-        project's sessions. Switching routes through the same safe path as `/resume`. */}
+      {/* The project sidebar (plan 58 M6): a collapsible left rail listing all projects and
+        their sessions. Switching routes through the same safe path as `/resume`. */}
       {sidebar.open ? (
-        <SessionSidebar
-          sessions={sidebar.sessions}
-          currentSessionId={sidebar.currentSessionId}
-          currentProject={sidebar.currentProject}
-          onSelect={sidebar.onSelect}
-          onRename={sidebar.onRename}
-          onArchive={sidebar.onArchive}
-          onDelete={sidebar.onDelete}
-          onNewSession={sidebar.onNewSession}
+        <ProjectSidebar
+          groups={sidebar.groups}
+          searchQuery={sidebar.searchQuery}
+          onSearchChange={sidebar.onSearch}
+          onToggleProject={sidebar.onToggleProject}
+          onSelectSession={sidebar.onSelect}
+          onShowMore={sidebar.onShowMore}
           liveActivity={sidebar.liveActivity}
-          onToggle={sidebar.onClose}
+          currentSessionId={sidebar.currentSessionId}
           nowMs={sidebar.nowMs}
           className="w-64 shrink-0"
         />
