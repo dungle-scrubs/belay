@@ -177,7 +177,6 @@ export class ProcessRegistry {
         this.changedVisible();
       }
     }, ProcessRegistry.SUCCESS_AUTO_PRUNE_MS);
-    timer.unref?.();
     this.pruneTimers.set(proc.id, timer);
   }
 
