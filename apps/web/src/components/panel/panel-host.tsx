@@ -347,6 +347,11 @@ export function PanelHost(props: {
           onToggleProject={sidebar.onToggleProject}
           onSelectSession={sidebar.onSelect}
           onShowMore={sidebar.onShowMore}
+          onAddProject={sidebar.onAddProject}
+          onNewSession={sidebar.onNewSession}
+          onArchiveSession={sidebar.onArchiveSession}
+          onRenameProject={sidebar.onRenameProject}
+          onRemoveProject={sidebar.onRemoveProject}
           onViewArchive={sidebar.onViewArchive}
           liveActivity={sidebar.liveActivity}
           currentSessionId={sidebar.currentSessionId}

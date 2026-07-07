@@ -1,5 +1,16 @@
 import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
-import { ChevronDown, ChevronRight, Inbox, Search } from "lucide-react";
+import {
+  Archive,
+  ChevronDown,
+  ChevronRight,
+  Inbox,
+  MoreVertical,
+  Pencil,
+  Plus,
+  Search,
+  Trash2,
+} from "lucide-react";
+import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { ProjectLabel } from "./project-label";
 import { type ProjectGroup, SESSION_CAP } from "./project-sidebar-model";
@@ -33,6 +44,16 @@ export interface ProjectSidebarProps {
    * filtered to that project's path. Absent => the empty state is non-interactive.
    */
   readonly onViewArchive?: (projectKey: string) => void;
+  /** Add a new project via the OS folder picker. */
+  readonly onAddProject?: () => void;
+  /** Create a fresh session for a project. */
+  readonly onNewSession?: (projectKey: string) => void;
+  /** Archive a session (hover action on session rows). */
+  readonly onArchiveSession?: (sessionId: string) => void;
+  /** Rename a project (context menu action). */
+  readonly onRenameProject?: (key: string, name: string) => void;
+  /** Remove a project (context menu action, with blocking). */
+  readonly onRemoveProject?: (key: string) => void;
   /** Live run state per session, layered over each row's durable activity (D-093 M3). */
   readonly liveActivity?: ReadonlyMap<string, SessionActivity>;
   /** The currently selected session id (for highlight). */
@@ -64,18 +85,18 @@ function SessionRow({
   selected,
   nowMs,
   onSelect,
+  onArchiveSession,
 }: {
   summary: SessionSummary;
   activity: SessionActivity;
   selected: boolean;
   nowMs: number;
   onSelect: (sessionId: string) => void;
+  onArchiveSession?: (sessionId: string) => void;
 }) {
   const active = activity === "running" || activity === "queued";
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(summary.sessionId)}
+    <div
       className={cn(
         "group relative flex w-full items-center gap-2 py-1.5 pl-7 pr-2.5 text-left text-ui",
         selected
@@ -95,7 +116,26 @@ function SessionRow({
               : "bg-muted-foreground/20",
         )}
       />
-      <span className="min-w-0 flex-1 truncate">{summary.title}</span>
+      <button
+        type="button"
+        onClick={() => onSelect(summary.sessionId)}
+        className="min-w-0 flex-1 truncate text-left"
+      >
+        {summary.title}
+      </button>
+      {onArchiveSession ? (
+        <button
+          type="button"
+          aria-label="Archive session"
+          onClick={(e) => {
+            e.stopPropagation();
+            onArchiveSession(summary.sessionId);
+          }}
+          className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-smui-red focus-visible:opacity-100 group-hover:opacity-100"
+        >
+          <Archive className="size-3" />
+        </button>
+      ) : null}
       <span className="shrink-0 text-label tracking-wider text-muted-foreground/60">
         {activity === "running" ? (
           <span className="inline-flex items-center gap-[3px]" role="status" aria-label="running">
@@ -113,42 +153,243 @@ function SessionRow({
           relativeTime(summary.updatedAt, nowMs)
         )}
       </span>
-    </button>
+    </div>
   );
 }
 
-/** A project row: expand/collapse chevron, name (with disambiguating path), session count, active dot. */
-function ProjectRow({ group, onToggle }: { group: ProjectGroup; onToggle: (key: string) => void }) {
-  const hasActive = group.sessions.some((s) => s.activity === "running" || s.activity === "queued");
+/** The inline rename input: replaces the project label when renaming is active.
+ *  Enter saves, Escape cancels, blur saves. Auto-focuses + selects on mount. */
+function RenameInput({
+  initial,
+  onSave,
+  onCancel,
+}: {
+  initial: string;
+  onSave: (name: string) => void;
+  onCancel: () => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const el = inputRef.current;
+    if (el) {
+      el.focus();
+      el.select();
+    }
+  }, []);
+
+  function handleKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const value = inputRef.current?.value.trim();
+      if (value) {
+        onSave(value);
+      } else {
+        onCancel();
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onCancel();
+    }
+  }
+
   return (
-    <button
-      type="button"
-      onClick={() => onToggle(group.key)}
-      className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-card/40"
-      aria-expanded={!group.collapsed}
+    <input
+      ref={inputRef}
+      type="text"
+      defaultValue={initial}
+      onKeyDown={handleKeyDown}
+      onBlur={() => {
+        const value = inputRef.current?.value.trim();
+        if (value) {
+          onSave(value);
+        } else {
+          onCancel();
+        }
+      }}
+      onClick={(e) => e.stopPropagation()}
+      className="flex-1 rounded bg-card px-1 py-0.5 text-ui text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+    />
+  );
+}
+
+/** The context menu for a project row: Rename and Remove, positioned below the trigger. */
+function ProjectContextMenu({
+  hasActive,
+  onRename,
+  onRemove,
+  onClose,
+}: {
+  hasActive: boolean;
+  onRename: () => void;
+  onRemove: () => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handlePointerDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
+  return (
+    <div
+      ref={menuRef}
+      className="absolute right-0 top-full z-50 mt-1 min-w-32 rounded-md border border-border bg-popover py-1 shadow-md"
     >
-      {group.collapsed ? (
-        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
-      ) : (
-        <ChevronDown className="size-3.5 shrink-0 text-muted-foreground/60" />
-      )}
-      <span
-        aria-hidden
+      <button
+        type="button"
+        onClick={() => {
+          onRename();
+          onClose();
+        }}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui text-foreground hover:bg-card/60"
+      >
+        <Pencil className="size-3" />
+        <span>Rename</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          if (hasActive) return;
+          onRemove();
+          onClose();
+        }}
+        disabled={hasActive}
         className={cn(
-          "size-1.5 shrink-0 rounded-full",
-          hasActive ? "bg-smui-green" : "bg-muted-foreground/30",
+          "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui",
+          hasActive
+            ? "cursor-not-allowed text-muted-foreground/40"
+            : "text-smui-red hover:bg-card/60",
         )}
-      />
-      <ProjectLabel
-        displayName={group.displayName}
-        displayPath={group.displayPath}
-        className="flex-1 text-ui text-foreground"
-        pathClassName="text-muted-foreground/50"
-      />
-      <span className="shrink-0 text-label tracking-wider text-muted-foreground/60">
-        {group.activeCount > 0 ? group.activeCount : ""}
-      </span>
-    </button>
+      >
+        <Trash2 className="size-3" />
+        <span>Remove</span>
+        {hasActive ? (
+          <span className="ml-auto text-label text-muted-foreground/40">busy</span>
+        ) : null}
+      </button>
+    </div>
+  );
+}
+
+/** A project row: expand/collapse chevron, name (with disambiguating path), session count, active dot.
+ *  When the project is expanded and onNewSession is provided, reveals a "New Session" button on hover.
+ *  Right-click opens a context menu with Rename and Remove. */
+function ProjectRow({
+  group,
+  onToggle,
+  onNewSession,
+  onRenameProject,
+  onRemoveProject,
+  renaming,
+  onStartRename,
+  onRenameSave,
+  onRenameCancel,
+}: {
+  group: ProjectGroup;
+  onToggle: (key: string) => void;
+  onNewSession?: (projectKey: string) => void;
+  onRenameProject?: (key: string, name: string) => void;
+  onRemoveProject?: (key: string) => void;
+  renaming: boolean;
+  onStartRename: () => void;
+  onRenameSave: (name: string) => void;
+  onRenameCancel: () => void;
+}) {
+  const hasActive = group.sessions.some((s) => s.activity === "running" || s.activity === "queued");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const rowRef = useRef<HTMLButtonElement>(null);
+
+  function handleContextMenu(e: React.MouseEvent<HTMLButtonElement>) {
+    if (!onRenameProject && !onRemoveProject) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(true);
+  }
+
+  const canMenu = onRenameProject != null || onRemoveProject != null;
+
+  return (
+    <div className="group relative">
+      <button
+        ref={rowRef}
+        type="button"
+        onClick={() => onToggle(group.key)}
+        onContextMenu={canMenu ? handleContextMenu : undefined}
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-card/40"
+        aria-expanded={!group.collapsed}
+      >
+        {group.collapsed ? (
+          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
+        ) : (
+          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground/60" />
+        )}
+        <span
+          aria-hidden
+          className={cn(
+            "size-1.5 shrink-0 rounded-full",
+            hasActive ? "bg-smui-green" : "bg-muted-foreground/30",
+          )}
+        />
+        {renaming ? (
+          <RenameInput
+            initial={group.displayName}
+            onSave={onRenameSave}
+            onCancel={onRenameCancel}
+          />
+        ) : (
+          <ProjectLabel
+            displayName={group.displayName}
+            displayPath={group.displayPath}
+            className="flex-1 text-ui text-foreground"
+            pathClassName="text-muted-foreground/50"
+          />
+        )}
+        <span className="shrink-0 text-label tracking-wider text-muted-foreground/60">
+          {group.activeCount > 0 ? group.activeCount : ""}
+        </span>
+        {onNewSession && !group.collapsed ? (
+          <button
+            type="button"
+            aria-label="New session"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNewSession(group.key);
+            }}
+            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <Plus className="size-3" />
+          </button>
+        ) : null}
+        {canMenu ? (
+          <button
+            type="button"
+            aria-label="Project actions"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen((v) => !v);
+            }}
+            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+          >
+            <MoreVertical className="size-3" />
+          </button>
+        ) : null}
+      </button>
+      {menuOpen ? (
+        <ProjectContextMenu
+          hasActive={hasActive}
+          onRename={onStartRename}
+          onRemove={() => onRemoveProject?.(group.key)}
+          onClose={() => setMenuOpen(false)}
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -190,16 +431,44 @@ export function ProjectSidebar({
   searchQuery,
   onSearchChange,
   onViewArchive,
+  onAddProject,
+  onNewSession,
+  onArchiveSession,
+  onRenameProject,
+  onRemoveProject,
   liveActivity,
   currentSessionId,
   nowMs = Date.now(),
   className,
 }: ProjectSidebarProps) {
+  const [renamingKey, setRenamingKey] = useState<string | null>(null);
+
+  function handleRenameSave(key: string) {
+    return (name: string) => {
+      onRenameProject?.(key, name);
+      setRenamingKey(null);
+    };
+  }
+
+  function handleRenameCancel() {
+    setRenamingKey(null);
+  }
+
   return (
     <div className={cn("flex h-full flex-col", className)}>
-      {/* Header: the "Projects" title + optional search. */}
+      {/* Header: the "Projects" title + optional "Add Project" button + optional search. */}
       <header className="flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-label tracking-wider text-muted-foreground">
         <span className="flex-1">Projects</span>
+        {onAddProject ? (
+          <button
+            type="button"
+            aria-label="Add project"
+            onClick={onAddProject}
+            className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+          >
+            <Plus className="size-3.5" />
+          </button>
+        ) : null}
       </header>
 
       {onSearchChange ? (
@@ -230,7 +499,17 @@ export function ProjectSidebar({
               const hidden = group.collapsed ? 0 : Math.max(0, group.sessions.length - SESSION_CAP);
               return (
                 <div key={group.key}>
-                  <ProjectRow group={group} onToggle={onToggleProject} />
+                  <ProjectRow
+                    group={group}
+                    onToggle={onToggleProject}
+                    onNewSession={onNewSession}
+                    onRenameProject={onRenameProject}
+                    onRemoveProject={onRemoveProject}
+                    renaming={renamingKey === group.key}
+                    onStartRename={() => setRenamingKey(group.key)}
+                    onRenameSave={handleRenameSave(group.key)}
+                    onRenameCancel={handleRenameCancel}
+                  />
                   {!group.collapsed ? (
                     <div>
                       {group.sessions.length === 0 ? (
@@ -244,6 +523,7 @@ export function ProjectSidebar({
                             selected={summary.sessionId === currentSessionId}
                             nowMs={nowMs}
                             onSelect={onSelectSession}
+                            onArchiveSession={onArchiveSession}
                           />
                         ))
                       )}
