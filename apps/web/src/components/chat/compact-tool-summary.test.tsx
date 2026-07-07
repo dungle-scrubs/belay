@@ -25,6 +25,40 @@ function toolRow(name: string, args: object, over?: Partial<Message>): Message {
 const summary = (name: string, args: object, over?: Partial<Message>): string | null =>
   compactDisplayFor(toolRow(name, args, over))?.secondary ?? null;
 
+const mcpSummary = (args: object, over?: Partial<Message>): string | null =>
+  summary("mcp", args, over);
+
+const MCP_SUMMARY_CASES: readonly {
+  readonly args: object;
+  readonly expected: string;
+}[] = [
+  { args: { action: "search", query: "notion config" }, expected: "search: notion config" },
+  {
+    args: { action: "call", name: "tool-proxy:notion_query" },
+    expected: "call: tool-proxy:notion_query",
+  },
+  {
+    args: { action: "resources", server: "tool-proxy", uri: "notion://page/abc" },
+    expected: "resources: tool-proxy notion://page/abc",
+  },
+  {
+    args: { action: "prompt", name: "tool-proxy:diagnose" },
+    expected: "prompt: tool-proxy:diagnose",
+  },
+  { args: { action: "status" }, expected: "status" },
+] as const;
+
+const MCP_INCOMPLETE_SUMMARY_CASES: readonly {
+  readonly args: object;
+  readonly expected: string;
+}[] = [
+  { args: { action: "resources", server: "tool-proxy" }, expected: "resources: tool-proxy" },
+  { args: { action: "resources" }, expected: "resources" },
+  { args: { action: "prompt", server: "tool-proxy" }, expected: "prompt: tool-proxy" },
+  { args: { action: "prompt" }, expected: "prompt" },
+  { args: {}, expected: "mcp" },
+] as const;
+
 test("file/command/pattern tools summarize on their primary arg", () => {
   assert.equal(summary("bash", { command: "pnpm test" }), "pnpm test");
   assert.equal(summary("read", { path: "src/app.ts" }), "src/app.ts");
@@ -81,6 +115,23 @@ test("multi_edit spanning files names the first file plus a bounded file count",
   assert.match(s, /a\.ts/);
   assert.match(s, /2 files/);
   assert.match(s, /2 edits/);
+});
+
+test("the mcp gateway summarizes each action on its safe schema fields", () => {
+  for (const { args, expected } of MCP_SUMMARY_CASES) {
+    assert.equal(mcpSummary(args), expected);
+  }
+});
+
+test("the mcp gateway summary tolerates incomplete and malformed args safely", () => {
+  for (const { args, expected } of MCP_INCOMPLETE_SUMMARY_CASES) {
+    assert.equal(mcpSummary(args), expected);
+  }
+  assert.equal(
+    compactDisplayFor(toolRow("mcp", {}, { args: '{"action":"call","args":{"token":"SECRET"}' }))
+      ?.secondary,
+    "mcp",
+  );
 });
 
 test("MCP and unknown tools fall back to a generic summary, never crash", () => {

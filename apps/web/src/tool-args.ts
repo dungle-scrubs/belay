@@ -37,6 +37,11 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" ? value : undefined;
 }
 
+function joinLabel(prefix: string, parts: readonly string[]): string {
+  const detail = parts.filter(Boolean).join(" ");
+  return detail ? `${prefix}: ${detail}` : prefix;
+}
+
 /** The TOTAL-width "cap + ellipsis": the result is at most `max` glyphs (the ellipsis counts toward the
  *  cap), so a label capped with it is guaranteed to FIT in `max`. Shared with `action-label.ts`'s label
  *  redaction. Distinct from `derive`'s `truncate`, which caps content only (up to `max+1` glyphs); use
@@ -71,6 +76,27 @@ export function salientToolArg(name: string, args: Record<string, unknown>): unk
   }
   if (name === "archive_read") {
     return args.path ?? args.url;
+  }
+  if (name === "mcp") {
+    const action = str(args.action);
+    const query = str(args.query);
+    const qualifiedName = str(args.name);
+    const server = str(args.server);
+    const uri = str(args.uri);
+    switch (action) {
+      case "search":
+        return joinLabel("search", [query]);
+      case "call":
+        return joinLabel("call", [qualifiedName]);
+      case "resources":
+        return joinLabel("resources", [server, uri]);
+      case "prompt":
+        return joinLabel("prompt", [qualifiedName || server]);
+      case "status":
+        return "status";
+      default:
+        return [query, qualifiedName, server, uri].find(Boolean) ?? "mcp";
+    }
   }
   if (name === "multi_edit") {
     // multi_edit has no top-level `path`; the single-string surfaces (action label, compact row)

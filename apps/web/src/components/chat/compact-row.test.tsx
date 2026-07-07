@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
 import { LoaderIcon } from "lucide-react";
 import { test } from "vitest";
+import type { Message } from "../../transcript";
+import { compactDisplayFor } from "./compact-display";
 import { compactDisplay as display } from "./compact-fixtures";
 import { CompactRow } from "./compact-row";
 
@@ -9,6 +11,21 @@ test("renders the primary label and secondary summary on one line", () => {
   const { getByText } = render(<CompactRow display={display({})} />);
   getByText("bash");
   getByText("ls -la /tmp");
+});
+
+test("renders an mcp gateway row with the action summary", () => {
+  const message: Message = {
+    kind: "tool",
+    id: "mcp1",
+    name: "mcp",
+    args: JSON.stringify({ action: "call", name: "tool-proxy:notion_query" }),
+    done: true,
+  };
+  const compact = compactDisplayFor(message);
+  assert.ok(compact);
+  const { getByText } = render(<CompactRow display={compact} />);
+  getByText("mcp");
+  getByText("call: tool-proxy:notion_query");
 });
 
 test("can suppress a repeated primary label while keeping the summary visible", () => {

@@ -14,6 +14,31 @@ const single = '{"edits":[{"path":"a.ts","old":"x","new":"y"}]}';
 const multiFile =
   '{"edits":[{"path":"a.ts","old":"x","new":"y"},{"path":"b.ts","old":"a","new":"b"}]}';
 
+const MCP_SALIENT_CASES: readonly {
+  readonly args: Record<string, unknown>;
+  readonly expected: string;
+}[] = [
+  { args: { action: "search", query: "notion config" }, expected: "search: notion config" },
+  {
+    args: { action: "call", name: "tool-proxy:notion_query" },
+    expected: "call: tool-proxy:notion_query",
+  },
+  {
+    args: { action: "resources", server: "tool-proxy", uri: "notion://page/abc" },
+    expected: "resources: tool-proxy notion://page/abc",
+  },
+  { args: { action: "resources", server: "tool-proxy" }, expected: "resources: tool-proxy" },
+  { args: { action: "resources" }, expected: "resources" },
+  {
+    args: { action: "prompt", name: "tool-proxy:diagnose", args: { token: "SECRET" } },
+    expected: "prompt: tool-proxy:diagnose",
+  },
+  { args: { action: "prompt", server: "tool-proxy" }, expected: "prompt: tool-proxy" },
+  { args: { action: "prompt" }, expected: "prompt" },
+  { args: { action: "status" }, expected: "status" },
+  { args: { args: { token: "SECRET" } }, expected: "mcp" },
+] as const;
+
 test("multiEditPaths returns distinct paths in first-seen order", () => {
   assert.deepEqual(
     multiEditPaths([
@@ -51,6 +76,12 @@ test("salientToolArg resolves multi_edit's path from edits[] (not a top-level pa
   // A still-streaming multi_edit with no path yet collapses to empty, never a raw-args leak.
   assert.equal(salientToolArg("multi_edit", { edits: [{ old: "x", new: "y" }] }), undefined);
   assert.equal(salientToolArg("multi_edit", {}), undefined);
+});
+
+test("salientToolArg summarizes the mcp gateway without leaking raw nested args", () => {
+  for (const { args, expected } of MCP_SALIENT_CASES) {
+    assert.equal(salientToolArg("mcp", args), expected);
+  }
 });
 
 test("toolActionLabel names the file a single-file multi_edit is editing", () => {
