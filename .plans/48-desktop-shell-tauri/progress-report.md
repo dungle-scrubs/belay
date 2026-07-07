@@ -11,6 +11,7 @@
 - [x] Existing local services.
 - [ ] Spawnable host artifact.
 - [ ] Desktop packaging decision.
+- [ ] `.plans/58-project-sidebar-sessions` - M8 consumes the shared project registry, immutable session project binding, and project-scoped fresh-session operation.
 
 ## Phase 1: Desktop Shell Skeleton and Shared Launcher Boundary
 
@@ -98,9 +99,9 @@
 
 - [ ] RED: Add tests for restoring last open sessions/windows from desktop state
 - [ ] GREEN: Reopen last project sessions and start/reuse their hosts
-- [ ] RED: Add tests for creating/opening a project session from desktop UI
-- [ ] GREEN: Wire project/session open through the shared launcher core
-- [ ] REFACTOR: Keep browser URL deep links compatible with desktop session identity
+- [ ] RED: Add tests for creating/opening a project session from desktop UI through plan 58's project registry and project-scoped fresh-session operation
+- [ ] GREEN: Wire project/session open through the shared launcher core and plan 58 registry/session-project binding
+- [ ] REFACTOR: Keep browser URL deep links compatible with desktop session identity and immutable session project paths
 
 ### M9: Window and Multi-View Semantics
 
@@ -143,6 +144,6 @@
 
 ## Summary
 
-- Current cutoff blockers: 74 unchecked implementation/report items.
+- Current cutoff blockers: 75 unchecked implementation/report items.
 - Accepted/deferred follow-up: none.
 - Superseded/obsolete checklist debt: none.

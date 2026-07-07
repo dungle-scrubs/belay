@@ -12,6 +12,7 @@
 - [ ] `.plans/56-rename-to-trevor` (coordination; sequenced first) - plan 56 renames the project to `trevor` and lands before 48. Build the Tauri app identity (bundle id, product name, window title) against the final `trevor` name and read all paths from `node-paths` (already `~/.trevor`); do not introduce `trevor` literals. <!-- D-006 -->
 - [ ] `.plans/50-cli-headless-agent-surface` (coordination; sequenced first) - plan 50 adds the `launch({ noBrowser })` option to `@trevor/launcher` for its headless one-shot. M7 **consumes that option** for the desktop supervisor's spawn-or-reuse rather than re-implementing a browser-less spawn; one shared seam, not two. <!-- D-007 -->
 - [ ] `.plans/45.2-session-store-resilience` (sequenced first) - 45.2 adds a store `/health` watchdog to the supervisor (detect wedge, kill the store PID, launchdawg respawns) and a store-health signal (`indexHealthy` / `user_version` / startup SHA via a store `GET /diag`) folded into the doctor `storage` area. M6 **reuses** both rather than adding a parallel store liveness probe or restart loop. <!-- D-008 -->
+- [ ] `.plans/58-project-sidebar-sessions` (sequenced first for desktop session UX) - plan 58 replaces legacy `projects.json` with the shared project registry, adds immutable session project binding, and makes fresh sessions project-scoped. M8 **consumes** that registry and fresh-session operation instead of adding a Tauri-specific project/session store or relying on one-root-one-session launcher semantics. <!-- D-009 -->
 
 ## 1. Architecture
 
@@ -190,9 +191,9 @@ The host is a Node + Effect app. The umbrella plan already marks a spawnable hos
 - **Tasks:**
   1. RED: Add tests for restoring last open sessions/windows from desktop state.
   2. GREEN: Reopen last project sessions and start/reuse their hosts.
-  3. RED: Add tests for creating/opening a project session from desktop UI.
-  4. GREEN: Wire project/session open through the shared launcher core.
-  5. REFACTOR: Keep browser URL deep links compatible with desktop session identity.
+  3. RED: Add tests for creating/opening a project session from desktop UI through plan 58's project registry and project-scoped fresh-session operation.
+  4. GREEN: Wire project/session open through the shared launcher core and plan 58 registry/session-project binding.
+  5. REFACTOR: Keep browser URL deep links compatible with desktop session identity and immutable session project paths.
 
 #### M9: Window and Multi-View Semantics
 
@@ -285,4 +286,3 @@ pnpm --filter @trevor/desktop test
 ## 8. Decisions
 
 Canonical decisions are in `.plans/48-desktop-shell-tauri/plan.db`.
-
