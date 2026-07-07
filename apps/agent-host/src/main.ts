@@ -901,6 +901,7 @@ function handleEvent(message: SessionEvent): void {
     return;
   }
   if (decoded.type === "user.message" && isAnswerableProducer(message.producerId, PRODUCER_ID)) {
+    mainWorker.observePromptProvider(message);
     scheduler.noteTurn(message);
   } else if (
     decoded.type === "user.supersede" &&

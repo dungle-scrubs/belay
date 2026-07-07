@@ -55,7 +55,7 @@ import type { TelemetryDoctorSummary } from "./probe-input";
 export interface HostFactsDeps {
   readonly scheduler: Pick<TurnScheduler, "debug">;
   readonly turnMachine: Pick<TurnMachine, "lastTermination">;
-  readonly compactionController: Pick<CompactionController, "lastFold">;
+  readonly compactionController: Pick<CompactionController, "debug" | "lastFold">;
   readonly internet: Pick<InternetMonitor, "current">;
   /** Whether replay has completed and the host is answering (main.ts's mutable `live` flag). */
   live(): boolean;
@@ -121,6 +121,7 @@ export function makeHostFacts(deps: HostFactsDeps) {
     hooksStats: readonly HookStatsEntry[],
   ): Record<string, unknown> {
     const turns = scheduler.debug();
+    const compaction = compactionController.debug();
     return {
       live: live(),
       activeRun: turns.active,
@@ -131,6 +132,7 @@ export function makeHostFacts(deps: HostFactsDeps) {
       // cancelled | interrupted | error. Omitted until the first turn completes.
       ...(turnMachine.lastTermination ? { lastTurn: turnMachine.lastTermination } : {}),
       compacting: turns.compacting,
+      compaction: `provider ${compaction.provider ? `${compaction.provider.id}/${compaction.provider.model}` : "none"} · input ${commas(compaction.lastInput)}tok · latest ${commas(compaction.latestWindow)} · budget ${commas(compaction.retainedBudgetWindow)} · floor ${compaction.floorReached ? "yes" : "no"}`,
       // Subagents (D-045..D-048): the discovered roster + the depth policy. Delegation is depth-1 (a
       // child is given no delegation capability); inline blocks, background fans out read-only (≤cap).
       subagents: `${discoverAgents().length} agents · depth≤1 · inline+background (≤${MAX_BACKGROUND_CHILDREN_PER_SESSION})`,

@@ -8,6 +8,7 @@ import { TurnMachine } from "@host/agent/turn-machine";
 import { TurnScheduler, type TurnSchedulerDeps } from "@host/agent/turn-scheduler";
 import type { InternetMonitor } from "@host/connectivity/probe";
 import { DEFAULT_PROVIDER, type ProviderRegistry } from "@host/providers/index";
+import { createTurnProviderResolver } from "@host/providers/turn-provider-resolver";
 import type { HostResidency } from "@host/residency/host";
 import type { Lease } from "@host/session/lease";
 import { log } from "@host/transport/log";
@@ -78,6 +79,7 @@ export interface SessionWorker {
   readonly reapOrphans: () => void;
   readonly reapOrphanSubagents: () => void;
   readonly reapOrphanQuestions: () => void;
+  readonly observePromptProvider: (message: SessionEvent) => void;
   readonly handleEvent: (message: SessionEvent) => void;
   readonly connect: () => void;
   readonly close: () => void;
@@ -108,6 +110,10 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
   const turnMachine = new TurnMachine();
   const activeRun = new ActiveRun();
   const compactionController = new CompactionController(providers[DEFAULT_PROVIDER]);
+  const turnProviderResolver = createTurnProviderResolver({
+    providers,
+    defaultProviderKey: DEFAULT_PROVIDER,
+  });
   const backgroundChildren = deps.backgroundChildren ?? new Map<string, BackgroundChildInfo>();
 
   let live = false;
@@ -133,6 +139,7 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
     producerId,
     transport,
     providers,
+    turnProviderResolver,
     compactionController,
     residency,
     internet,
@@ -156,12 +163,23 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
     pendingQuestionIds: deps.pendingQuestionIds ?? (() => new Set<string>()),
   });
 
+  function observePromptProvider(message: SessionEvent): void {
+    if (!isAnswerableProducer(message.producerId, producerId)) {
+      return;
+    }
+    const resolved = turnProviderResolver.resolveUserMessage(message);
+    if (resolved) {
+      compactionController.noteProvider(resolved.provider, resolved.budgetWindow);
+    }
+  }
+
   function handleEvent(message: SessionEvent): void {
     const decoded = decodeTrevorEvent(message);
     if (!decoded) {
       return;
     }
     if (decoded.type === "user.message" && isAnswerableProducer(message.producerId, producerId)) {
+      observePromptProvider(message);
       scheduler.noteTurn(message);
     } else if (decoded.type === "user.cancel" && live && lease.isLeader()) {
       abortRuns(decoded.runId);
@@ -188,6 +206,14 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
         compactionController.noteTurnCompleted();
       }
       scheduler.processCompletion(decoded.runId, message.seq);
+    } else if (decoded.type === "context.compacted") {
+      conversationLog.admit(message);
+      compactionController.noteCompacted({
+        throughSeq: decoded.throughSeq,
+        tokensBefore: decoded.tokensBefore,
+        tokensAfter: decoded.tokensAfter,
+      });
+      scheduler.finishCompaction();
     } else if (
       decoded.type === "tool.started" ||
       decoded.type === "tool.completed" ||
@@ -209,6 +235,7 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
     reapOrphans,
     reapOrphanSubagents,
     reapOrphanQuestions,
+    observePromptProvider,
     handleEvent,
     connect,
     close,
@@ -226,6 +253,7 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
   function connect(): void {
     live = false;
     conversationLog.reset();
+    compactionController.resetForReplay();
     scheduler.resetForReconnect();
     connection = transport.connectSession({
       sessionId,

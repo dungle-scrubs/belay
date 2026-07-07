@@ -1,7 +1,10 @@
 import type { InternetMonitor } from "@host/connectivity/probe";
 import { hooksRuntime } from "@host/hooks/host-runtime";
 import { type ChatMessage, DEFAULT_PROVIDER, type ProviderRegistry } from "@host/providers/index";
-import { createModelSourceResolver } from "@host/providers/model-source-resolver";
+import {
+  createTurnProviderResolver,
+  type TurnProviderResolver,
+} from "@host/providers/turn-provider-resolver";
 import type { HostResidency } from "@host/residency/host";
 import type { Lease } from "@host/session/lease";
 import { discoverAgents } from "@host/subagents/discovery";
@@ -56,6 +59,8 @@ export interface StartTurnDeps {
   readonly transport: SessionTransport;
   /** The registered providers the legacy provider-string path picks from. */
   readonly providers: ProviderRegistry;
+  /** Shared turn provider resolver, also used by prompt preflight before compaction checks. */
+  readonly turnProviderResolver?: TurnProviderResolver;
   /** The compaction controller: notes the turn's provider + seeds carried-forward usage. */
   readonly compactionController: Pick<CompactionController, "noteProvider" | "usageSeed">;
   /** The host's local-model residency: reconciled to this turn's provider (plan 11.1). */
@@ -96,6 +101,12 @@ export function makeStartTurn(deps: StartTurnDeps) {
     backgroundChildren,
     activeRun,
   } = deps;
+  const turnProviderResolver =
+    deps.turnProviderResolver ??
+    createTurnProviderResolver({
+      providers,
+      defaultProviderKey: DEFAULT_PROVIDER,
+    });
 
   /**
    * Forks the agent turn for a user.message and returns its handle for the scheduler to
@@ -115,16 +126,13 @@ export function makeStartTurn(deps: StartTurnDeps) {
       return null;
     }
     const runId = crypto.randomUUID();
-    // Resolve the turn's provider (D-065): a ModelRef into a known catalog SOURCE builds a provider for
-    // that exact model (so any catalog model runs, not just the ~6 registered keys); otherwise fall back
-    // to the legacy registered providers keyed by the provider string, defaulting unknown keys.
-    const modelResolver = createModelSourceResolver({
-      providers,
-      defaultProviderKey: DEFAULT_PROVIDER,
-    });
-    const { provider, model: turnModel } = modelResolver.resolveTurnProvider(decoded);
+    const {
+      provider,
+      model: turnModel,
+      budgetWindow,
+    } = turnProviderResolver.resolveTurnProvider(decoded);
     // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
-    compactionController.noteProvider(provider);
+    compactionController.noteProvider(provider, budgetWindow);
     // Reconcile local-model residency for this turn's provider (plan 11.1): claim the local model it holds
     // (releasing + sweeping the prior one), or release the current claim when the turn goes to the cloud.
     // Fire-and-forget: residency is best-effort and must never gate a turn.
@@ -226,7 +234,8 @@ export function makeStartTurn(deps: StartTurnDeps) {
           ? {
               switchSurface: {
                 cell: switchCell,
-                rebuildProvider: (model: ModelRef) => modelResolver.buildProviderForModel(model),
+                rebuildProvider: (model: ModelRef) =>
+                  turnProviderResolver.buildProviderForModel(model),
                 ...(decoded.model ? { initialModel: decoded.model } : {}),
               },
             }

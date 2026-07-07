@@ -14,6 +14,18 @@ export interface CompactionFoldSnapshot {
   readonly tokensAfter: number;
 }
 
+export interface CompactionBudgetSnapshot {
+  readonly lastInput: number;
+  readonly latestWindow: number;
+  readonly retainedBudgetWindow: number;
+  readonly provider: {
+    readonly id: string;
+    readonly model: string;
+  } | null;
+  readonly floorReached: boolean;
+  readonly lastFold: CompactionFoldSnapshot | null;
+}
+
 /** The per-fold pieces a caller supplies; the controller fills the rest (provider, window, input) from
  *  its captured state, so a fold call site stops re-threading the controller's internals. */
 export interface CompactionFoldRequest {
@@ -45,7 +57,7 @@ export class CompactionController {
     return this.lastFoldValue;
   }
 
-  noteProvider(provider: Provider): void {
+  noteProvider(provider: Provider, budgetWindow?: number): void {
     // A genuine foreground-model change re-anchors the replay window (03.2 D-005): an upgrade or
     // downgrade to a DIFFERENT foreground model adopts its own window on the next usage, so the prior
     // model's window never permanently over- or under-compacts the new one. The same foreground model
@@ -57,6 +69,18 @@ export class CompactionController {
       this.budgetWindowValue = 0;
     }
     this.lastProviderValue = provider;
+    if (budgetWindow !== undefined) {
+      this.retainBudgetWindow(budgetWindow);
+    }
+  }
+
+  resetForReplay(): void {
+    this.lastInputValue = 0;
+    this.lastWindowValue = 0;
+    this.budgetWindowValue = 0;
+    this.floorReached = false;
+    this.lastProviderValue = undefined;
+    this.lastFoldValue = null;
   }
 
   /** The provider a fold/control prompt runs on: the last turn's, else the registry default. */
@@ -155,5 +179,18 @@ export class CompactionController {
       !this.floorReached &&
       overBudget(this.lastInputValue, this.budgetWindow(), COMPACT_WHEN)
     );
+  }
+
+  debug(): CompactionBudgetSnapshot {
+    return {
+      lastInput: this.lastInputValue,
+      latestWindow: this.lastWindowValue,
+      retainedBudgetWindow: this.budgetWindow(),
+      provider: this.lastProviderValue
+        ? { id: this.lastProviderValue.id, model: this.lastProviderValue.model }
+        : null,
+      floorReached: this.floorReached,
+      lastFold: this.lastFoldValue,
+    };
   }
 }

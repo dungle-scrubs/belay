@@ -110,6 +110,23 @@ test("a genuine foreground upgrade to a larger window is honored once it is the 
   assert.equal(controller.needed(true), false);
 });
 
+test("a replayed foreground provider change re-anchors the retained budget window", () => {
+  const controller = new CompactionController(undefined);
+  controller.noteProvider(fakeProvider("small", "Small-6K"));
+  controller.noteUsage(5_200, 6_144, 5_200);
+  controller.noteProvider(fakeProvider("large", "Large-262K"));
+  controller.noteUsage(20_900, 262_144, 20_900);
+  assert.equal(controller.needed(true), false);
+  assert.deepEqual(controller.debug(), {
+    lastInput: 20_900,
+    latestWindow: 262_144,
+    retainedBudgetWindow: 262_144,
+    provider: { id: "large", model: "Large-262K" },
+    floorReached: false,
+    lastFold: null,
+  });
+});
+
 test("the retained replay window keeps a growing history foldable across interleaved turns", () => {
   const controller = new CompactionController(undefined);
   controller.noteProvider(fakeProvider("minimax", "MiniMax-M3"));
@@ -119,4 +136,38 @@ test("the retained replay window keeps a growing history foldable across interle
   controller.noteUsage(215_000, 262_144, 215_000);
   controller.noteUsage(215_000, 1_000_000, 215_000);
   assert.equal(controller.needed(true), true);
+});
+
+test("debug separates the latest served window from the retained budget window", () => {
+  const controller = new CompactionController(undefined);
+  controller.noteProvider(fakeProvider("small", "Small-6K"));
+  controller.noteUsage(5_200, 6_144, 5_200);
+  controller.noteUsage(20_900, 262_144, 20_900);
+  assert.deepEqual(controller.debug(), {
+    lastInput: 20_900,
+    latestWindow: 262_144,
+    retainedBudgetWindow: 6_144,
+    provider: { id: "small", model: "Small-6K" },
+    floorReached: false,
+    lastFold: null,
+  });
+});
+
+test("resetForReplay clears budget, provider, floor, and fold state before rebuilding", () => {
+  const controller = new CompactionController(undefined);
+  controller.noteProvider(fakeProvider("small", "Small-6K"));
+  controller.noteUsage(5_200, 6_144, 5_200);
+  controller.noteCompacted({ throughSeq: 4, tokensBefore: 5_200, tokensAfter: 2_000 });
+  controller.markFloorReached();
+
+  controller.resetForReplay();
+
+  assert.deepEqual(controller.debug(), {
+    lastInput: 0,
+    latestWindow: 0,
+    retainedBudgetWindow: 0,
+    provider: null,
+    floorReached: false,
+    lastFold: null,
+  });
 });

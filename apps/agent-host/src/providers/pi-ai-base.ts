@@ -95,6 +95,17 @@ export class PiAiProviderBase extends DescribableProvider {
     return Effect.void;
   }
 
+  debugInfo(): Record<string, unknown> {
+    try {
+      const model = this.resolveModel();
+      return {
+        contextWindow: resolveContextWindow(model.id, model.contextWindow) ?? model.contextWindow,
+      };
+    } catch {
+      return {};
+    }
+  }
+
   stream(
     messages: readonly ChatMessage[],
     tools: readonly ToolDef[],
