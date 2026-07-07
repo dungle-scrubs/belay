@@ -15,7 +15,7 @@ import {
 type CompletedEvent = Extract<ReturnType<typeof events.assistantCompleted>, { type: string }>;
 type DecodedCompleted = Extract<DecodedEvent, { type: "assistant.completed" }>;
 
-export type CloseRunKind = "cancelled" | "interrupted";
+export type CloseRunKind = "cancelled" | "interrupted" | "steered";
 
 export class TurnMachine {
   private readonly completedRuns = new Set<string>();
@@ -80,7 +80,11 @@ export class TurnMachine {
     return events.assistantCompleted({
       runId,
       text: "",
-      ...(kind === "cancelled" ? { cancelled: true } : { interrupted: true }),
+      ...(kind === "cancelled"
+        ? { cancelled: true }
+        : kind === "steered"
+          ? { steered: true }
+          : { interrupted: true }),
       ...(last?.usage ? { usage: last.usage } : {}),
       ...(last?.breakdown ? { breakdown: last.breakdown } : {}),
     }) satisfies CompletedEvent;

@@ -770,6 +770,7 @@ export const events = {
     error?: string;
     cancelled?: boolean;
     interrupted?: boolean;
+    steered?: boolean;
     noReply?: boolean;
     stepLimit?: number;
     stop?: TurnStop;
@@ -786,6 +787,9 @@ export const events = {
       // Closed by the host (restart/crash mid-turn reap), not by the user - rendered distinctly
       // from `cancelled` so a host hot-reload never looks like the user pressed ESC.
       ...(p.interrupted ? { interrupted: true } : {}),
+      // Closed by the user steering (Esc with queued prompts: fold + cancel + submit in one
+      // action). Rendered as a muted "steered" note, not the alarming red "cancelled".
+      ...(p.steered ? { steered: true } : {}),
       ...(p.noReply ? { noReply: true } : {}),
       // Step count when the turn was budget-terminated (step backstop or context gate);
       // omitted on a normal turn. A forced final answer still streams; this flags WHY.
@@ -794,10 +798,12 @@ export const events = {
       ...(p.diagnostic ? { diagnostic: p.diagnostic } : {}),
     },
   }),
-  /** User asked to cancel the active run (hard steering / ESC). */
-  userCancel: (p: { runId: string }): TrevorEventInput => ({
+  /** User asked to cancel the active run (hard steering / ESC). When `steered` is true the
+   *   cancel is part of a steer (fold + cancel + submit); the host closes the run as `steered`
+   *   instead of `cancelled` so the transcript shows a muted note, not the alarming red. */
+  userCancel: (p: { runId: string; steered?: boolean }): TrevorEventInput => ({
     type: "user.cancel",
-    payload: { runId: p.runId },
+    payload: { runId: p.runId, ...(p.steered ? { steered: true } : {}) },
   }),
   /**
    * Retracts one or more queued `user.message`s from the durable follow-up queue (plan 47 D-003): the

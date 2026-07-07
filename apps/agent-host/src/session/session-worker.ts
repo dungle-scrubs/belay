@@ -75,7 +75,7 @@ export interface SessionWorker {
   readonly compactionController: CompactionController;
   readonly scheduler: TurnScheduler;
   readonly emit: (event: TrevorEventInput) => Promise<void>;
-  readonly abortRuns: (runId: string) => void;
+  readonly abortRuns: (runId: string, kind?: "cancelled" | "steered") => void;
   readonly reapOrphans: () => void;
   readonly reapOrphanSubagents: () => void;
   readonly reapOrphanQuestions: () => void;
@@ -182,7 +182,7 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
       observePromptProvider(message);
       scheduler.noteTurn(message);
     } else if (decoded.type === "user.cancel" && live && lease.isLeader()) {
-      abortRuns(decoded.runId);
+      abortRuns(decoded.runId, decoded.steered ? "steered" : "cancelled");
     } else if (decoded.type === "assistant.started") {
       turnMachine.start(decoded.runId);
       scheduler.noteTurn(message);

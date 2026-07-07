@@ -351,7 +351,7 @@ export interface SessionActions {
    * unqueue (`"unqueue"`), and recall-pull (`"recall"`) - all on the append-only log, never a mutation.
    */
   readonly supersede: (supersedes: readonly string[], reason: SupersedeReason) => Promise<void>;
-  readonly cancel: (runId: string) => Promise<void>;
+  readonly cancel: (runId: string, steered?: boolean) => Promise<void>;
   /** Switch the in-flight turn's model/reasoning mid-flight (plan 09.1): publish a
    *  `model.switch.requested` keyed to the active runId, which the host routes to that turn's switch
    *  cell. A no-op on the host when `runId` is not the active turn. */
@@ -417,7 +417,8 @@ export function createSessionActions(publishVia: PublishVia): SessionActions {
     publish: (prompt) => publishVia(sessionEvents.userMessage(prompt)),
     supersede: (supersedes: readonly string[], reason: SupersedeReason) =>
       publishVia(sessionEvents.userSupersede({ supersedes, reason })),
-    cancel: (runId: string) => publishVia(sessionEvents.userCancel({ runId })),
+    cancel: (runId: string, steered?: boolean) =>
+      publishVia(sessionEvents.userCancel({ runId, ...(steered ? { steered: true } : {}) })),
     switchModel: (runId: string, model: ModelRef) =>
       publishVia(sessionEvents.modelSwitchRequested({ runId, model, initiator: "manual" })),
     command,

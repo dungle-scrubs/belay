@@ -862,7 +862,6 @@ export function App() {
       return;
     }
     history.record(text); // record ordinary prompts for recall (empty/attachments-only is skipped)
-    justFoldedRef.current = false; // a fresh prompt is a new queue - the next Escape folds it again
     setDraft(""); // clears the draft text AND its image-token refs (via the composer's syncDraft)
     // Image refs (token order) ride first so the host maps token #k -> the k-th image artifact;
     // document attachments follow as a note.
@@ -965,19 +964,18 @@ export function App() {
     model: sendModelRef,
   });
 
-  // Progressive Escape after a fold (plan 47 D-003): the folded steering prompt is itself published as
-  // a durable queued follow-up, so it re-enters the queue projection. This latch marks "we just folded"
-  // so the NEXT Escape counts the queue as empty and cancels (the folded steer keeps running), instead
-  // of re-folding the steer into itself. Reset when the user queues something new or cancels.
-  const justFoldedRef = useRef(false);
-
-  // First Escape with queued prompts (D-003): fold the queue into ONE steering prompt and publish it
-  // now (as a durable user.message), superseding the folded prompts, WITHOUT cancelling. The host runs
-  // the single folded prompt after the active turn; a deliberate second Escape then cancels.
+  // Steer (Escape with queued prompts): fold the queue into ONE steering prompt, cancel the active
+  // turn as `steered` (so the transcript shows a muted note, not the alarming red "cancelled"), and
+  // publish the folded prompt so it runs next. All in one action - no two-step latch, no second Esc.
+  // A plain cancel (no queued prompts) keeps the red "cancelled": it means "stop", not "redirect".
   const onFlushQueuedSteer = () => {
     flushQueuedSteer(steerMeta());
-    justFoldedRef.current = true;
-    // Return focus to the composer so the user can keep typing immediately after steering.
+    const runId = active ?? (awaitingResponse ? "" : null);
+    if (runId !== null) {
+      void cancel(runId, true);
+    } else if (compacting) {
+      void cancel("", true);
+    }
     inputRef.current?.focus();
   };
 
@@ -987,7 +985,6 @@ export function App() {
   // already-durable queue - plan 47 runs queued follow-ups as distinct ordered turns, not a collapse.
   const onCancel = () => {
     const runId = active ?? (awaitingResponse ? "" : null);
-    justFoldedRef.current = false;
     const text = draft.trim();
     const all = [...imageRefs, ...attachments];
     if (text || all.length > 0) {
@@ -1078,9 +1075,10 @@ export function App() {
     draft,
     modalOpen,
     handoffPending: pendingHandoff !== null,
-    // The durable queue length decides queued-steer vs cancel. After a fold the folded steer re-enters
-    // the queue, so the justFolded latch counts it as empty - the next Escape cancels, not re-folds.
-    queued: justFoldedRef.current ? 0 : queue.length,
+    // The durable queue length decides queued-steer vs cancel. The steer (fold + cancel + submit)
+    // happens in one Esc now, so there is no two-step latch: a non-empty queue routes to steer,
+    // an empty queue routes to cancel.
+    queued: queue.length,
     setDraft,
     onCancel,
     onFlushQueuedSteer,

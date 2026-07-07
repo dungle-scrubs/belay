@@ -512,6 +512,11 @@ export function TranscriptRowView({
       <div className="text-sm text-smui-red">cancelled</div>
     ) : null;
 
+  const steeredNote =
+    message.kind === "assistant" && message.steered ? (
+      <div className="text-sm text-muted-foreground/60">steered</div>
+    ) : null;
+
   const interruptedNote =
     message.kind === "assistant" && message.interrupted ? (
       <div className="text-sm text-smui-red">interrupted · host restarted</div>
@@ -613,6 +618,7 @@ export function TranscriptRowView({
       {overflowNote}
       {errorNote}
       {cancelledNote}
+      {steeredNote}
       {interruptedNote}
       {noReplyNote}
       {stepLimitNote}

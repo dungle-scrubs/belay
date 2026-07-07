@@ -5,7 +5,7 @@ import { interruptFiber } from "../effect/fiber-exit";
 import type { CompactionCommandsApi } from "./compaction-commands";
 import { orphanedSubagentReaps } from "./delegate";
 import { orphanedQuestionReaps } from "./provider-questions";
-import type { TurnMachine } from "./turn-machine";
+import type { CloseRunKind, TurnMachine } from "./turn-machine";
 import type { TurnScheduler } from "./turn-scheduler";
 
 /**
@@ -62,7 +62,7 @@ export function makeRunLifecycle(deps: RunLifecycleDeps) {
    * it consumed don't vanish on a cancel. `cancelled` = the user pressed ESC; `interrupted` = the host
    * closed it (restart/crash mid-turn), rendered as a muted "host restarted" note rather than an ESC.
    */
-  function closeRun(runId: string, kind: "cancelled" | "interrupted"): void {
+  function closeRun(runId: string, kind: CloseRunKind): void {
     const event = turnMachine.close(runId, kind);
     if (event) {
       emit(event).catch(() => {});
@@ -76,14 +76,14 @@ export function makeRunLifecycle(deps: RunLifecycleDeps) {
    * every in-flight run - and matches `scheduler.cancel("")`. Shared by the live-leader user.cancel
    * handler and the graceful-stop path, so /stop + SIGTERM tear down the same things ESC does.
    */
-  function abortRuns(runId: string): void {
+  function abortRuns(runId: string, kind: "cancelled" | "steered" = "cancelled"): void {
     const compactFiber = manualCompactFiber();
     if (compactFiber) {
       interruptFiber(compactFiber);
     }
     const targets = runId ? [runId] : turnMachine.inFlightIds();
     for (const target of targets) {
-      closeRun(target, "cancelled");
+      closeRun(target, kind);
     }
     scheduler.cancel(runId);
   }

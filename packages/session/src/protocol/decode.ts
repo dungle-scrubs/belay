@@ -635,6 +635,8 @@ export type DecodedEvent =
       readonly cancelled: boolean;
       /** Closed by a host reap (restart/crash mid-turn), not a user cancel - rendered distinctly. */
       readonly interrupted: boolean;
+      /** Closed by the user steering (Esc with queued prompts). Rendered as a muted note, not red. */
+      readonly steered: boolean;
       readonly noReply: boolean;
       /** Steps run when the turn hit its budget (0 = not budget-terminated). */
       readonly stepLimit: number;
@@ -658,7 +660,7 @@ export type DecodedEvent =
       readonly tokens: number;
       readonly budget: number;
     }
-  | { readonly type: "user.cancel"; readonly runId: string }
+  | { readonly type: "user.cancel"; readonly runId: string; readonly steered: boolean }
   | {
       readonly type: "user.supersede";
       /** The retracted `user.message` eventIds (plan 47). */
@@ -1092,6 +1094,7 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
         error: optStr(p.error),
         cancelled: p.cancelled === true,
         interrupted: p.interrupted === true,
+        steered: p.steered === true,
         noReply: p.noReply === true,
         stepLimit: typeof p.stepLimit === "number" ? p.stepLimit : 0,
         stop: coerceTurnStop(p.stop),
@@ -1120,7 +1123,7 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
         budget: num(p.budget),
       };
     case "user.cancel":
-      return { type: "user.cancel", runId };
+      return { type: "user.cancel", runId, steered: p.steered === true };
     case "user.supersede":
       // The retracted ids are string eventIds; junk entries drop out so a malformed event can never
       // supersede a message it never named. `reason` defaults to "unqueue" (the plainest retraction).

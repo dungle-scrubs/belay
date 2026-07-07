@@ -1012,7 +1012,7 @@ function handleEvent(message: SessionEvent): void {
     // completions are already in the durable log; re-running this on replay would RE-EMIT a fresh
     // cancelled burst for every in-flight run at that point - which is what made each host restart
     // republish a wall of "cancelled" completions. Replay just lets those logged completions stand.
-    abortRuns(decoded.runId);
+    abortRuns(decoded.runId, decoded.steered === true ? "steered" : "cancelled");
   } else if (decoded.type === "model.switch.requested" && live && lease.isLeader()) {
     // LIVE LEADER ONLY (09.1). Route the switch into the in-flight turn's cell; the loop re-resolves at
     // its next step boundary and the host then emits model.switched. A request whose runId is not the

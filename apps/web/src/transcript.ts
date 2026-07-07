@@ -47,6 +47,8 @@ export type AssistantMessage = {
   cancelled?: boolean;
   /** Closed by a host reap (restart/crash mid-turn), not a user cancel - rendered as a muted note. */
   interrupted?: boolean;
+  /** Closed by the user steering (Esc with queued prompts). Rendered as a muted "steered" note. */
+  steered?: boolean;
   /** The model ended the turn with no reply (after a retry). */
   noReply?: boolean;
   /** Steps run when the turn hit its budget (>0 = a forced answer after the step/context cap). */
@@ -1126,6 +1128,9 @@ export function toTranscript(
         }
         if (decoded.interrupted) {
           segment.interrupted = true;
+        }
+        if (decoded.steered) {
+          segment.steered = true;
         }
         if (decoded.noReply) {
           segment.noReply = true;
