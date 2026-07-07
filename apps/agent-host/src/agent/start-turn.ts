@@ -1,7 +1,7 @@
 import type { InternetMonitor } from "@host/connectivity/probe";
 import { hooksRuntime } from "@host/hooks/host-runtime";
-import { buildSourceProvider } from "@host/providers/catalog";
-import { type ChatMessage, type ProviderRegistry, pickProvider } from "@host/providers/index";
+import { type ChatMessage, DEFAULT_PROVIDER, type ProviderRegistry } from "@host/providers/index";
+import { createModelSourceResolver } from "@host/providers/model-source-resolver";
 import type { HostResidency } from "@host/residency/host";
 import type { Lease } from "@host/session/lease";
 import { discoverAgents } from "@host/subagents/discovery";
@@ -13,7 +13,6 @@ import {
   isAnswerableProducer,
   isClipProducer,
   type ModelRef,
-  resolveUserTurnModel,
   type SessionEvent,
   type SessionTransport,
 } from "@trevor/session";
@@ -116,16 +115,14 @@ export function makeStartTurn(deps: StartTurnDeps) {
       return null;
     }
     const runId = crypto.randomUUID();
-    // Resolve the turn's source + reasoning through the migration bridge (D-065): a new event's
-    // `model` ModelRef wins (its sourceId is the provider key, its reasoning is authoritative), else
-    // the legacy provider/reasoning strings. pickProvider defaults an unknown/undefined source.
-    const turnModel = resolveUserTurnModel(decoded);
     // Resolve the turn's provider (D-065): a ModelRef into a known catalog SOURCE builds a provider for
     // that exact model (so any catalog model runs, not just the ~6 registered keys); otherwise fall back
-    // to the legacy registered providers keyed by the provider string. pickProvider defaults an unknown.
-    const provider =
-      (decoded.model ? buildSourceProvider(decoded.model.sourceId, decoded.model.modelId) : null) ??
-      pickProvider(providers, turnModel.sourceId);
+    // to the legacy registered providers keyed by the provider string, defaulting unknown keys.
+    const modelResolver = createModelSourceResolver({
+      providers,
+      defaultProviderKey: DEFAULT_PROVIDER,
+    });
+    const { provider, model: turnModel } = modelResolver.resolveTurnProvider(decoded);
     // Remember the turn's provider so a between-turn fold summarizes with the same model (D-043).
     compactionController.noteProvider(provider);
     // Reconcile local-model residency for this turn's provider (plan 11.1): claim the local model it holds
@@ -229,8 +226,7 @@ export function makeStartTurn(deps: StartTurnDeps) {
           ? {
               switchSurface: {
                 cell: switchCell,
-                rebuildProvider: (model: ModelRef) =>
-                  buildSourceProvider(model.sourceId, model.modelId),
+                rebuildProvider: (model: ModelRef) => modelResolver.buildProviderForModel(model),
                 ...(decoded.model ? { initialModel: decoded.model } : {}),
               },
             }

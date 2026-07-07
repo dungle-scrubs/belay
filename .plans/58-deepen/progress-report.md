@@ -4,10 +4,10 @@
 
 - Original audit candidate total: 8
 - Implementation milestones: 10
-- Completed milestones: 5
-- Active blockers: 5
-- Current status: Host session-worker and tool registry boundaries are complete.
-Current focus: M5. Deepen provider selection and catalog into one model-source resolver.
+- Completed milestones: 6
+- Active blockers: 4
+- Current status: Phase 2 host runtime boundaries are complete and verified.
+Current focus: M6. Deepen cross-service test harnesses into workflow drivers.
 
 ## Audit Passes
 
@@ -29,7 +29,7 @@ Current focus: M5. Deepen provider selection and catalog into one model-source r
 
 - [x] M3. Deepen host session-worker composition for main sessions and tangents.
 - [x] M4. Deepen host tool registration into a composable `ToolRegistry`.
-- [ ] M5. Deepen provider selection and catalog into one model-source resolver.
+- [x] M5. Deepen provider selection and catalog into one model-source resolver.
 
 ## Phase 3 - Cross-Service Harness And Artifact Policy
 
@@ -48,7 +48,7 @@ Current focus: M5. Deepen provider selection and catalog into one model-source r
 
 - [x] Gate 0->1. Planner state passes `check-progress`, docs are registered, and plan docs are committed to `main`.
 - [x] Gate 1->2. Protocol and web read-model validation passes.
-- [ ] Gate 2->3. Host session, tool, provider, and hermetic e2e validation passes.
+- [x] Gate 2->3. Host session, tool, provider, and hermetic e2e validation passes.
 - [ ] Gate 3->4. Test-kit, artifact, integration, and e2e validation passes.
 - [ ] Gate 4->5. CLI typecheck, CLI unit tests, and CLI e2e flows pass.
 - [ ] Final Gate. Lint, typecheck, all Vitest projects, browser e2e status, and planner checks pass.

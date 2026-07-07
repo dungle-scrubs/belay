@@ -7,6 +7,7 @@ import type { LocalAdmissionGate } from "../admission/service";
 import type { ResidencyRecorder } from "../residency/registry";
 import { codexProvider } from "./codex";
 import { lmStudioProvider, lmsBin } from "./lmstudio";
+import { pickProviderFromRegistry } from "./model-source-resolver";
 import { PI_KEY_PROVIDERS, piKeyProvider } from "./pi-key";
 import type { Provider } from "./types";
 
@@ -20,6 +21,13 @@ export {
   ProviderUnavailable,
   providerFailureEvidence,
 } from "./errors";
+export {
+  createModelSourceResolver,
+  type ModelSourceResolver,
+  pickProviderFromRegistry,
+  type ResolvedTurnProvider,
+  type TurnProviderInput,
+} from "./model-source-resolver";
 export {
   incidentReasonOf,
   protocolAnomalyDiagnostic,
@@ -100,10 +108,5 @@ export function buildProviders(
 
 /** Resolves the provider key the browser chose to a concrete provider (default if unknown). */
 export function pickProvider(providers: ProviderRegistry, key: unknown): Provider {
-  const byKey = typeof key === "string" ? providers[key] : undefined;
-  const provider = byKey ?? providers[DEFAULT_PROVIDER];
-  if (!provider) {
-    throw new Error(`no provider for "${String(key)}" and no "${DEFAULT_PROVIDER}" default`);
-  }
-  return provider;
+  return pickProviderFromRegistry(providers, key, DEFAULT_PROVIDER);
 }
