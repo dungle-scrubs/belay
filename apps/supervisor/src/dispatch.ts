@@ -25,6 +25,10 @@ import {
 export interface SupervisorDeps {
   /** Publishes a result event on the control session (the caller stamps the supervisor producer id). */
   readonly emit: (event: TrevorEventInput) => Promise<void>;
+  /** Publishes an event on an ARBITRARY session (plan 58 M4): used to stamp a `session.project`
+   *  marker on a freshly-minted project-scoped session before the host launches. The caller stamps
+   *  the supervisor producer id. Falls back to `emit` (control session) when not wired. */
+  readonly publishToSession?: (sessionId: string, event: TrevorEventInput) => Promise<void>;
   /** The launcher core: spawn-or-reuse a host for a resolved session; resolves the browser-facing
    *  outcome (`launched` = fresh/replaced host, `reused` = an already-live host). A rejection is
    *  reported as a `failed` result rather than crashing the daemon. */
@@ -87,7 +91,13 @@ export async function handleSupervisorEvent(
   }
   switch (decoded.type) {
     case "session.launch.requested":
-      await handleLaunch(decoded.requestId, decoded.root, deps);
+      await handleLaunch(
+        decoded.requestId,
+        decoded.root,
+        deps,
+        decoded.sessionId,
+        decoded.projectPath,
+      );
       break;
     case "folder.pick.requested":
       await handleFolderPick(decoded.requestId, deps);
@@ -118,9 +128,28 @@ export async function handleSupervisorEvent(
  * paired `session.launch.result`. A launcher failure (unresolvable/nonexistent root, spawn denied) is
  * caught and surfaced as a structured `failed` result on the control session - never a silent drop.
  */
-async function handleLaunch(requestId: string, root: string, deps: SupervisorDeps): Promise<void> {
-  const sessionId = projectSessionId(root);
+async function handleLaunch(
+  requestId: string,
+  root: string,
+  deps: SupervisorDeps,
+  sessionIdOverride?: string,
+  projectPath?: string,
+): Promise<void> {
+  const sessionId = sessionIdOverride ?? projectSessionId(root);
   try {
+    // Plan 58 M4: a fresh project-scoped session gets a `session.project` marker BEFORE the host
+    // launches, so the inventory can group it by project from the very first event. Touch the
+    // registry too so the project surfaces in the sidebar. Both are best-effort: a missing
+    // publishToSession or registry degrades to the legacy bare-root launch.
+    if (projectPath) {
+      if (deps.publishToSession) {
+        await deps.publishToSession(sessionId, events.sessionProject({ path: projectPath }));
+      }
+      if (deps.projectRegistry) {
+        const now = deps.now?.() ?? new Date().toISOString();
+        deps.projectRegistry.add(projectPath, now);
+      }
+    }
     const status = await deps.launch({ sessionId, root });
     deps.log?.("launch dispatched", { requestId, root, sessionId, status });
     await deps.emit(events.sessionLaunchResult({ requestId, sessionId, status }));

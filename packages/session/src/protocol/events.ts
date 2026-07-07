@@ -1091,9 +1091,24 @@ export const events = {
    * `sessionId` the browser navigates to; the freshly spawned host announces `host.online` on its OWN
    * session, so the control session stays a side-channel and the presence path is unchanged.
    */
-  sessionLaunchRequested: (p: { requestId: string; root: string }): TrevorEventInput => ({
+  sessionLaunchRequested: (p: {
+    requestId: string;
+    root: string;
+    /** An explicit fresh session id (plan 58 M4). When absent the supervisor derives
+     *  the deterministic projectSessionId(root). When present the supervisor launches
+     *  a FRESH project-scoped session instead of reusing the deterministic one. */
+    sessionId?: string;
+    /** The project path to stamp as a session.project marker on the new session before
+     *  launch (plan 58 M4). Absent for the legacy bare-root launch (no marker). */
+    projectPath?: string;
+  }): TrevorEventInput => ({
     type: "session.launch.requested",
-    payload: { requestId: p.requestId, root: p.root },
+    payload: {
+      requestId: p.requestId,
+      root: p.root,
+      ...(p.sessionId ? { sessionId: p.sessionId } : {}),
+      ...(p.projectPath ? { projectPath: p.projectPath } : {}),
+    },
   }),
   sessionLaunchResult: (p: {
     requestId: string;

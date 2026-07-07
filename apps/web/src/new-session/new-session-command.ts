@@ -1,7 +1,8 @@
 /**
- * The `/new` browser-side UI command (plan 44.2, D-001): typing `/new` opens the New-session picker,
- * exactly as the sidebar `＋ New session` affordance does - both share one open-picker entry so they
- * cannot drift. Like `/resume` and `/worktree`, `/new` is intercepted in the composer submit path
+ * The `/new` browser-side UI command (plan 58 M4): typing `/new` creates a fresh project-scoped
+ * session. With a path arg (`/new ~/dev/foo`) it launches a fresh session for that project; with no
+ * arg it uses the current session's known root, or falls back to the New-session picker when no root
+ * is resolvable. Like `/resume` and `/worktree`, `/new` is intercepted in the composer submit path
  * BEFORE the host command lane, so it never reaches the model or the host; it is pure browser UI and
  * injects no transcript content.
  *

@@ -64,14 +64,16 @@ test("/compact reports unavailability when the host offers no compaction hook", 
   assert.match(text, /unavailable/i);
 });
 
-test("/cd is announced as a host-owned workspace switch command", async () => {
+test("/clear and /cd are retired from the announced specs (plan 58 M4)", () => {
   const registry = buildCommandRegistry();
-  const spec = registry.specs.find((item) => item.name === "/cd");
-  assert.equal(spec?.usage, "/cd <directory>");
-
-  const { text, ok } = await registry.run("/cd", "/tmp", baseCtx);
-  assert.equal(ok, true);
-  assert.match(text, /handled by the live host/i);
+  assert.equal(
+    registry.specs.find((s) => s.name === "/clear"),
+    undefined,
+  );
+  assert.equal(
+    registry.specs.find((s) => s.name === "/cd"),
+    undefined,
+  );
 });
 
 test("/init drafts AGENTS.md from repo evidence without writing", async () => {

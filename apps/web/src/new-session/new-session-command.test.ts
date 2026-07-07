@@ -16,8 +16,8 @@ test("the descriptor is the /new command shown in the command list", () => {
 });
 
 test("the matcher accepts the bare command and a command with an argument", () => {
-  assert.equal(isNewSessionCommand("/new"), true, "bare /new opens the picker");
-  assert.equal(isNewSessionCommand("/new ~/dev/foo"), true, "an argument still opens the picker");
+  assert.equal(isNewSessionCommand("/new"), true, "bare /new launches a fresh session");
+  assert.equal(isNewSessionCommand("/new ~/dev/foo"), true, "an argument launches for that path");
 });
 
 test("the matcher rejects prefixes, embeds, and other commands", () => {

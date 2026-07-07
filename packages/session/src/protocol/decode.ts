@@ -747,7 +747,13 @@ export type DecodedEvent =
       readonly files: readonly FileMatch[];
       readonly truncated: boolean;
     }
-  | { readonly type: "session.launch.requested"; readonly requestId: string; readonly root: string }
+  | {
+      readonly type: "session.launch.requested";
+      readonly requestId: string;
+      readonly root: string;
+      readonly sessionId?: string;
+      readonly projectPath?: string;
+    }
   | {
       readonly type: "session.launch.result";
       readonly requestId: string;
@@ -1302,12 +1308,17 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
     }
     // Supervisor side-channel (plan 44.1). A missing requestId falls back to the event's own id so a
     // forward-compat request still correlates; `status` is decoded tolerantly to the failed-safe default.
-    case "session.launch.requested":
+    case "session.launch.requested": {
+      const sessionId = optStr(p.sessionId);
+      const projectPath = optStr(p.projectPath);
       return {
         type: "session.launch.requested",
         requestId: str(p.requestId, event.eventId),
         root: str(p.root),
+        ...(sessionId ? { sessionId } : {}),
+        ...(projectPath ? { projectPath } : {}),
       };
+    }
     case "session.launch.result": {
       const error = optStr(p.error);
       return {

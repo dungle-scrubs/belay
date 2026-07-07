@@ -123,9 +123,10 @@ const ARTIFACT_PANEL_KEY = "trevor.artifactPanel";
 // this and the host's SESSION_ID default cannot drift into two different sessions.
 const DEFAULT_SESSION = DEFAULT_SESSION_ID;
 const BUILT_IN_COMMANDS = [
-  { name: "/clear", summary: "Start a fresh session" },
-  { name: "/cd", summary: "Switch directories in a fresh session", usage: "/cd <directory>" },
+  // /clear is retired from visible surfaces (plan 58 M4): /new replaces it. The programmatic
+  // /clear handler stays in the host for replay compatibility with legacy sessions.
   NEW_SESSION_COMMAND,
+  { name: "/cd", summary: "Alias for /new <path>", usage: "/cd <directory>" },
   { name: "/resume", summary: "Open a prior session (no implicit resume)" },
   { name: "/worktree", summary: "Switch a Trevor-managed worktree" },
 ] as const;
@@ -440,6 +441,18 @@ export function App() {
     setStartRequested(true);
     sessionLaunch.launch(knownRoot);
   }, [knownRoot, sessionLaunch.launch]);
+  // `/new <path>` and `/cd <path>` (plan 58 M4): mint a FRESH session id (not the deterministic
+  // projectSessionId) and launch a project-scoped session with a session.project marker. The
+  // supervisor stamps the marker + touches the registry before spawning the host. Reuses the same
+  // useLaunch + control subscription as the session-view "start host" so the two surfaces never fork.
+  const startFreshProjectSession = useCallback(
+    (projectPath: string) => {
+      const sessionId = crypto.randomUUID();
+      setStartRequested(true);
+      sessionLaunch.launch(projectPath, { sessionId, projectPath });
+    },
+    [sessionLaunch.launch],
+  );
   // Once a host is present (the badge flips to "host active", so the launch UI is gone) or the viewed
   // session changes, disarm the subscription and reset the launch - the reset bumps useLaunch's guard
   // token so a superseded launch's pending host.online never navigates the new session late.
@@ -829,13 +842,36 @@ export function App() {
       modal.setResumeOpen(true);
       return;
     }
-    // `/new` is a browser-side UI command (plan 44.2, D-001): it opens the New-session picker, sharing
-    // one open-picker entry with the sidebar `＋`. Like `/resume` it is intercepted before the host
-    // command lane, so it never becomes a model turn or a host round-trip.
+    // `/new` is a browser-side UI command (plan 58 M4): it creates a fresh project-scoped session.
+    // With a path arg (`/new ~/dev/foo`) it launches a fresh session for that project. With no arg
+    // it uses the current session's known root, or falls back to the New-session picker when no root
+    // is resolvable. Like `/resume` it is intercepted before the host command lane.
     if (isNewSessionCommand(text)) {
+      const arg = text.slice(NEW_SESSION_COMMAND.name.length).trim();
       history.resetNavigation();
       setDraft("");
-      openNewSession();
+      if (arg) {
+        startFreshProjectSession(arg);
+      } else if (knownRoot !== null) {
+        startFreshProjectSession(knownRoot);
+      } else {
+        openNewSession();
+      }
+      return;
+    }
+    // `/cd <path>` is a browser-side alias for `/new <path>` (plan 58 M4): same fresh project-scoped
+    // session launch. Intercepted before the host command lane, never a model turn.
+    if (text === "/cd" || text.startsWith("/cd ")) {
+      const arg = text.slice("/cd".length).trim();
+      history.resetNavigation();
+      setDraft("");
+      if (arg) {
+        startFreshProjectSession(arg);
+      } else if (knownRoot !== null) {
+        startFreshProjectSession(knownRoot);
+      } else {
+        openNewSession();
+      }
       return;
     }
     // `/worktree` is a browser-side UI command (D-091): it opens the worktree switcher; the actual

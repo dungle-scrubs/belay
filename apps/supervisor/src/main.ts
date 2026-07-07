@@ -55,8 +55,17 @@ const emit = (event: TrevorEventInput): Promise<void> =>
     producerId: PRODUCER_IDS.supervisor,
   });
 
+/** Publishes an event on an arbitrary session (plan 58 M4): stamps a session.project marker on a
+ *  freshly-minted project-scoped session before the host launches. */
+const publishToSession = (sessionId: string, event: TrevorEventInput): Promise<void> =>
+  transport.publishEvent(sessionId, {
+    ...event,
+    producerId: PRODUCER_IDS.supervisor,
+  });
+
 const deps: SupervisorDeps = {
   emit,
+  publishToSession,
   launch: nodeLaunch,
   pickFolder: pickProjectFolder,
   // The registry read lives under TREVOR_STATE_HOME (the launcher's projects.json), read through the
