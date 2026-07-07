@@ -19,11 +19,16 @@ import type { ToolDetailModel } from "./detail-model";
 export function ToolDetailView({
   model,
   onBack,
+  action,
   onOpenPath,
   className,
 }: {
   readonly model: ToolDetailModel;
   readonly onBack: () => void;
+  readonly action?: {
+    readonly label: string;
+    readonly onClick: () => void;
+  };
   /** Opens a file path in the editor (read/write/edit/multi_edit detail), when the host can. */
   readonly onOpenPath?: (path: string) => void;
   readonly className?: string;
@@ -54,6 +59,15 @@ export function ToolDetailView({
       <header className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
         <h2 className="font-mono text-base font-medium">{model.toolName}</h2>
         <StatusPill status={model.status} aborted={model.aborted} />
+        {action ? (
+          <button
+            type="button"
+            onClick={action.onClick}
+            className="ml-auto rounded border border-border px-2 py-1 text-label tracking-wider uppercase text-muted-foreground hover:text-foreground"
+          >
+            {action.label}
+          </button>
+        ) : null}
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">

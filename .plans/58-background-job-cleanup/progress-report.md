@@ -1,11 +1,11 @@
 # Background Job Cleanup - Progress Report
 
-Current focus: Phase 3 M4 - Support Panel and Detail Actions
+Current focus: Phase 4 M5 - Successful Exit Auto-Prune
 
 ## Summary
 
-- **Current cutoff blockers:** 25
-- **Completed current cutoff:** 23
+- **Current cutoff blockers:** 15
+- **Completed current cutoff:** 33
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -55,19 +55,19 @@ Current focus: Phase 3 M4 - Support Panel and Detail Actions
 
 ### M4: Support Panel and Detail Actions
 
-- [ ] RED: Add support-panel projection tests showing terminal jobs expose a dismiss affordance and running jobs do not.
-- [ ] GREEN: Extend the support-panel row model with a terminal cleanup action.
-- [ ] RED: Add web tests showing a terminal job detail can dispatch cleanup and closes or clears when the job disappears.
-- [ ] GREEN: Wire the UI action through the existing command dispatch path to `/jobs-dismiss <id>`.
-- [ ] RED: Add accessibility/label tests for the dismiss control.
-- [ ] GREEN: Render the dismiss control with an icon button and tooltip on terminal job rows/details.
-- [ ] REFACTOR: Keep job stop and job dismiss action naming separate in the component props.
+- [x] RED: Add support-panel projection tests showing terminal jobs expose a dismiss affordance and running jobs do not.
+- [x] GREEN: Extend the support-panel row model with a terminal cleanup action.
+- [x] RED: Add web tests showing a terminal job detail can dispatch cleanup and closes or clears when the job disappears.
+- [x] GREEN: Wire the UI action through the existing command dispatch path to `/jobs-dismiss <id>`.
+- [x] RED: Add accessibility/label tests for the dismiss control.
+- [x] GREEN: Render the dismiss control with an icon button and tooltip on terminal job rows/details.
+- [x] REFACTOR: Keep job stop and job dismiss action naming separate in the component props.
 
 ### Gate 3 to 4
 
-- [ ] Web tests pass in the `web` Vitest project.
-- [ ] Terminal jobs can be dismissed without a full page refresh.
-- [ ] Running jobs still show stop behavior, not dismiss behavior.
+- [x] Web tests pass in the `web` Vitest project.
+- [x] Terminal jobs can be dismissed without a full page refresh.
+- [x] Running jobs still show stop behavior, not dismiss behavior.
 
 ## Phase 4: Conservative Auto-Prune
 

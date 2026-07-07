@@ -105,6 +105,23 @@ test("job status -> tone + label: running / done (exit 0) / killed / non-zero ex
   );
 });
 
+test("terminal job rows expose dismiss while running jobs do not", () => {
+  const rows = buildSupportPanel({
+    tasks: [],
+    subagents: [],
+    jobs: [
+      job({ id: "p1", status: "running" }),
+      job({ id: "p2", status: "exited", exitCode: 0 }),
+      job({ id: "p3", status: "killed" }),
+    ],
+  }).background;
+
+  assert.deepEqual(
+    rows.map((row) => row.dismissEligible),
+    [false, true, true],
+  );
+});
+
 test("jobOutcome resolves the terminal disposition the row + detail both key off (incl. null exit)", () => {
   assert.equal(jobOutcome(job({ id: "a", status: "running" })), "running");
   assert.equal(jobOutcome(job({ id: "b", status: "exited", exitCode: 0 })), "done");

@@ -769,6 +769,11 @@ export function App() {
     const snap = jobs.find((j) => j.id === jobDetailId);
     return snap ? jobToDetailModel(snap) : null;
   }, [jobDetailId, jobs]);
+  useEffect(() => {
+    if (jobDetailId !== null && !jobs.some((job) => job.id === jobDetailId)) {
+      setJobDetailId(null);
+    }
+  }, [jobDetailId, jobs]);
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
   // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
   const editor = usePromptEditor();
@@ -1269,6 +1274,12 @@ export function App() {
   };
   const closeAgentDetail = () => setAgentDetailChild(null);
   const onKillJob = (jobId: string) => void command("/jobs-stop", jobId);
+  const onDismissJob = (jobId: string) => {
+    void command("/jobs-dismiss", jobId);
+    if (jobDetailId === jobId) {
+      setJobDetailId(null);
+    }
+  };
   const closeJobDetail = () => setJobDetailId(null);
   const closeDetail = () => {
     const sourceId = detailId;
@@ -1295,7 +1306,16 @@ export function App() {
     ) : undefined;
   const jobDetailView =
     jobDetail !== null ? (
-      <ToolDetailView model={jobDetail} onBack={closeJobDetail} className="h-full" />
+      <ToolDetailView
+        model={jobDetail}
+        onBack={closeJobDetail}
+        action={
+          jobDetail.status === "running"
+            ? undefined
+            : { label: "Dismiss job", onClick: () => onDismissJob(jobDetail.id) }
+        }
+        className="h-full"
+      />
     ) : undefined;
   const agentDetailView =
     agentDetailChild !== null ? (
@@ -1528,6 +1548,7 @@ export function App() {
         jobs={jobs}
         onOpenJobDetail={onOpenJobDetail}
         onKillJob={onKillJob}
+        onDismissJob={onDismissJob}
         panel={{
           // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
           // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.

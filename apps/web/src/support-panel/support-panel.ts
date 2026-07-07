@@ -52,6 +52,8 @@ export interface SupportBackgroundRow {
   /** A job opens the tool-detail takeover; a subagent links to its child session instead, so only jobs
    *  are detail-eligible from this panel (M8). */
   readonly detailEligible: boolean;
+  /** Terminal jobs can be dismissed from the host's in-memory job registry; running jobs must be stopped. */
+  readonly dismissEligible: boolean;
 }
 
 export interface ThreadSupportPanel {
@@ -169,6 +171,7 @@ function subagentRow(s: SupportSubagent): SupportBackgroundRow {
     statusLabel: s.status,
     tone,
     detailEligible: false,
+    dismissEligible: false,
   };
 }
 
@@ -183,5 +186,13 @@ function jobRow(job: PanelJob): SupportBackgroundRow {
         : tone === "error"
           ? `exit ${job.exitCode}`
           : "done";
-  return { id: job.id, kind: "job", label: job.command, statusLabel, tone, detailEligible: true };
+  return {
+    id: job.id,
+    kind: "job",
+    label: job.command,
+    statusLabel,
+    tone,
+    detailEligible: true,
+    dismissEligible: tone !== "running",
+  };
 }

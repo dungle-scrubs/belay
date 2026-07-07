@@ -55,18 +55,22 @@ test("a running job row opens its detail and can be stopped", () => {
   assert.deepEqual(onKillJob.mock.calls, [["p1"]]);
 });
 
-test("a finished job has no stop control (only detail)", () => {
+test("a finished job has no stop control and can be dismissed", () => {
+  const onDismissJob = vi.fn();
   render(
     <SupportPanel
       tasks={[]}
       subagents={[]}
       jobs={[job({ id: "p2", status: "exited", exitCode: 0 })]}
+      onDismissJob={onDismissJob}
       onOpenJobDetail={vi.fn()}
       onKillJob={vi.fn()}
     />,
   );
   assert.ok(screen.getByLabelText("Inspect p2"));
   assert.equal(screen.queryByLabelText("Stop p2"), null);
+  fireEvent.click(screen.getByLabelText("Dismiss p2"));
+  assert.deepEqual(onDismissJob.mock.calls, [["p2"]]);
 });
 
 test("a subagent row has neither a detail nor a kill control", () => {

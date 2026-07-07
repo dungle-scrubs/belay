@@ -41,6 +41,19 @@ test("the back arrow returns to chat", () => {
   assert.equal(onBack.mock.calls.length, 1);
 });
 
+test("an optional header action dispatches from the detail view", () => {
+  const onAction = vi.fn();
+  render(
+    <ToolDetailView
+      model={model()}
+      onBack={vi.fn()}
+      action={{ label: "Dismiss job", onClick: onAction }}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Dismiss job" }));
+  assert.equal(onAction.mock.calls.length, 1);
+});
+
 test("Escape returns to chat", () => {
   const onBack = vi.fn();
   render(<ToolDetailView model={model()} onBack={onBack} />);

@@ -256,6 +256,8 @@ export function PanelHost(props: {
   onOpenJobDetail?: (jobId: string) => void;
   /** Stop a running promoted job (plan 09 M8). */
   onKillJob?: (jobId: string) => void;
+  /** Dismiss a terminal promoted job from the host snapshot. */
+  onDismissJob?: (jobId: string) => void;
   panel: PanelBinding;
   artifactPanel?: ArtifactPanelBinding;
   choosers: ChooserBinding;
@@ -299,6 +301,7 @@ export function PanelHost(props: {
     jobs,
     onOpenJobDetail,
     onKillJob,
+    onDismissJob,
     panel,
     artifactPanel,
     choosers,
@@ -457,6 +460,7 @@ export function PanelHost(props: {
           onClearTasks={onClearTasks}
           onOpenJobDetail={onOpenJobDetail}
           onKillJob={onKillJob}
+          onDismissJob={onDismissJob}
         />
 
         {loopInventory.rows.length > 0 ? (

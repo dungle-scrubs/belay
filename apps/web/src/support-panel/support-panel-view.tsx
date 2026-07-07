@@ -1,5 +1,5 @@
 import type { TaskSnapshot } from "@trevor/session";
-import { Maximize2, X } from "lucide-react";
+import { Maximize2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { TasksPanel } from "@/tasks-panel";
@@ -37,6 +37,7 @@ export function SupportPanel({
   onClearTasks,
   onOpenJobDetail,
   onKillJob,
+  onDismissJob,
   className,
 }: {
   readonly tasks: readonly TaskSnapshot[];
@@ -46,6 +47,7 @@ export function SupportPanel({
   readonly onClearTasks?: () => void;
   readonly onOpenJobDetail?: (jobId: string) => void;
   readonly onKillJob?: (jobId: string) => void;
+  readonly onDismissJob?: (jobId: string) => void;
   readonly className?: string;
 }) {
   const panel = buildSupportPanel({ tasks, subagents, jobs });
@@ -65,6 +67,7 @@ export function SupportPanel({
             rows={panel.background}
             onOpenJobDetail={onOpenJobDetail}
             onKillJob={onKillJob}
+            onDismissJob={onDismissJob}
           />
         ) : null}
       </div>
@@ -76,10 +79,12 @@ function BackgroundGroup({
   rows,
   onOpenJobDetail,
   onKillJob,
+  onDismissJob,
 }: {
   readonly rows: readonly SupportBackgroundRow[];
   readonly onOpenJobDetail?: (jobId: string) => void;
   readonly onKillJob?: (jobId: string) => void;
+  readonly onDismissJob?: (jobId: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const hidden = expanded ? 0 : Math.max(0, rows.length - BACKGROUND_CAP);
@@ -96,6 +101,7 @@ function BackgroundGroup({
             row={row}
             onOpenJobDetail={onOpenJobDetail}
             onKillJob={onKillJob}
+            onDismissJob={onDismissJob}
           />
         ))}
       </ul>
@@ -116,10 +122,12 @@ function BackgroundRow({
   row,
   onOpenJobDetail,
   onKillJob,
+  onDismissJob,
 }: {
   readonly row: SupportBackgroundRow;
   readonly onOpenJobDetail?: (jobId: string) => void;
   readonly onKillJob?: (jobId: string) => void;
+  readonly onDismissJob?: (jobId: string) => void;
 }) {
   const running = row.tone === "running";
   return (
@@ -149,6 +157,17 @@ function BackgroundRow({
           className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-smui-red focus-visible:opacity-100 group-hover/row:opacity-100"
         >
           <X className="size-3" />
+        </button>
+      ) : null}
+      {row.kind === "job" && row.dismissEligible && onDismissJob ? (
+        <button
+          type="button"
+          onClick={() => onDismissJob(row.id)}
+          aria-label={`Dismiss ${row.id}`}
+          title="Dismiss"
+          className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover/row:opacity-100"
+        >
+          <Trash2 className="size-3" />
         </button>
       ) : null}
     </li>
