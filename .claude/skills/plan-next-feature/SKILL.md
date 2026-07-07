@@ -3,7 +3,7 @@ name: plan-next-feature
 as_slash_command: true
 argument-hint: [topic]
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write
-description: "Spec a new Trevor plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present three comparisons - how trevor legacy (~/dev/trevor_legacy) does it, what Trevor already does, and what the existing numbered plans under /Users/kevin/dev/trevor/.plans say - then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. After writing it, thread the new plan into any later plans whose assumptions it changes (forward-dependency + accommodation), skipping any plan with a live feature branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
+description: "Spec a new Trevor plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present the current Trevor evidence and the existing numbered-plan constraints under /Users/kevin/dev/trevor/.plans, adding Trevor legacy comparison only when the user explicitly asks for it, then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. After writing it, thread the new plan into any later plans whose assumptions it changes (forward-dependency + accommodation), skipping any plan with a live feature branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
 ---
 
 # Plan the Next Trevor Feature
@@ -25,7 +25,8 @@ flight (see "Plan placement, numbering, and git policy").
 
 ## Paths
 
-- **trevor legacy** (prior art): `~/dev/trevor_legacy` - the previous Trevor. How does it do this today?
+- **Trevor legacy** (optional prior art): `~/dev/trevor_legacy` - read only when the user explicitly
+  asks to compare against legacy Trevor.
 - **Trevor** (this project): `/Users/kevin/dev/trevor` - what does it already do?
 - **Plans**: `/Users/kevin/dev/trevor/.plans/` - **numbered plan directories** `<NN[.n]>-<name>/`
   (integer slots like `03-...`, decimal slots like `03.1-...`), each a self-contained plan-db
@@ -89,7 +90,7 @@ flight (see "Plan placement, numbering, and git policy").
 
 ## Planner Integration
 
-This skill exists because Trevor feature discussions need the trevor legacy / Trevor / existing-plans comparison before a
+This skill exists because Trevor feature discussions need current Trevor evidence plus existing-plan constraints before a
 plan is written. It does not replace `planner`. It is a front-end decision workflow that must hand the
 recording and progress-report synchronization back to the planner system.
 
@@ -133,28 +134,27 @@ IF TOPIC is non-empty:
   THE TOPIC = TOPIC (e.g. "git").
 ELSE:
   Survey the existing numbered plans under .plans/ (their stages via `plan-db list-plans`) and the
-	  AGENTS.md plan policy, plus the obvious trevor legacy / Trevor gaps, and PROPOSE the next topic to the user. There is
+	  AGENTS.md plan policy, plus the obvious Trevor gaps, and PROPOSE the next topic to the user. There is
   no single roadmap file to read from - confirm the topic with the user before continuing.
 ```
 
 State the chosen topic in one sentence before continuing.
 
-### Phase 2 - Gather the three comparisons (do NOT decide yet)
+### Phase 2 - Gather the comparisons (do NOT decide yet)
 
 Investigate the topic in each source and report findings side by side. Read the actual code/plans;
 do not assume from names.
 
-1. **trevor legacy - what `~/dev/trevor_legacy` already does.** Find and summarize how trevor legacy implements (or doesn't) this
-   topic: the surface, the model, the rough mechanism. This is prior art to learn from, not a target
-   to copy.
-2. **Trevor - what this project already does.** Search `/Users/kevin/dev/trevor` for anything related:
+1. **Trevor - what this project already does.** Search `/Users/kevin/dev/trevor` for anything related:
    existing tools, host paths, protocol events, web UI, partial support. What exists vs. what's
    missing.
-3. **Plans - what the existing numbered plans say.** What the relevant numbered plans under `.plans/`
+2. **Plans - what the existing numbered plans say.** What the relevant numbered plans under `.plans/`
    (and `CONTEXT.md` vocabulary) already record about this topic - decisions, constraints, sequencing,
    hard dependencies - if anything. Note any plan this work depends on or overlaps with.
+3. **Trevor legacy - optional prior art.** Include `~/dev/trevor_legacy` only when the user explicitly
+   asks to compare with legacy Trevor. Otherwise skip it entirely.
 
-Present these as a compact comparison (trevor legacy / Trevor / plans), then surface the open design questions and
+Present these as a compact comparison (Trevor / plans, plus legacy only when requested), then surface the open design questions and
 the trade-offs between them. **Stop and discuss - do not write any files yet.**
 
 ### Phase 3 - Decide collaboratively (HARD GATE)
@@ -270,8 +270,8 @@ the later plans that will need to accommodate it (threaded in Phase 4 step 9).
 ## Instructions
 
 - This skill DECIDES and PLANS; it does not implement. Stop at the plan write.
-- Always read the real trevor legacy / Trevor code before claiming what either does - prior art and current state are
-  evidence, not guesses.
+- Always read the real Trevor code before claiming what it does - current state is evidence, not a guess.
+  Read Trevor legacy only when the user explicitly requests a legacy comparison.
 - The decision gate is the point of the skill: the value is deciding the right shape together before
   it becomes plan debt. Never front-run the user's decision by writing the plan early.
 - The planner owns lifecycle integrity. Do not bypass `plan-db`, `check-progress`, or convergence checks when
@@ -292,5 +292,5 @@ the later plans that will need to accommodate it (threaded in Phase 4 step 9).
 - RED/GREEN/REFACTOR milestone tasks are mandatory for new progress-report implementation work. A generic
   product checklist is drift unless each behavior is tied to test-first RED items, matching GREEN
   implementation items, and REFACTOR cleanup.
-- Keep the comparison specific about gaps (what Trevor lacks, what trevor legacy got wrong) rather than just listing
-  features.
+- Keep the comparison specific about gaps in Trevor rather than just listing features. If the user explicitly
+  asks for a legacy comparison, include what legacy got right or wrong as prior art.
