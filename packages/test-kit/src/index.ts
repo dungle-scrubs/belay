@@ -195,6 +195,160 @@ export interface LiveTurnResult {
   readonly text: string;
 }
 
+export interface WorkflowTurnResult {
+  readonly completed: SessionEvent;
+  readonly events: readonly SessionEvent[];
+  readonly text: string;
+}
+
+export interface WorkflowCommandResult {
+  readonly result: SessionEvent;
+  readonly events: readonly SessionEvent[];
+  readonly text: string;
+  readonly ok: boolean;
+}
+
+export interface WorkflowDriver {
+  readonly sessionId: string;
+  readonly events: readonly SessionEvent[];
+  readonly isReplayed: () => boolean;
+  publish(input: PublishInput): Promise<void>;
+  prompt(
+    text: string,
+    opts?: {
+      readonly provider?: string;
+      readonly producerId?: string;
+      readonly payload?: Record<string, unknown>;
+    },
+  ): Promise<void>;
+  command(
+    command: string,
+    args?: string,
+    opts?: { readonly producerId?: string; readonly timeoutMs?: number; readonly label?: string },
+  ): Promise<WorkflowCommandResult>;
+  waitForType(
+    type: string,
+    opts?: { readonly timeoutMs?: number; readonly label?: string },
+  ): Promise<SessionEvent>;
+  promptToCompletion(
+    text: string,
+    opts?: {
+      readonly provider?: string;
+      readonly producerId?: string;
+      readonly timeoutMs?: number;
+      readonly label?: string;
+      readonly payload?: Record<string, unknown>;
+    },
+  ): Promise<WorkflowTurnResult>;
+  readLog(): Promise<readonly SessionEvent[]>;
+  close(): void;
+}
+
+export async function createWorkflowDriver(
+  transport: SessionTransport,
+  sessionId: string,
+  opts: {
+    readonly who?: string;
+    readonly producerId?: string;
+    readonly provider?: string;
+  } = {},
+): Promise<WorkflowDriver> {
+  await transport.ensureSession(sessionId);
+  const who = opts.who ?? "workflow-driver";
+  const producerId = opts.producerId ?? "workflow-driver";
+  const subscriber = subscribe(transport, sessionId, who, {
+    identity: testIdentity(who, "web"),
+  });
+  await waitFor(subscriber.isReplayed, { label: `${sessionId} replay` });
+
+  const driver: WorkflowDriver = {
+    sessionId,
+    events: subscriber.events,
+    isReplayed: subscriber.isReplayed,
+    publish: (input) => transport.publishEvent(sessionId, input),
+    prompt: (text, promptOpts) =>
+      transport.publishEvent(sessionId, {
+        type: "user.message",
+        producerId: promptOpts?.producerId ?? producerId,
+        payload: {
+          text,
+          provider: promptOpts?.provider ?? opts.provider,
+          ...(promptOpts?.payload ?? {}),
+        },
+      }),
+    command: async (command, args = "", commandOpts) => {
+      const mark = subscriber.events.length;
+      await transport.publishEvent(sessionId, {
+        type: "user.command",
+        producerId: commandOpts?.producerId ?? producerId,
+        payload: { command, args },
+      });
+      await waitFor(
+        () =>
+          subscriber.events
+            .slice(mark)
+            .some(
+              (event) =>
+                event.type === "command.result" && String(event.payload.command ?? "") === command,
+            ),
+        {
+          timeoutMs: commandOpts?.timeoutMs ?? 30_000,
+          label: commandOpts?.label ?? `command.result ${command}`,
+        },
+      );
+      const after = subscriber.events.slice(mark);
+      const result = after.find(
+        (event) =>
+          event.type === "command.result" && String(event.payload.command ?? "") === command,
+      );
+      if (!result) {
+        throw new Error(`${command} command.result vanished after wait`);
+      }
+      return {
+        result,
+        events: after,
+        text: String(result.payload.text ?? ""),
+        ok: result.payload.ok === true,
+      };
+    },
+    waitForType: async (type, waitOpts) => {
+      await waitFor(() => subscriber.events.some((event) => event.type === type), {
+        timeoutMs: waitOpts?.timeoutMs,
+        label: waitOpts?.label ?? type,
+      });
+      const event = subscriber.events.find((candidate) => candidate.type === type);
+      if (!event) {
+        throw new Error(`${type} vanished after wait`);
+      }
+      return event;
+    },
+    promptToCompletion: async (text, promptOpts) => {
+      const mark = subscriber.events.length;
+      await driver.prompt(text, promptOpts);
+      await waitFor(
+        () => subscriber.events.slice(mark).some((event) => event.type === "assistant.completed"),
+        {
+          timeoutMs: promptOpts?.timeoutMs ?? 180_000,
+          label: promptOpts?.label ?? "assistant.completed",
+        },
+      );
+      const after = subscriber.events.slice(mark);
+      const completed = after.find((event) => event.type === "assistant.completed");
+      if (!completed) {
+        throw new Error("assistant.completed vanished after wait");
+      }
+      return {
+        completed,
+        events: after,
+        text: String(completed.payload.text ?? ""),
+      };
+    },
+    readLog: () => transport.readLog(sessionId, testIdentity(who, "web")),
+    close: () => subscriber.connection.close(),
+  };
+  return driver;
+}
+
 export interface LiveHostHarness {
   readonly events: readonly SessionEvent[];
   waitHostOnline(opts?: { readonly timeoutMs?: number; readonly label?: string }): Promise<void>;

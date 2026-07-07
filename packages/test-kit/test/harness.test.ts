@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import type { RunningServer } from "@trevor/server-kit";
 import { events, streamTransport } from "@trevor/session";
-import { joinSession, liveHost, recordingTransport, storedEvent } from "@trevor/test-kit";
-import { type BootedBlob, bootBlob, bootStore } from "@trevor/test-kit/boot";
+import {
+  createWorkflowDriver,
+  joinSession,
+  liveHost,
+  recordingTransport,
+  storedEvent,
+} from "@trevor/test-kit";
+import { type BootedBlob, bootBlob, bootStore, bootWorkflowStack } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 let store: RunningServer;
@@ -77,4 +83,79 @@ test("liveHost waits for host.online and returns the completed turn window", asy
     ["assistant.completed"],
   );
   host.close();
+});
+
+test("WorkflowDriver publishes prompts and returns a completion window with labels", async () => {
+  const rt = recordingTransport();
+  const driver = await createWorkflowDriver(rt.transport, "s", {
+    who: "viewer",
+    producerId: "web",
+    provider: "qwen",
+  });
+
+  const asked = driver.promptToCompletion("hello", { label: "test completion" });
+  assert.deepEqual(rt.publishedBy("s")[0], {
+    type: "user.message",
+    producerId: "web",
+    payload: { text: "hello", provider: "qwen" },
+  });
+  rt.connects[0]?.onEvent(
+    storedEvent(events.toolStarted({ runId: "r1", callId: "c1", name: "read", arguments: "{}" })),
+  );
+  rt.connects[0]?.onEvent(storedEvent(events.assistantCompleted({ runId: "r1", text: "done" })));
+
+  const result = await asked;
+  assert.equal(result.text, "done");
+  assert.deepEqual(
+    result.events.map((event) => event.type),
+    ["tool.started", "assistant.completed"],
+  );
+  assert.equal((await driver.waitForType("tool.started")).type, "tool.started");
+  driver.close();
+});
+
+test("WorkflowDriver publishes commands and returns the correlated result window", async () => {
+  const rt = recordingTransport();
+  const driver = await createWorkflowDriver(rt.transport, "s", {
+    who: "viewer",
+    producerId: "web",
+  });
+
+  const command = driver.command("/status", "now");
+  assert.deepEqual(rt.publishedBy("s")[0], {
+    type: "user.command",
+    producerId: "web",
+    payload: { command: "/status", args: "now" },
+  });
+  rt.connects[0]?.onEvent(
+    storedEvent(events.commandResult({ command: "/status", text: "ready", ok: true })),
+  );
+
+  const result = await command;
+  assert.equal(result.text, "ready");
+  assert.equal(result.ok, true);
+  assert.deepEqual(
+    result.events.map((event) => event.type),
+    ["command.result"],
+  );
+  driver.close();
+});
+
+test("bootWorkflowStack boots a hermetic store and creates replayed workflow drivers", async () => {
+  const stack = await bootWorkflowStack();
+  try {
+    const workflow = await stack.workflow("workflow-stack", { who: "viewer" });
+
+    assert.equal(workflow.isReplayed(), true);
+    await workflow.publish({
+      ...events.userMessage({ text: "hello", provider: "fake" }),
+      producerId: "web",
+    });
+    const message = await workflow.waitForType("user.message", { label: "workflow user.message" });
+
+    assert.equal(message.type, "user.message");
+    workflow.close();
+  } finally {
+    await stack.close();
+  }
 });

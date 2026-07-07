@@ -9,7 +9,7 @@ import { resolveInterpolationConfig } from "@host/commands/interpolation";
 import { createProgrammaticCommandDispatcher } from "@host/commands/programmatic-command";
 import type { RunningServer } from "@trevor/server-kit";
 import { decodeTrevorEvent, events, streamTransport } from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
+import { createWorkflowDriver, waitFor } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -48,10 +48,7 @@ function loadedRoot(id: string, body: string): CommandFileRoot {
 test("dispatching /fix 123 submits the expanded body as a user.message prompt", async () => {
   const session = "cmd-file-fix";
   const transport = streamTransport(store.url);
-  await transport.ensureSession(session);
-
-  const viewer = subscribe(transport, session, "viewer");
-  await waitFor(viewer.isReplayed);
+  const workflow = await createWorkflowDriver(transport, session, { who: "viewer" });
 
   // The exact objects main.ts wires: the registry over the loaded file, the SUBMIT-branch dispatch
   // publishing a control-shaped user.message, and the programmatic dispatcher with main.ts's fallback.
@@ -82,10 +79,10 @@ test("dispatching /fix 123 submits the expanded body as a user.message prompt", 
 
   dispatcher.dispatch("/fix", "123 urgently");
 
-  await waitFor(() => viewer.events.some((e) => e.type === "user.message"), {
+  await workflow.waitForType("user.message", {
     label: "user.message",
   });
-  const message = viewer.events.find((e) => e.type === "user.message");
+  const message = workflow.events.find((e) => e.type === "user.message");
   const decoded = message ? decodeTrevorEvent(message) : null;
   assert.equal(decoded?.type, "user.message");
   if (decoded?.type !== "user.message") {
@@ -99,7 +96,7 @@ test("dispatching /fix 123 submits the expanded body as a user.message prompt", 
     "a file-loaded command never falls through to the built-in lane",
   );
 
-  viewer.connection.close();
+  workflow.close();
 });
 
 test("a non-file (built-in) command still falls through to the immediate-command lane unchanged", async () => {

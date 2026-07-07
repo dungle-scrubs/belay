@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import { type SessionEvent, streamTransport } from "@trevor/session";
-import { joinSession } from "@trevor/test-kit";
+import { createWorkflowDriver } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -28,7 +28,7 @@ afterAll(async () => {
 
 test("a running tool's started/completed events carry the fields the detail takeover projects", async () => {
   const transport = streamTransport(store.url);
-  const viewer = await joinSession(transport, "detail", "viewer");
+  const workflow = await createWorkflowDriver(transport, "detail", { who: "viewer" });
 
   await publishTurnVia(
     transportEmit(transport, "detail", "host"),
@@ -37,10 +37,10 @@ test("a running tool's started/completed events carry the fields the detail take
     { runId: "r1" },
   );
 
-  await viewer.waitForType("assistant.completed");
+  await workflow.waitForType("assistant.completed");
 
-  const started = viewer.events.find((e: SessionEvent) => e.type === "tool.started");
-  const completed = viewer.events.find((e: SessionEvent) => e.type === "tool.completed");
+  const started = workflow.events.find((e: SessionEvent) => e.type === "tool.started");
+  const completed = workflow.events.find((e: SessionEvent) => e.type === "tool.completed");
 
   // The "running" detail: a tool.started with the name + arguments the detail body reads, and it lands
   // strictly before its completion (the window the takeover renders as running).
@@ -53,7 +53,7 @@ test("a running tool's started/completed events carry the fields the detail take
   assert.ok(completed, "the tool emitted a completed event");
   // `started`/`completed` are narrowed non-null by the assert.ok guards above.
   assert.ok(
-    viewer.events.indexOf(started) < viewer.events.indexOf(completed),
+    workflow.events.indexOf(started) < workflow.events.indexOf(completed),
     "started precedes completed (the running -> done transition)",
   );
 
@@ -68,5 +68,5 @@ test("a running tool's started/completed events carry the fields the detail take
     "the result is on the wire for the detail Output",
   );
 
-  viewer.connection.close();
+  workflow.close();
 });

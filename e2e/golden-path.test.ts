@@ -7,7 +7,7 @@ import {
 } from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
+import { createWorkflowDriver } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
@@ -32,10 +32,7 @@ afterAll(async () => {
 
 test("a fake-provider turn streams through the store to a subscriber, tool result and all", async () => {
   const transport = streamTransport(store.url);
-  await transport.ensureSession("golden");
-
-  const viewer = subscribe(transport, "golden", "viewer");
-  await waitFor(viewer.isReplayed);
+  const workflow = await createWorkflowDriver(transport, "golden", { who: "viewer" });
 
   // The turn pipeline writes its events to the real store via a transport-backed Emit.
   await publishTurnVia(
@@ -45,11 +42,9 @@ test("a fake-provider turn streams through the store to a subscriber, tool resul
     { runId: "r1" },
   );
 
-  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
-    label: "assistant.completed",
-  });
+  await workflow.waitForType("assistant.completed");
 
-  const types = viewer.events.map((e: SessionEvent) => e.type);
+  const types = workflow.events.map((e: SessionEvent) => e.type);
   assert.equal(types[0], "assistant.started");
   assert.ok(
     types.indexOf("tool.started") < types.indexOf("tool.completed") &&
@@ -57,22 +52,19 @@ test("a fake-provider turn streams through the store to a subscriber, tool resul
     types.join(" -> "),
   );
 
-  const toolResult = viewer.events.find((e) => e.type === "tool.completed");
+  const toolResult = workflow.events.find((e) => e.type === "tool.completed");
   assert.ok(String(toolResult?.payload.result ?? "").includes("hello-from-tool"));
 
-  const completed = viewer.events.find((e) => e.type === "assistant.completed");
+  const completed = workflow.events.find((e) => e.type === "assistant.completed");
   assert.equal(completed?.payload.error, undefined);
   assert.ok(String(completed?.payload.text ?? "").includes("the tool ran."));
 
-  viewer.connection.close();
+  workflow.close();
 });
 
 test("a DeepSeek-like 1M-context low-pressure stop replays as an adaptive step_backstop", async () => {
   const transport = streamTransport(store.url);
-  await transport.ensureSession("low-context-stop");
-
-  const viewer = subscribe(transport, "low-context-stop", "viewer");
-  await waitFor(viewer.isReplayed);
+  const workflow = await createWorkflowDriver(transport, "low-context-stop", { who: "viewer" });
 
   let calls = 0;
   await publishTurnVia(
@@ -103,10 +95,10 @@ test("a DeepSeek-like 1M-context low-pressure stop replays as an adaptive step_b
     { runId: "r-low" },
   );
 
-  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+  await workflow.waitForType("assistant.completed", {
     label: "assistant.completed step_backstop",
   });
-  const completed = viewer.events.find((e) => e.type === "assistant.completed");
+  const completed = workflow.events.find((e) => e.type === "assistant.completed");
   const decoded = completed ? decodeTrevorEvent(completed) : null;
   assert.equal(decoded?.type, "assistant.completed");
   if (decoded?.type !== "assistant.completed") return;
@@ -117,15 +109,14 @@ test("a DeepSeek-like 1M-context low-pressure stop replays as an adaptive step_b
   assert.equal(decoded.stop?.action, "paused");
   assert.equal(decoded.stop?.context?.pressure, 0.089022);
 
-  viewer.connection.close();
+  workflow.close();
 });
 
 test("a high-context pressure stop replays as context_pressure after synthesis", async () => {
   const transport = streamTransport(store.url);
-  await transport.ensureSession("context-pressure-stop");
-
-  const viewer = subscribe(transport, "context-pressure-stop", "viewer");
-  await waitFor(viewer.isReplayed);
+  const workflow = await createWorkflowDriver(transport, "context-pressure-stop", {
+    who: "viewer",
+  });
 
   await publishTurnVia(
     transportEmit(transport, "context-pressure-stop", "host"),
@@ -148,10 +139,10 @@ test("a high-context pressure stop replays as context_pressure after synthesis",
     { runId: "r-pressure" },
   );
 
-  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+  await workflow.waitForType("assistant.completed", {
     label: "assistant.completed context_pressure",
   });
-  const completed = viewer.events.find((e) => e.type === "assistant.completed");
+  const completed = workflow.events.find((e) => e.type === "assistant.completed");
   const decoded = completed ? decodeTrevorEvent(completed) : null;
   assert.equal(decoded?.type, "assistant.completed");
   if (decoded?.type !== "assistant.completed") return;
@@ -160,15 +151,12 @@ test("a high-context pressure stop replays as context_pressure after synthesis",
   assert.equal(decoded.stop?.action, "synthesized");
   assert.equal(decoded.text, "synthesized answer");
 
-  viewer.connection.close();
+  workflow.close();
 });
 
 test("a DeepSeek-style thinking-only stream drop reconnects and completes through the store", async () => {
   const transport = streamTransport(store.url);
-  await transport.ensureSession("thinking-retry");
-
-  const viewer = subscribe(transport, "thinking-retry", "viewer");
-  await waitFor(viewer.isReplayed);
+  const workflow = await createWorkflowDriver(transport, "thinking-retry", { who: "viewer" });
 
   let calls = 0;
   await publishTurnVia(
@@ -204,12 +192,12 @@ test("a DeepSeek-style thinking-only stream drop reconnects and completes throug
     { runId: "r-think" },
   );
 
-  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+  await workflow.waitForType("assistant.completed", {
     label: "assistant.completed thinking-retry",
   });
 
   // A reconnecting marker carrying the safe-to-retry transport diagnostic rode the durable wire.
-  const reconnecting = viewer.events.find((e) => e.type === "assistant.reconnecting");
+  const reconnecting = workflow.events.find((e) => e.type === "assistant.reconnecting");
   const rDecoded = reconnecting ? decodeTrevorEvent(reconnecting) : null;
   assert.equal(rDecoded?.type, "assistant.reconnecting");
   if (rDecoded?.type !== "assistant.reconnecting") return;
@@ -217,12 +205,12 @@ test("a DeepSeek-style thinking-only stream drop reconnects and completes throug
   assert.equal(rDecoded.diagnostic?.reason, "transport_loss");
 
   // The retry succeeded: a clean completion with the answer, and NEVER a bare `stream failed` error.
-  const completed = viewer.events.find((e) => e.type === "assistant.completed");
+  const completed = workflow.events.find((e) => e.type === "assistant.completed");
   const decoded = completed ? decodeTrevorEvent(completed) : null;
   assert.equal(decoded?.type, "assistant.completed");
   if (decoded?.type !== "assistant.completed") return;
   assert.equal(decoded.error, undefined);
   assert.ok(decoded.text.includes("Recovered and done."), decoded.text);
 
-  viewer.connection.close();
+  workflow.close();
 });

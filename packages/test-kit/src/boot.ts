@@ -2,8 +2,9 @@ import { rmSync } from "node:fs";
 import { createBlobServer } from "@trevor/blob-store/server";
 import { createTrevorClient, type TrevorClient } from "@trevor/sdk";
 import { type RunningServer, startServer } from "@trevor/server-kit";
+import { streamTransport } from "@trevor/session";
 import { createSessionStore } from "@trevor/session-store/server";
-import { tempDir } from "./index";
+import { createWorkflowDriver, tempDir, type WorkflowDriver } from "./index";
 
 /**
  * The node-only half of the test harness: booting real local stores on ephemeral ports. Kept in a
@@ -75,5 +76,35 @@ export async function bootSdkStack(): Promise<BootedSdkStack> {
       await blob.close();
       await store.close();
     },
+  };
+}
+
+export interface BootedWorkflowStack {
+  readonly store: RunningServer;
+  readonly transport: ReturnType<typeof streamTransport>;
+  workflow(
+    sessionId: string,
+    opts?: {
+      readonly who?: string;
+      readonly producerId?: string;
+      readonly provider?: string;
+    },
+  ): Promise<WorkflowDriver>;
+  close(): Promise<void>;
+}
+
+/**
+ * Boots the hermetic session-store and binds a workflow driver factory to its transport, so cross-service
+ * tests can drive prompt, command, subscribe, wait, and event inspection through one test-kit-owned
+ * boundary instead of reassembling store lifecycle plus subscriber mechanics in every e2e file.
+ */
+export async function bootWorkflowStack(): Promise<BootedWorkflowStack> {
+  const store = await bootStore();
+  const transport = streamTransport(store.url);
+  return {
+    store,
+    transport,
+    workflow: (sessionId, opts) => createWorkflowDriver(transport, sessionId, opts),
+    close: () => store.close(),
   };
 }

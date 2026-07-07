@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import { type SessionEvent, streamTransport } from "@trevor/session";
-import { joinSession } from "@trevor/test-kit";
+import { createWorkflowDriver } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
@@ -61,7 +61,7 @@ test("archive_read runs through the hermetic model/tool/session loop", async () 
     );
 
     const transport = streamTransport(store.url);
-    const viewer = await joinSession(transport, "archive-read", "viewer");
+    const workflow = await createWorkflowDriver(transport, "archive-read", { who: "viewer" });
 
     await publishTurnVia(
       transportEmit(transport, "archive-read", "host"),
@@ -84,11 +84,11 @@ test("archive_read runs through the hermetic model/tool/session loop", async () 
       { runId: "archive-read-run" },
     );
 
-    await viewer.waitForType("assistant.completed", { label: "archive_read completed" });
-    const completed = viewer.events.find((e: SessionEvent) => e.type === "tool.completed");
+    await workflow.waitForType("assistant.completed", { label: "archive_read completed" });
+    const completed = workflow.events.find((e: SessionEvent) => e.type === "tool.completed");
     assert.equal(completed?.payload.name, "archive_read");
     assert.ok(String(completed?.payload.result ?? "").includes("archive evidence"));
-    viewer.connection.close();
+    workflow.close();
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -108,7 +108,7 @@ test("archive_unpack extracts selected entries through the hermetic model/tool/s
     );
 
     const transport = streamTransport(store.url);
-    const viewer = await joinSession(transport, "archive-unpack", "viewer");
+    const workflow = await createWorkflowDriver(transport, "archive-unpack", { who: "viewer" });
 
     await publishTurnVia(
       transportEmit(transport, "archive-unpack", "host"),
@@ -137,12 +137,12 @@ test("archive_unpack extracts selected entries through the hermetic model/tool/s
       { runId: "archive-unpack-run" },
     );
 
-    await viewer.waitForType("assistant.completed", { label: "archive_unpack completed" });
-    const completed = viewer.events.find((e: SessionEvent) => e.type === "tool.completed");
+    await workflow.waitForType("assistant.completed", { label: "archive_unpack completed" });
+    const completed = workflow.events.find((e: SessionEvent) => e.type === "tool.completed");
     assert.equal(completed?.payload.name, "archive_unpack");
     assert.equal(await readFile(join(destination, "logs/app.txt"), "utf8"), "selected evidence");
     await assert.rejects(() => readFile(join(destination, "src/index.ts"), "utf8"));
-    viewer.connection.close();
+    workflow.close();
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

@@ -11,7 +11,7 @@ import {
   events as sessionEvents,
   streamTransport,
 } from "@trevor/session";
-import { questionAnswerDrain, subscribe, waitFor } from "@trevor/test-kit";
+import { createWorkflowDriver, questionAnswerDrain } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, afterEach, beforeAll, test } from "vitest";
@@ -43,18 +43,15 @@ afterEach(() => {
 test("a fake-provider ask_user turn blocks, then resumes with the browser's answer", async () => {
   const transport = streamTransport(store.url);
   const SESSION = "ask-user";
-  await transport.ensureSession(SESSION);
+  const viewer = await createWorkflowDriver(transport, SESSION, { who: "viewer" });
 
   // Wire the runtime to publish its request/resolved events to the store (the host's emit role).
   providerQuestionRuntime.configure((event) => {
     void transport.publishEvent(SESSION, { producerId: "host", ...event });
   });
 
-  const viewer = subscribe(transport, SESSION, "viewer");
-  await waitFor(viewer.isReplayed);
-
   // The host-side consumer: on a browser answer, resolve the pending question (main.ts's inbound lane).
-  const host = subscribe(transport, SESSION, "host-consumer");
+  const host = await createWorkflowDriver(transport, SESSION, { who: "host-consumer" });
   const drainAnswers = questionAnswerDrain(host.events, (questionId, answer) =>
     providerQuestionRuntime.submitAnswer(questionId, answer),
   );
@@ -97,7 +94,7 @@ test("a fake-provider ask_user turn blocks, then resumes with the browser's answ
   );
 
   // 1) The tool blocks and the request reaches the store.
-  await waitFor(() => viewer.events.some((e) => e.type === "provider.question.requested"), {
+  await viewer.waitForType("provider.question.requested", {
     label: "provider.question.requested",
   });
   const requested = viewer.events.find((e) => e.type === "provider.question.requested");
@@ -112,18 +109,18 @@ test("a fake-provider ask_user turn blocks, then resumes with the browser's answ
       { id: "question_1", answer: "Postgres", selected: [{ id: "pg", label: "Postgres" }] },
     ],
   };
-  await transport.publishEvent(SESSION, {
+  await viewer.publish({
     producerId: "web",
     ...sessionEvents.providerQuestionAnswer({ questionId, answer }),
   });
-  await waitFor(() => host.events.some((e) => e.type === "provider.question.answer"), {
+  await host.waitForType("provider.question.answer", {
     label: "provider.question.answer",
   });
   drainAnswers();
 
   // 3) The turn resumes and completes; the question resolves.
   await turn;
-  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+  await viewer.waitForType("assistant.completed", {
     label: "assistant.completed",
   });
 
@@ -148,6 +145,6 @@ test("a fake-provider ask_user turn blocks, then resumes with the browser's answ
   assert.equal(completed?.payload.error, undefined);
   assert.ok(String(completed?.payload.text ?? "").includes("Recorded the database choice."));
 
-  viewer.connection.close();
-  host.connection.close();
+  viewer.close();
+  host.close();
 });

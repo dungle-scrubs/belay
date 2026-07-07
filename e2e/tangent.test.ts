@@ -11,7 +11,7 @@ import {
   events as sessionEvents,
   streamTransport,
 } from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
+import { createWorkflowDriver } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -36,10 +36,10 @@ afterAll(async () => {
 
 async function readLog(url: string, sessionId: string): Promise<readonly SessionEvent[]> {
   const transport = streamTransport(url);
-  const viewer = subscribe(transport, sessionId, `reader-${sessionId}`);
-  await waitFor(viewer.isReplayed, { label: `${sessionId} replay` });
-  viewer.connection.close();
-  return viewer.events;
+  const workflow = await createWorkflowDriver(transport, sessionId, { who: `reader-${sessionId}` });
+  const events = [...workflow.events];
+  workflow.close();
+  return events;
 }
 
 test("create -> isolated chat -> fold-back keeps the parent transcript intact", async () => {
@@ -73,12 +73,13 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
     await transport.publishEvent(tangentSessionId, input);
   }
 
-  const viewer = subscribe(transport, tangentSessionId, "tangent-viewer");
-  await waitFor(viewer.isReplayed);
+  const workflow = await createWorkflowDriver(transport, tangentSessionId, {
+    who: "tangent-viewer",
+  });
 
   // The tangent's first prompt folds the seed in; publish it (web producer) + run an ISOLATED turn.
   const firstPrompt = seedTangentPrompt(quote, "why sha256 and not a uuid?");
-  await transport.publishEvent(tangentSessionId, {
+  await workflow.publish({
     ...sessionEvents.userMessage({ text: firstPrompt, provider: "lmstudio" }),
     producerId: PRODUCER_IDS.web,
   });
@@ -88,11 +89,11 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
     [{ role: "user", content: firstPrompt }],
     { runId: "tr1" },
   );
-  await waitFor(() => viewer.events.some((e) => e.type === "assistant.completed"), {
+  await workflow.waitForType("assistant.completed", {
     label: "tangent completed",
   });
 
-  const tangentLog = viewer.events;
+  const tangentLog = workflow.events;
   // The tangent ran its OWN turn: lineage marker + the seeded prompt + an assistant reply.
   assert.ok(tangentLog.some((e) => e.type === "session.tangentOf"));
   const prompt = tangentLog.find((e) => e.type === "user.message");
@@ -116,7 +117,7 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
   // Explicit fold-back (M8): the durable marker is recorded ON THE TANGENT, never the parent - the
   // reviewable text lands in the parent COMPOSER (web), so the parent LOG is never injected into.
   const replyText = String(completed?.payload.text ?? "");
-  await transport.publishEvent(tangentSessionId, {
+  await workflow.publish({
     ...sessionEvents.tangentFoldedBack({
       tangentSessionId,
       parentSessionId: parent,
@@ -125,10 +126,10 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
     }),
     producerId: PRODUCER_IDS.web,
   });
-  await waitFor(() => viewer.events.some((e) => e.type === "tangent.foldedBack"), {
+  await workflow.waitForType("tangent.foldedBack", {
     label: "fold-back recorded",
   });
-  const foldEvent = viewer.events.find((e) => e.type === "tangent.foldedBack");
+  const foldEvent = workflow.events.find((e) => e.type === "tangent.foldedBack");
   const decoded = foldEvent ? decodeTrevorEvent(foldEvent) : null;
   assert.equal(decoded?.type, "tangent.foldedBack");
 
@@ -141,5 +142,5 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
   );
   assert.ok(!parentAfterFold.some((e) => e.type === "tangent.foldedBack"));
 
-  viewer.connection.close();
+  workflow.close();
 });

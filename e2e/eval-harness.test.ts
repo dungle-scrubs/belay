@@ -1,10 +1,13 @@
 import {
   answerProvider,
+  attachFakeHost,
   createFakeEvalHarness,
   type EvalHarness,
+  fakeProvider,
   hangingProvider,
   liveLaneStatus,
 } from "@trevor/agent-host/testing";
+import { type BootedWorkflowStack, bootWorkflowStack } from "@trevor/test-kit/boot";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
@@ -15,10 +18,32 @@ import { afterEach, describe, expect, it } from "vitest";
 
 describe("eval harness (fake lane)", () => {
   let harness: EvalHarness | undefined;
+  let stack: BootedWorkflowStack | undefined;
 
   afterEach(async () => {
     await harness?.close();
+    await stack?.close();
     harness = undefined;
+    stack = undefined;
+  });
+
+  it("attaches a fake-provider host through the public host testing export", async () => {
+    stack = await bootWorkflowStack();
+    const workflow = await stack.workflow("fake-host-export", {
+      who: "viewer",
+      producerId: "web",
+      provider: "fake",
+    });
+    const host = attachFakeHost(stack.transport, workflow.sessionId, () => fakeProvider());
+
+    const result = await workflow.promptToCompletion("Please run echo hello-from-tool.", {
+      label: "fake host public export completion",
+    });
+
+    expect(result.text).toContain("the tool ran.");
+    expect(result.events.some((event) => event.type === "tool.completed")).toBe(true);
+    host.close();
+    workflow.close();
   });
 
   it("runs a prompt and returns a structured record with the answer and transcript", async () => {

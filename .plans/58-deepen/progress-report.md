@@ -4,10 +4,10 @@
 
 - Original audit candidate total: 8
 - Implementation milestones: 10
-- Completed milestones: 6
-- Active blockers: 4
-- Current status: Phase 2 host runtime boundaries are complete and verified.
-Current focus: M6. Deepen cross-service test harnesses into workflow drivers.
+- Completed milestones: 7
+- Active blockers: 3
+- Current status: Cross-service workflow drivers are complete and verified.
+Current focus: M7. Deepen blob and artifact IO into a shared artifact runtime.
 
 ## Audit Passes
 
@@ -33,7 +33,7 @@ Current focus: M6. Deepen cross-service test harnesses into workflow drivers.
 
 ## Phase 3 - Cross-Service Harness And Artifact Policy
 
-- [ ] M6. Deepen cross-service test harnesses into workflow drivers.
+- [x] M6. Deepen cross-service test harnesses into workflow drivers.
 - [ ] M7. Deepen blob and artifact IO into a shared artifact runtime.
 
 ## Phase 4 - CLI Command Surface
