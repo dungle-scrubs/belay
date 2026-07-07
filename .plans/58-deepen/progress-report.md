@@ -4,10 +4,10 @@
 
 - Original audit candidate total: 8
 - Implementation milestones: 10
-- Completed milestones: 8
-- Active blockers: 2
-- Current status: Cross-service harness and artifact runtime boundaries are complete and verified.
-Current focus: M8. Deepen CLI command dispatch into a command table and router.
+- Completed milestones: 9
+- Active blockers: 1
+- Current status: CLI command routing is table-driven and verified.
+Current focus: M9. Remove boundary drift and finish the repository-wide cutover.
 
 ## Audit Passes
 
@@ -38,7 +38,7 @@ Current focus: M8. Deepen CLI command dispatch into a command table and router.
 
 ## Phase 4 - CLI Command Surface
 
-- [ ] M8. Deepen CLI command dispatch into a command table and router.
+- [x] M8. Deepen CLI command dispatch into a command table and router.
 
 ## Phase 5 - Repository-Wide Cutover And Verification
 
@@ -50,7 +50,7 @@ Current focus: M8. Deepen CLI command dispatch into a command table and router.
 - [x] Gate 1->2. Protocol and web read-model validation passes.
 - [x] Gate 2->3. Host session, tool, provider, and hermetic e2e validation passes.
 - [x] Gate 3->4. Test-kit, artifact, integration, and e2e validation passes.
-- [ ] Gate 4->5. CLI typecheck, CLI unit tests, and CLI e2e flows pass.
+- [x] Gate 4->5. CLI typecheck, CLI unit tests, and CLI e2e flows pass.
 - [ ] Final Gate. Lint, typecheck, all Vitest projects, browser e2e status, and planner checks pass.
 
 ## Deferred Follow-Up
