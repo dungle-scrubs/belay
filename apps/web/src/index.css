@@ -306,7 +306,8 @@
   color: hsl(193 44% 67%);
 }
 
-/* Skeleton shimmer for loading placeholders. */
+/* Skeleton shimmer for loading placeholders. Tinted with the frost/aurora palette so the
+ * sweep reads as colorful motion rather than a flat gray pulse. */
 @keyframes shimmer {
   0% {
     background-position: 200% 0;
@@ -318,12 +319,24 @@
 .skeleton {
   background: linear-gradient(
     90deg,
-    hsl(var(--smui-surface-2)) 25%,
-    hsl(var(--smui-surface-3)) 50%,
-    hsl(var(--smui-surface-2)) 75%
+    hsl(var(--smui-surface-2)) 20%,
+    hsl(var(--smui-frost-2) / 0.4) 45%,
+    hsl(var(--smui-purple) / 0.35) 55%,
+    hsl(var(--smui-surface-2)) 80%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+}
+
+/* Colorful band for the `tw-shimmer` text/bg overlay (action-shimmer, tool-group,
+ * reasoning, tool-fallback). The library defaults to a near-invisible monochrome sweep
+ * derived from currentColor; overriding --shimmer-color with the aurora palette makes the
+ * active/working/thinking indicators visibly colorful in both themes. */
+.shimmer {
+  --shimmer-color: hsl(var(--smui-frost-2) / 0.65);
+}
+.dark .shimmer {
+  --shimmer-color: hsl(var(--smui-frost-2) / 0.85);
 }
 
 /* SMUI re-theming for the shared Markdown renderer (.trevor-md, see markdown.tsx).
