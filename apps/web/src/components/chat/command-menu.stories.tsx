@@ -110,3 +110,23 @@ export const Highlighted: Story = {
     </div>
   ),
 };
+
+/**
+ * Many matches: the row list is capped (`max-h-[60vh]`) and scrolls internally, so it never runs off
+ * the top of the screen. The slash command set is small in practice, but the menu shares the
+ * `AutocompleteMenu` chrome with the `@`-file-mention menu, so this story proves the shared cap
+ * holds for both.
+ */
+export const Overflow: Story = {
+  render: () => {
+    const many: CommandSpec[] = Array.from({ length: 40 }, (_, i) => ({
+      name: `/cmd-${String(i).padStart(2, "0")}`,
+      summary: `Synthetic command ${i} to exercise the shared height cap`,
+    }));
+    return (
+      <div className="mx-auto w-[34rem] max-w-full">
+        <CommandMenu matches={many} activeIndex={0} query="" onPick={() => {}} />
+      </div>
+    );
+  },
+};

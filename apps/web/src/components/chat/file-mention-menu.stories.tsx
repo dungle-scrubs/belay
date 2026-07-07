@@ -120,3 +120,28 @@ export const Loading: Story = {
     },
   ],
 };
+
+/**
+ * Many matches: the row list is capped (`max-h-[60vh]`) and scrolls internally, so it never runs off
+ * the top of the screen. The summary footer stays pinned below the scroll area. This story is the
+ * primary verification surface for the height cap.
+ */
+export const Overflow: Story = {
+  args: {
+    matches: Array.from({ length: 40 }, (_, i) => ({
+      path: `apps/web/src/deeply/nested/module-${String(i).padStart(2, "0")}.tsx`,
+    })),
+    activeIndex: 0,
+    query: "module",
+  },
+  decorators: [
+    (Story) => {
+      const Frame = storyFrame("w-[34rem]");
+      return (
+        <Frame>
+          <Story />
+        </Frame>
+      );
+    },
+  ],
+};

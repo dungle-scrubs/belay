@@ -58,30 +58,36 @@ export function AutocompleteMenu({
       {rows.length === 0 && empty ? (
         <div className="px-3 py-1.5 text-sm text-muted-foreground">{empty}</div>
       ) : (
-        <div id={listboxId} role="listbox" aria-label={ariaLabel} className="flex flex-col">
-          {rows.map((row, i) => (
-            <button
-              key={row.key}
-              id={activeOptionId(listboxId, i)}
-              type="button"
-              role="option"
-              aria-selected={i === activeIndex}
-              // onMouseDown (not onClick) so the composer input keeps focus through the pick.
-              onMouseDown={(event) => {
-                event.preventDefault();
-                onPick(row.key);
-              }}
-              className={cn(
-                // Stable row height (single-line, py-1.5, baseline-aligned) so the list never jitters
-                // as matches change.
-                "flex w-full items-baseline gap-2 px-3 py-1.5 text-left",
-                i === activeIndex ? "bg-accent" : "hover:bg-secondary",
-              )}
-            >
-              {row.primary}
-              {row.secondary}
-            </button>
-          ))}
+        // The row list is capped at 60vh and scrolls internally so a long match list (e.g. dozens of
+        // workspace files) can never grow the popover off the top of the screen. `max-h` (not `h`)
+        // keeps a short list at natural height - no empty box. The empty/loading state and the summary
+        // footer stay OUTSIDE this container, so an empty menu never scrolls and the footer stays pinned.
+        <div className="max-h-[60vh] overflow-y-auto">
+          <div id={listboxId} role="listbox" aria-label={ariaLabel} className="flex flex-col">
+            {rows.map((row, i) => (
+              <button
+                key={row.key}
+                id={activeOptionId(listboxId, i)}
+                type="button"
+                role="option"
+                aria-selected={i === activeIndex}
+                // onMouseDown (not onClick) so the composer input keeps focus through the pick.
+                onMouseDown={(event) => {
+                  event.preventDefault();
+                  onPick(row.key);
+                }}
+                className={cn(
+                  // Stable row height (single-line, py-1.5, baseline-aligned) so the list never jitters
+                  // as matches change.
+                  "flex w-full items-baseline gap-2 px-3 py-1.5 text-left",
+                  i === activeIndex ? "bg-accent" : "hover:bg-secondary",
+                )}
+              >
+                {row.primary}
+                {row.secondary}
+              </button>
+            ))}
+          </div>
         </div>
       )}
       {summary ? (
