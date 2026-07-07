@@ -230,6 +230,8 @@ export interface SidebarBinding {
   readonly onRenameProject: (key: string, name: string) => void;
   /** Remove a project (persisted via the supervisor; blocked by active sessions). */
   readonly onRemoveProject: (key: string) => void;
+  /** View an archive-only project's archived sessions, filtered to that project (plan 58 M7). */
+  readonly onViewArchive?: (projectKey: string) => void;
   /** The currently selected session id (for row highlight). */
   readonly currentSessionId: string;
   /** Live run state per session, layered over each row's durable activity. */
@@ -345,6 +347,7 @@ export function PanelHost(props: {
           onToggleProject={sidebar.onToggleProject}
           onSelectSession={sidebar.onSelect}
           onShowMore={sidebar.onShowMore}
+          onViewArchive={sidebar.onViewArchive}
           liveActivity={sidebar.liveActivity}
           currentSessionId={sidebar.currentSessionId}
           nowMs={sidebar.nowMs}

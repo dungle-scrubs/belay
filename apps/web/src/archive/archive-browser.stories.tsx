@@ -28,6 +28,7 @@ function row(over: Partial<ArchivedSessionRow> & { sessionId: string }): Archive
   return {
     title: `Session ${over.sessionId}`,
     project: "trevor",
+    projectPath: "/dev/trevor",
     cwd: "~/dev/trevor",
     updatedAt: "2026-06-29T09:00:00.000Z",
     eventCount: 42,
@@ -42,6 +43,7 @@ const ROWS: readonly ArchivedSessionRow[] = [
     sessionId: "b",
     title: "Investigate flaky e2e",
     project: "opchain",
+    projectPath: "/dev/opchain",
     cwd: "~/dev/opchain",
     eventCount: 7,
     updatedAt: "2026-06-28T18:00:00.000Z",

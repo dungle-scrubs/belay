@@ -1,9 +1,10 @@
 import { relativeTime } from "@trevor/session";
-import { AlertTriangle, ArchiveRestore, Loader2, ShieldAlert, Trash2 } from "lucide-react";
+import { AlertTriangle, ArchiveRestore, Loader2, ShieldAlert, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ProjectLabel } from "@/sidebar/project-label";
 import { type ArchivedSessionRow, isArchiveRowDeletable } from "./archive-rows";
 
 /**
@@ -42,6 +43,14 @@ export interface ArchiveBrowserProps {
   readonly onDelete: (sessionId: string) => void;
   /** Returns to chat; renders the top-left back arrow when provided. */
   readonly onBack?: () => void;
+  /**
+   * When set, the browser filters its rows to archived sessions whose {@link ArchivedSessionRow.projectPath}
+   * matches, and renders a project-filter banner with a clear affordance (plan 58 M7). Driven by the
+   * sidebar's "view archive" entry on an archive-only project. Null = show all archived sessions.
+   */
+  readonly projectFilter?: string | null;
+  /** Clears the {@link projectFilter} (renders the banner's close button when a filter is active). */
+  readonly onClearProjectFilter?: () => void;
   /** Per-row async feedback keyed by sessionId, so one row's action never blanks the browser. */
   readonly actionState?: Readonly<Record<string, RowActionState>>;
   /** Seeds the row whose delete confirmation is initially open (stories/tests; mirrors a chooser default). */
@@ -64,12 +73,19 @@ export function ArchiveBrowser({
   onBack,
   actionState,
   defaultConfirmingId,
+  projectFilter = null,
+  onClearProjectFilter,
   className,
 }: ArchiveBrowserProps) {
   // Which row's permanent-delete is being confirmed (at most one). The typed phrase lives in the
   // confirmation panel itself, reset naturally when it mounts for a different row.
   const [confirmingId, setConfirmingId] = useState<string | null>(defaultConfirmingId ?? null);
-  const hasRows = rows.length > 0;
+
+  // Project-path filtering (plan 58 M7): when a projectFilter is set, keep only the archived sessions
+  // whose projectPath matches it. A null projectFilter shows all archived sessions (the default).
+  const filteredRows =
+    projectFilter != null ? rows.filter((r) => r.projectPath === projectFilter) : rows;
+  const hasRows = filteredRows.length > 0;
 
   return (
     <section
@@ -86,6 +102,18 @@ export function ArchiveBrowser({
           be undone.
         </p>
       </header>
+
+      {projectFilter != null ? (
+        <ProjectFilterBanner
+          displayName={
+            filteredRows[0]?.project ??
+            projectFilter.split("/").filter(Boolean).pop() ??
+            projectFilter
+          }
+          displayPath={projectFilter}
+          onClear={onClearProjectFilter}
+        />
+      ) : null}
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
         {/* A load error/spinner banners ABOVE the list when rows are in hand (so a transient refetch
@@ -106,7 +134,7 @@ export function ArchiveBrowser({
 
         {hasRows ? (
           <ul className="flex flex-col gap-2">
-            {rows.map((row) => (
+            {filteredRows.map((row) => (
               <ArchiveRow
                 key={row.sessionId}
                 row={row}
@@ -162,6 +190,41 @@ function StatusLine({
       <Icon className={cn("size-3.5 shrink-0", spin && "animate-spin")} />
       {children}
     </p>
+  );
+}
+
+/** The project-filter banner (plan 58 M7): shows which project the archive is scoped to, with a clear
+ *  affordance so the user can return to the full archive list. Uses the shared {@link ProjectLabel}. */
+function ProjectFilterBanner({
+  displayName,
+  displayPath,
+  onClear,
+}: {
+  displayName: string;
+  displayPath: string;
+  onClear?: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-2">
+      <span className="text-xs text-muted-foreground">Archive for</span>
+      <ProjectLabel
+        displayName={displayName}
+        displayPath={displayPath}
+        className="flex-1 text-xs"
+      />
+      {onClear ? (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={onClear}
+          aria-label="Clear project filter"
+          title="Show all archived sessions"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <X />
+        </Button>
+      ) : null}
+    </div>
   );
 }
 

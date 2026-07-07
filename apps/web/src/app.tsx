@@ -384,6 +384,10 @@ export function App() {
   // /resume, /worktree, the left session sidebar, and the right details panel.
   const worktrees = readModel.worktrees;
   const modal = useModalState({ worktrees, host, target, sessionId, busy });
+  // The archive browser's optional project filter (plan 58 M7): set when the user clicks "View
+  // archive" on an archive-only project in the sidebar, so the archive lists only that project's
+  // archived sessions. Cleared via the banner's close button or whenever the archive closes.
+  const [archiveProjectFilter, setArchiveProjectFilter] = useState<string | null>(null);
   // The single open-picker entry (plan 44.2, D-001): both the sidebar `＋ New session` and the `/new`
   // command call this, so the two entry points can never drift.
   const openNewSession = useCallback(() => modal.setNewOpen(true), [modal.setNewOpen]);
@@ -1294,7 +1298,12 @@ export function App() {
       actionState={archiveActions.actionState}
       onUnarchive={archiveActions.onUnarchive}
       onDelete={archiveActions.onDelete}
-      onBack={() => modal.setArchiveOpen(false)}
+      onBack={() => {
+        modal.setArchiveOpen(false);
+        setArchiveProjectFilter(null);
+      }}
+      projectFilter={archiveProjectFilter}
+      onClearProjectFilter={() => setArchiveProjectFilter(null)}
     />
   ) : undefined;
 
@@ -1466,6 +1475,7 @@ export function App() {
         type="button"
         onClick={() => {
           setChooserOpen(false); // only one takeover at a time
+          setArchiveProjectFilter(null); // the footer entry shows ALL archived sessions
           modal.setArchiveOpen(true);
         }}
         title="Manage archived sessions"
@@ -1680,6 +1690,10 @@ export function App() {
           onArchiveSession: projectSidebar.onArchiveSession,
           onRenameProject: projectSidebar.onRenameProject,
           onRemoveProject: projectSidebar.onRemoveProject,
+          onViewArchive: (projectKey) => {
+            setArchiveProjectFilter(projectKey);
+            modal.setArchiveOpen(true);
+          },
           currentSessionId: target,
           liveActivity: modal.sidebarLiveActivity,
           nowMs: now,

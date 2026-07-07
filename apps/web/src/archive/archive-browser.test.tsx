@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, within } from "@testing-library/react";
-import { test } from "vitest";
+import { describe, test } from "vitest";
 import { ArchiveBrowser, DELETE_CONFIRM_PHRASE } from "./archive-browser";
 import type { ArchivedSessionRow } from "./archive-rows";
 
@@ -10,6 +10,7 @@ function row(over: Partial<ArchivedSessionRow> & { sessionId: string }): Archive
   return {
     title: `Session ${over.sessionId}`,
     project: "trevor",
+    projectPath: "/dev/trevor",
     cwd: "~/dev/trevor",
     updatedAt: "2026-06-29T09:00:00.000Z",
     eventCount: 42,
@@ -171,4 +172,81 @@ test("a per-row error renders row-scoped without removing the other rows", () =>
   getByText("Delete failed - store rejected it.");
   // The other row is untouched.
   getByText("Investigate flaky e2e");
+});
+
+describe("project-path filtering (M7)", () => {
+  test("a projectFilter shows only the archived sessions for that project path", () => {
+    const rows = [
+      row({ sessionId: "a", projectPath: "/dev/trevor" }),
+      row({ sessionId: "b", projectPath: "/dev/other", project: "other" }),
+    ];
+    const { getByText, queryByText } = render(
+      <ArchiveBrowser
+        rows={rows}
+        nowMs={NOW}
+        projectFilter="/dev/trevor"
+        onUnarchive={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+    getByText("Session a");
+    assert.equal(queryByText("Session b"), null);
+  });
+
+  test("the project-filter banner names the project and offers a clear affordance", () => {
+    const { getByLabelText, getByText } = render(
+      <ArchiveBrowser
+        rows={[row({ sessionId: "a", projectPath: "/dev/trevor" })]}
+        nowMs={NOW}
+        projectFilter="/dev/trevor"
+        onUnarchive={() => {}}
+        onDelete={() => {}}
+        onClearProjectFilter={() => {}}
+      />,
+    );
+    getByText("Archive for");
+    getByText("/dev/trevor");
+    getByLabelText("Clear project filter");
+  });
+
+  test("clearing the filter calls onClearProjectFilter", () => {
+    let cleared = 0;
+    const { getByLabelText } = render(
+      <ArchiveBrowser
+        rows={[row({ sessionId: "a", projectPath: "/dev/trevor" })]}
+        nowMs={NOW}
+        projectFilter="/dev/trevor"
+        onUnarchive={() => {}}
+        onDelete={() => {}}
+        onClearProjectFilter={() => (cleared += 1)}
+      />,
+    );
+    fireEvent.click(getByLabelText("Clear project filter"));
+    assert.equal(cleared, 1);
+  });
+
+  test("without a projectFilter, all archived sessions are shown", () => {
+    const rows = [
+      row({ sessionId: "a", projectPath: "/dev/trevor" }),
+      row({ sessionId: "b", projectPath: "/dev/other", project: "other" }),
+    ];
+    const { getByText } = render(
+      <ArchiveBrowser rows={rows} nowMs={NOW} onUnarchive={() => {}} onDelete={() => {}} />,
+    );
+    getByText("Session a");
+    getByText("Session b");
+  });
+
+  test("a project filter with no matching rows renders the empty state, not a banner crash", () => {
+    const { getByText } = render(
+      <ArchiveBrowser
+        rows={[row({ sessionId: "a", projectPath: "/dev/trevor" })]}
+        nowMs={NOW}
+        projectFilter="/dev/none"
+        onUnarchive={() => {}}
+        onDelete={() => {}}
+      />,
+    );
+    getByText("No archived sessions");
+  });
 });

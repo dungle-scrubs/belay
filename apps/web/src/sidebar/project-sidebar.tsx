@@ -1,6 +1,7 @@
 import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
 import { ChevronDown, ChevronRight, Inbox, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ProjectLabel } from "./project-label";
 import { type ProjectGroup, SESSION_CAP } from "./project-sidebar-model";
 
 /**
@@ -26,6 +27,12 @@ export interface ProjectSidebarProps {
   readonly searchQuery: string;
   /** When provided, renders a search input the live owner wires to set the query. */
   readonly onSearchChange?: (query: string) => void;
+  /**
+   * View an archive-only project's archived sessions (plan 58 M7). When provided, the empty state of a
+   * project with only archived sessions renders an "archive" link that opens the archive browser
+   * filtered to that project's path. Absent => the empty state is non-interactive.
+   */
+  readonly onViewArchive?: (projectKey: string) => void;
   /** Live run state per session, layered over each row's durable activity (D-093 M3). */
   readonly liveActivity?: ReadonlyMap<string, SessionActivity>;
   /** The currently selected session id (for highlight). */
@@ -132,9 +139,12 @@ function ProjectRow({ group, onToggle }: { group: ProjectGroup; onToggle: (key: 
           hasActive ? "bg-smui-green" : "bg-muted-foreground/30",
         )}
       />
-      <span className="min-w-0 flex-1 truncate text-ui font-medium text-foreground">
-        {group.displayName}
-      </span>
+      <ProjectLabel
+        displayName={group.displayName}
+        displayPath={group.displayPath}
+        className="flex-1 text-ui text-foreground"
+        pathClassName="text-muted-foreground/50"
+      />
       <span className="shrink-0 text-label tracking-wider text-muted-foreground/60">
         {group.activeCount > 0 ? group.activeCount : ""}
       </span>
@@ -142,8 +152,28 @@ function ProjectRow({ group, onToggle }: { group: ProjectGroup; onToggle: (key: 
   );
 }
 
-/** The empty state for a project with only archived sessions: an archive link affordance. */
-function EmptyProjectState() {
+/** The empty state for a project with only archived sessions: an archive link affordance (plan 58 M7).
+ *  When {@link onViewArchive} is provided, the state is a clickable link that opens the archive browser
+ *  filtered to this project's path; otherwise it is a static label. */
+function EmptyProjectState({
+  projectKey,
+  onViewArchive,
+}: {
+  projectKey: string;
+  onViewArchive?: (projectKey: string) => void;
+}) {
+  if (onViewArchive) {
+    return (
+      <button
+        type="button"
+        onClick={() => onViewArchive(projectKey)}
+        className="flex w-full items-center gap-1.5 py-1.5 pl-7 pr-2.5 text-left text-label tracking-wider text-muted-foreground/50 hover:text-foreground"
+      >
+        <Inbox className="size-3" />
+        <span>View archive</span>
+      </button>
+    );
+  }
   return (
     <div className="flex items-center gap-1.5 py-1.5 pl-7 pr-2.5 text-label tracking-wider text-muted-foreground/50">
       <Inbox className="size-3" />
@@ -159,6 +189,7 @@ export function ProjectSidebar({
   onShowMore,
   searchQuery,
   onSearchChange,
+  onViewArchive,
   liveActivity,
   currentSessionId,
   nowMs = Date.now(),
@@ -203,7 +234,7 @@ export function ProjectSidebar({
                   {!group.collapsed ? (
                     <div>
                       {group.sessions.length === 0 ? (
-                        <EmptyProjectState />
+                        <EmptyProjectState projectKey={group.key} onViewArchive={onViewArchive} />
                       ) : (
                         visible.map((summary) => (
                           <SessionRow
