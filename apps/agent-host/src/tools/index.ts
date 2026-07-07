@@ -10,9 +10,8 @@ import { mcpRuntime } from "@host/mcp/host-runtime";
 import { supervisor } from "@host/processes/processes";
 import { buildSkillTool, discoverSkills } from "@host/skills/skills";
 import { buildTaskTools } from "@host/tools/tasks/tasks";
-import { log, warn } from "@host/transport/log";
 import { READ_ONLY_TOOL_NAMES } from "@trevor/session";
-import { Effect, Either, JSONSchema, ParseResult, Schema } from "effect";
+import { Effect } from "effect";
 import type { ToolDef } from "../providers";
 import { buildToolScriptTool } from "../tool-script/tool";
 import { archiveReadTool, archiveUnpackTool } from "./archive/tool";
@@ -24,7 +23,6 @@ import { clipboardWriteTool } from "./clipboard";
 import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
 import { editTool } from "./edit";
-import { ToolInputError } from "./errors";
 import { globTool } from "./glob";
 import { grepTool } from "./grep";
 import { buildLspCodeActionsTool } from "./lsp-code-actions";
@@ -38,6 +36,7 @@ import { migrateClaudeTool } from "./migrate-claude";
 import { multiEditTool } from "./multi-edit";
 import { DEFAULT_PROMOTION_CONFIG } from "./promote-policy";
 import { readTool } from "./read";
+import { createToolRegistry } from "./registry";
 import { sessionRecallTool } from "./session-recall";
 import { skillViewTool } from "./skill-view";
 import { skillsListTool } from "./skills-list";
@@ -45,11 +44,10 @@ import { loadSourceRecallConfig } from "./source-recall/config";
 import { createSourceRecallRegistry } from "./source-recall/registry";
 import { buildSourceRecallTools } from "./source-recall/tools";
 import { trevorExpertTool } from "./trevor-expert";
-import type { Tool, ToolContext } from "./types";
+import type { Tool } from "./types";
 import { videoInspectTool } from "./video-inspect/tool";
 import { webFetchTool } from "./web-fetch/web-fetch";
 import { webSearchTool } from "./web-search";
-import { currentLeafWorkspace } from "./workspace";
 import { writeTool } from "./write";
 
 export type { ToolError } from "./errors";
@@ -58,6 +56,7 @@ export type { ToolError } from "./errors";
 // tags and implement this interface. Re-exporting them here keeps `errors.ts`/`types.ts` internal
 // and gives every consumer one import path (mirrors providers/index.ts).
 export { ProcessError, ToolExecutionError, ToolInputError } from "./errors";
+export { createToolRegistry, type ToolRegistry, toParametersJsonSchema } from "./registry";
 export type { Tool } from "./types";
 
 // The TOOLS array is heterogeneous (each tool decodes to its own params type), so it holds
@@ -152,35 +151,6 @@ const TOOLS: readonly Tool<any>[] = discoveredSkills.length
   : FILE_TOOLS;
 
 /**
- * Derives the provider-facing JSON Schema for a tool's parameters from its Effect Schema.
- * `JSONSchema.make` returns a draft-07 doc with a top-level `$schema` key (dropped here);
- * every tool's params schema is kept FLAT (inline primitives/arrays, no cross-references)
- * so the doc never carries a `$defs` block. The result is the plain
- * `{ type: "object", properties, required }` object the provider casts to a typebox schema
- * (providers/pi-ai.ts `toPiAiTools`).
- */
-function toParametersJsonSchema(
-  // biome-ignore lint/suspicious/noExplicitAny: matches the Tool.params Encoded erasure.
-  schema: Schema.Schema<unknown, any>,
-): Record<string, unknown> {
-  // Drop the draft `$schema` AND `$id`: both are doc-level metadata the provider never needs, and
-  // `$id` is emitted as a RELATIVE URL (e.g. `/schemas/%7B%7D` for an empty struct) that
-  // OpenAI-compatible providers try to resolve and reject with "relative URL without a base".
-  const { $schema, $id, $defs, ...rest } = JSONSchema.make(schema) as unknown as Record<
-    string,
-    unknown
-  >;
-  if ($defs) {
-    // Every params schema is flat by construction; a $defs means a cross-reference slipped
-    // in (e.g. a bare Schema.Int) and the provider would receive an unusable $ref. Inline it.
-    throw new Error(
-      `tool parameter schema produced a $defs block (must stay flat): ${JSON.stringify($defs)}`,
-    );
-  }
-  return rest;
-}
-
-/**
  * Names of the tools the loop may run concurrently. The classification is owned by the
  * cross-surface vocabulary in `@trevor/session` (D-031) - the single source both the host
  * and the web consume - so it can never drift between the two surfaces. A parity test
@@ -189,14 +159,15 @@ function toParametersJsonSchema(
  * tool absent from the read-only set is a mutating serial barrier. The loop partitions a
  * step's tool batch against this set (D-050).
  */
-export const READ_ONLY_TOOLS: ReadonlySet<string> = READ_ONLY_TOOL_NAMES;
+export const DEFAULT_TOOL_REGISTRY = createToolRegistry({
+  tools: TOOLS,
+  readOnlyTools: READ_ONLY_TOOL_NAMES,
+});
+
+export const READ_ONLY_TOOLS: ReadonlySet<string> = DEFAULT_TOOL_REGISTRY.readOnlyTools;
 
 /** Tool definitions advertised to the model (parameters derived from each tool's schema). */
-export const TOOL_DEFS = TOOLS.map((tool) => ({
-  name: tool.name,
-  description: tool.description,
-  parameters: toParametersJsonSchema(tool.params),
-}));
+export const TOOL_DEFS = DEFAULT_TOOL_REGISTRY.toolDefs;
 
 /**
  * The exact tool-def set the model is OFFERED for one turn: the registry tools when tools are enabled,
@@ -209,9 +180,7 @@ export function offeredToolDefs(
   toolNames: ReadonlySet<string> | undefined,
   delegateDefs: readonly ToolDef[] | undefined,
 ): readonly ToolDef[] {
-  const registryTools = useTools ? TOOL_DEFS : [];
-  const allowed = toolNames ? registryTools.filter((t) => toolNames.has(t.name)) : registryTools;
-  return delegateDefs ? [...allowed, ...delegateDefs] : allowed;
+  return DEFAULT_TOOL_REGISTRY.offeredToolDefs(useTools, toolNames, delegateDefs);
 }
 
 /**
@@ -229,57 +198,5 @@ export function executeTool(
   runId?: string,
   callId?: string,
 ): Effect.Effect<string> {
-  const tool = TOOLS.find((candidate) => candidate.name === name);
-  if (!tool) {
-    return Effect.succeed(`error: unknown tool "${name}"`);
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(argumentsJson || "{}");
-  } catch {
-    return Effect.succeed("error: tool arguments were not valid JSON");
-  }
-  const decoded = Schema.decodeUnknownEither(tool.params)(parsed);
-  if (Either.isLeft(decoded)) {
-    const detail = ParseResult.TreeFormatter.formatErrorSync(decoded.left);
-    return renderFailure(name, new ToolInputError({ tool: name, detail }), runId, Date.now());
-  }
-  const startedAt = Date.now();
-  // Inject the fiber-local leaf workspace (a worktree-isolated leaf's own tree) into the ctx, so the
-  // cwd/root-reading tools resolve against it; absent = the ambient globals (every non-leaf turn). M6.
-  return currentLeafWorkspace.pipe(
-    Effect.flatMap((workspace) => {
-      const ctx: ToolContext = {
-        runId,
-        callId,
-        ...(workspace ? { cwd: workspace.cwd, workspaceRoot: workspace.root } : {}),
-      };
-      return tool.execute(decoded.right, ctx).pipe(
-        Effect.tap(() =>
-          Effect.sync(() =>
-            log("tool", "executed", { run: runId, name, ms: Date.now() - startedAt, ok: true }),
-          ),
-        ),
-        Effect.catchAll((error) => renderFailure(name, error, runId, startedAt)),
-      );
-    }),
-  );
-}
-
-/** Renders a tool failure to one model-facing `error: …` line and logs it. */
-function renderFailure(
-  name: string,
-  error: { readonly message: string },
-  runId: string | undefined,
-  startedAt: number,
-): Effect.Effect<string> {
-  return Effect.sync(() => {
-    warn("tool", "failed", {
-      run: runId,
-      name,
-      ms: Date.now() - startedAt,
-      error: error.message,
-    });
-    return `error: ${name} failed - ${error.message}`;
-  });
+  return DEFAULT_TOOL_REGISTRY.executeTool(name, argumentsJson, runId, callId);
 }
