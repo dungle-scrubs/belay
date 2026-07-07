@@ -1,29 +1,16 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { test } from "vitest";
+import { listGitTrackedFiles } from "./filename-policy";
 
 const REPO = join(import.meta.dirname, "..", "..", "..");
 
-function walk(dir: string): string[] {
-  const out: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      out.push(...walk(path));
-    } else if (entry.isFile() && /\.(ts|tsx)$/.test(entry.name)) {
-      out.push(path);
-    }
-  }
-  return out;
-}
-
-function rel(path: string): string {
-  return relative(REPO, path);
-}
+const tsFiles = (): readonly string[] =>
+  listGitTrackedFiles(REPO).filter((path) => /\.(ts|tsx)$/.test(path));
 
 function read(path: string): string {
-  return readFileSync(path, "utf8");
+  return readFileSync(join(REPO, path), "utf8");
 }
 
 test("e2e host-internal imports stay explicit compatibility debt", () => {
@@ -33,9 +20,9 @@ test("e2e host-internal imports stay explicit compatibility debt", () => {
     "e2e/live/source-recall.test.ts",
     "e2e/source-recall-smoke.test.ts",
   ]);
-  const violations = walk(join(REPO, "e2e"))
+  const violations = tsFiles()
+    .filter((path) => path.startsWith("e2e/"))
     .filter((path) => /from "@host\//.test(read(path)))
-    .map(rel)
     .filter((path) => !allowed.has(path));
 
   assert.deepEqual(violations, [], `new e2e @host imports:\n${violations.join("\n")}`);
@@ -54,12 +41,12 @@ test("web raw event folds stay behind projection/debug boundaries", () => {
     "apps/web/src/tangent/tangent-send.ts",
     "apps/web/src/transcript.ts",
   ]);
-  const violations = walk(join(REPO, "apps/web/src"))
+  const violations = tsFiles()
+    .filter((path) => path.startsWith("apps/web/src/"))
     .filter((path) => !/(\.test|\.stories)\.(ts|tsx)$/.test(path))
     .filter((path) =>
       /readonly SessionEvent\[\]|SessionEvent\[\]|events\.(map|filter|find)/.test(read(path)),
     )
-    .map(rel)
     .filter((path) => !allowed.has(path));
 
   assert.deepEqual(
@@ -80,22 +67,21 @@ test("blob URL and artifact policy stay in artifact runtime bindings", () => {
     "packages/session/src/blob.ts",
     "packages/session/src/ports.ts",
   ]);
-  const violations = walk(REPO)
+  const violations = tsFiles()
     .filter((path) => !/(\.test|\.stories)\.(ts|tsx)$/.test(path))
     .filter((path) =>
       /(process\.env\.BLOB_STORE_URL|VITE_BLOB_STORE_URL|blobUrl\(|putBlob\(|fetchBlobBytes\(|artifactRef\()/.test(
         read(path),
       ),
     )
-    .map(rel)
     .filter((path) => !allowed.has(path));
 
   assert.deepEqual(violations, [], `duplicated blob/artifact policy:\n${violations.join("\n")}`);
 });
 
 test("CLI process entrypoint delegates command dispatch to the router", () => {
-  const main = read(join(REPO, "apps/trevor-cli/src/main.ts"));
-  const router = read(join(REPO, "apps/trevor-cli/src/command-router.ts"));
+  const main = read("apps/trevor-cli/src/main.ts");
+  const router = read("apps/trevor-cli/src/command-router.ts");
 
   assert.ok(router.includes("COMMAND_SPECS"), "command router owns command metadata");
   assert.equal(/if \(cmd ===/.test(main), false, "main.ts must not own command dispatch branches");
