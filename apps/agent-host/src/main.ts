@@ -28,7 +28,6 @@ import { describeAgent, discoverAgents } from "@host/subagents/discovery";
 import { taskRegistry } from "@host/tools/tasks/tasks";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import { emitLiveLayer } from "@host/transport/services";
 import * as Sentry from "@sentry/node";
 import {
   catalogEntryFor,
@@ -37,7 +36,6 @@ import {
   DEFAULT_SESSION_ID,
   decodeTrevorEvent,
   events,
-  hostIdentity,
   inputEstimateTokens,
   isAnswerableProducer,
   PRODUCER_IDS,
@@ -56,19 +54,12 @@ import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-tr
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { createLocalAdmissionGate } from "./admission/service";
 import { nodeAdmissionCaps } from "./admission/store";
-import { ActiveRun } from "./agent/active-run";
 import { makeCompactionCommands } from "./agent/compaction-commands";
-import { CompactionController } from "./agent/compaction-controller";
 import { makeControlPrompts } from "./agent/control-prompts";
-import { ConversationLog } from "./agent/conversation-log";
 import type { BackgroundChildInfo } from "./agent/delegate";
 import { providerQuestionRuntime } from "./agent/provider-questions";
 import { recallEngine } from "./agent/recall/engine";
 import { createSiblingReader } from "./agent/recall/reader";
-import { makeRunLifecycle } from "./agent/run-lifecycle";
-import { makeStartTurn } from "./agent/start-turn";
-import { TurnMachine } from "./agent/turn-machine";
-import { TurnScheduler } from "./agent/turn-scheduler";
 import { makeLifecycleCommands } from "./commands/lifecycle";
 import { defaultProbeTargets, nodeProbeIo } from "./connectivity/node-io";
 import { InternetMonitor, probeInternet } from "./connectivity/probe";
@@ -91,6 +82,7 @@ import { makeSourceSignIn } from "./providers/source-signin";
 import { createHostResidency } from "./residency/host";
 import { makeSerialRunCommands } from "./serial-run/commands";
 import { makeSessionSwitch } from "./session/session-switch";
+import { makeSessionWorker } from "./session/session-worker";
 import { makeTangentAdoption } from "./session/tangent-adoption";
 import { bootstrapNodeSentry } from "./telemetry/sentry";
 import { registerToolScriptSink } from "./tool-script/sink";
@@ -302,29 +294,13 @@ function releaseWorkspaceCwdLock(): void {
 
 // Single live connection's state (rebuilt from replay on each connect).
 let live = false;
-const conversationLog = new ConversationLog({ selfProducerId: PRODUCER_ID });
 // The turn-dispatch state (active run, deferred FIFO, catch-up watermarks) lives in
-// the TurnScheduler constructed below, not in module mutables.
+// the SessionWorker constructed below, not in module mutables.
 
 /** Publishes one event to the durable log, attaching this host's producerId. */
 function emit(event: TrevorEventInput): Promise<void> {
   return transport.publishEvent(SESSION_ID, toPublishInput(event, PRODUCER_ID));
 }
-
-// The ask_user pending-question runtime publishes its request/resolved events through this host's emit
-// (fire-and-forget). The blocking + answer routing live in the runtime; main.ts only wires the boundary.
-providerQuestionRuntime.configure((event) => {
-  void emit(event);
-});
-
-const turnMachine = new TurnMachine();
-const compactionController = new CompactionController(providers[DEFAULT_PROVIDER]);
-
-const activeRun = new ActiveRun();
-
-// The live Emit service: the turn program's events go to the Tether log via emit(), with the
-// already-completed dedup shared with each adopted tangent (see emitLiveLayer).
-const EmitLive = emitLiveLayer(emit, (runId) => turnMachine.markCompleted(runId));
 
 /** Cache window for the internet probe (D-060): reuse a result for ~30s to avoid constant checks. */
 const INTERNET_CACHE_MS = 30_000;
@@ -405,6 +381,63 @@ let compactPending = false;
  *  cap holds across turns and /doctor can report active children. An entry clears when the child settles. */
 const backgroundChildren = new Map<string, BackgroundChildInfo>();
 
+let needsCompaction: ReturnType<typeof makeCompactionCommands>["needsCompaction"] = () => false;
+let startCompaction: ReturnType<typeof makeCompactionCommands>["startCompaction"] = () => {};
+let manualCompactFiber: ReturnType<typeof makeCompactionCommands>["manualCompactFiber"] = () =>
+  null;
+
+// Main-session worker: owns the shared per-session turn lifecycle objects while main.ts keeps the
+// command, handoff, shell, source-auth, and other main-session-only event branches.
+const mainWorker = makeSessionWorker({
+  sessionId: SESSION_ID,
+  producerId: PRODUCER_ID,
+  instanceId: INSTANCE_ID,
+  transport,
+  providers,
+  residency,
+  internet,
+  lease,
+  hostTelemetry,
+  providerTrace,
+  backgroundChildren,
+  compaction: { needed: () => needsCompaction(), run: () => startCompaction() },
+  manualCompactFiber: () => manualCompactFiber(),
+  activeChildSessionIds: () =>
+    new Set(
+      [...backgroundChildren.values()]
+        .map((child) => child.childSessionId)
+        .filter((id) => id.length > 0),
+    ),
+  pendingQuestionIds: () => providerQuestionRuntime.pendingIds(),
+  onEvent: (message) => handleEvent(message),
+  onReplayComplete: () => {
+    live = true;
+    goLive();
+  },
+  onStatus: (status) => {
+    if (status === "open") {
+      log("host", "joined session", { participant: PARTICIPANT_ID, session: SESSION_ID });
+    } else if (status === "closed") {
+      live = false;
+      log("host", "socket closed; reconnecting", { ms: 1000 });
+    }
+  },
+  autoConnect: false,
+});
+
+const conversationLog = mainWorker.conversationLog;
+const turnMachine = mainWorker.turnMachine;
+const compactionController = mainWorker.compactionController;
+const activeRun = mainWorker.activeRun;
+const scheduler = mainWorker.scheduler;
+const { abortRuns, reapOrphans, reapOrphanSubagents, reapOrphanQuestions } = mainWorker;
+
+// The ask_user pending-question runtime publishes its request/resolved events through this host's emit
+// (fire-and-forget). The blocking + answer routing live in the runtime; main.ts only wires the boundary.
+providerQuestionRuntime.configure((event) => {
+  void mainWorker.emit(event);
+});
+
 // Tangent adoption (plan 37 takeover): the parent host ALSO answers the tangents branched off this
 // session, each in an isolated per-tangent worker (its own log/turn machinery, `startTurn` bound to
 // the tangent id) - never a fork. The manager is session-agnostic; `reconcileTangents` below feeds it
@@ -457,16 +490,19 @@ async function reconcileTangents(): Promise<void> {
 // manualCompactFiber getter), and the fold-progress throttle. Constructed BEFORE the scheduler -
 // whose compaction gate takes needsCompaction/startCompaction below - so the scheduler half is
 // threaded lazily.
-const { needsCompaction, startCompaction, forceCompact, manualCompactFiber } =
-  makeCompactionCommands({
-    producerId: PRODUCER_ID,
-    emit,
-    compactionController,
-    conversationLog,
-    live: () => live,
-    lease,
-    scheduler: () => scheduler,
-  });
+const compactionCommands = makeCompactionCommands({
+  producerId: PRODUCER_ID,
+  emit,
+  compactionController,
+  conversationLog,
+  live: () => live,
+  lease,
+  scheduler: () => scheduler,
+});
+needsCompaction = compactionCommands.needsCompaction;
+startCompaction = compactionCommands.startCompaction;
+manualCompactFiber = compactionCommands.manualCompactFiber;
+const { forceCompact } = compactionCommands;
 
 // The host-issued control prompts + continuation lane (plan 22.3, agent/control-prompts): the
 // control/clip prompt shapes, the continue/retry/compress flows, the /clip lane, and the bounded
@@ -503,66 +539,6 @@ const commandFileDispatch = makeCommandFileDispatch({
   interpolationConfig: resolveInterpolationConfig(process.env),
   publish: publishControlPrompt,
   emitResult: (result) => emit(events.commandResult(result)),
-});
-
-/**
- * The turn machine: owns when turns run (one at a time, deferred FIFO, leader catch-up).
- * Each prompt is recorded through `start`, which admits it to the prompt view and - only
- * when this host is the live leader - forks its turn. On replay the prompt is recorded
- * without being answered.
- */
-const scheduler = new TurnScheduler({
-  isLeader: () => lease.isLeader(),
-  start: (event) => {
-    admit(event);
-    return live ? startTurn(event, conversationLog.historySnapshot()) : null;
-  },
-  compaction: { needed: needsCompaction, run: startCompaction },
-});
-
-// The run close/abort/reap lifecycle (plan 22.3, agent/run-lifecycle): wired over the live turn
-// machine + scheduler and the active-run/manual-compact markers, so handleEvent's user.cancel arm,
-// the lifecycle commands, and the leadership reconciles share one teardown.
-const { abortRuns, reapOrphans, reapOrphanSubagents, reapOrphanQuestions } = makeRunLifecycle({
-  turnMachine,
-  scheduler,
-  emit,
-  runningRunId: () => activeRun.runId(),
-  manualCompactFiber,
-  // The replayed parent log + the child sessions this host is itself running - the subagent reap derives
-  // orphaned running links from the former, excluding the latter (the analogue of the live-run exclusion).
-  parentLog: () => conversationLog.events(),
-  activeChildSessionIds: () =>
-    new Set(
-      [...backgroundChildren.values()]
-        .map((child) => child.childSessionId)
-        .filter((id) => id.length > 0),
-    ),
-  // The ask_user questions this host is itself blocking on, excluded from the question reap the same
-  // way (a live waiter is never an orphan).
-  pendingQuestionIds: () => providerQuestionRuntime.pendingIds(),
-});
-
-// The turn fork (plan 22.3, agent/start-turn): resolves the prompt's provider/model, assembles the
-// delegation + hooks + switch surface, and forks the turn fiber. Constructed after the scheduler -
-// whose `start` closure above resolves the `startTurn` binding at dispatch time (runtime), so the
-// scheduler-first order is TDZ-safe. The active-run/switch markers stay main.ts lets (handleEvent
-// and the run lifecycle read them), threaded as get/set refs.
-const { startTurn } = makeStartTurn({
-  sessionId: SESSION_ID,
-  producerId: PRODUCER_ID,
-  transport,
-  providers,
-  compactionController,
-  residency,
-  internet,
-  lease,
-  hostTelemetry,
-  providerTrace,
-  emitLive: EmitLive,
-  scheduler,
-  backgroundChildren,
-  activeRun,
 });
 
 // The host presence surface (plan 22.3, transport/presence): the git/worktree projections + the
@@ -1251,28 +1227,7 @@ function configureRecall(): void {
 /** Connects to the session stream (replay-then-tail) with simple reconnect. */
 function connect(): void {
   live = false;
-  conversationLog.reset();
-  // Rebuilt from replay; an in-flight turn's active run is left intact (its turn keeps
-  // emitting over REST and its replayed completed clears it - resetting could race a
-  // concurrent turn). The deferred queue + catch-up watermarks are rebuilt from replay.
-  scheduler.resetForReconnect();
-  transport.connectSession({
-    sessionId: SESSION_ID,
-    identity: hostIdentity({ instanceId: INSTANCE_ID, participantId: PARTICIPANT_ID }),
-    onEvent: handleEvent,
-    onReplayComplete: () => {
-      live = true;
-      goLive();
-    },
-    onStatus: (status) => {
-      if (status === "open") {
-        log("host", "joined session", { participant: PARTICIPANT_ID, session: SESSION_ID });
-      } else if (status === "closed") {
-        log("host", "socket closed; reconnecting", { ms: 1000 });
-        setTimeout(connect, 1000);
-      }
-    },
-  });
+  mainWorker.connect();
 }
 
 // Ctrl-C (SIGINT) is a quick exit: tear down child processes (dev servers, watchers) so they aren't

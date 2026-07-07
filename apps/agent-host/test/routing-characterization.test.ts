@@ -181,12 +181,19 @@ test("the startup narrative wires in the characterized order", () => {
 
   const connectAt = MAIN.indexOf("function connect()");
   const connectBody = MAIN.slice(connectAt, MAIN.indexOf("\n}", connectAt));
-  assert.ok(connectBody.includes("onEvent: handleEvent"), "connect() no longer wires handleEvent");
-  const liveAt = connectBody.indexOf("live = true;");
-  const goLiveAt = connectBody.indexOf("goLive();");
+  assert.ok(
+    connectBody.includes("mainWorker.connect();"),
+    "connect() no longer delegates stream wiring to the main session worker",
+  );
+
+  const workerAt = MAIN.indexOf("const mainWorker = makeSessionWorker(");
+  const workerBody = MAIN.slice(workerAt, MAIN.indexOf("\n});", workerAt));
+  assert.ok(workerBody.includes("onEvent: (message) => handleEvent(message)"));
+  const liveAt = workerBody.indexOf("live = true;");
+  const goLiveAt = workerBody.indexOf("goLive();");
   assert.ok(
     liveAt >= 0 && liveAt < goLiveAt,
-    "replay completion must set live before goLive() runs",
+    "worker replay completion must set live before goLive() runs",
   );
 });
 

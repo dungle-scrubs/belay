@@ -4,10 +4,10 @@
 
 - Original audit candidate total: 8
 - Implementation milestones: 10
-- Completed milestones: 3
-- Active blockers: 7
-- Current status: Phase 1 protocol and web read-model boundaries complete; host runtime boundaries are next.
-Current focus: M3. Deepen host session-worker composition for main sessions and tangents.
+- Completed milestones: 4
+- Active blockers: 6
+- Current status: Host session-worker composition now owns shared main and tangent turn lifecycle.
+Current focus: M4. Deepen host tool registration into a composable `ToolRegistry`.
 
 ## Audit Passes
 
@@ -27,7 +27,7 @@ Current focus: M3. Deepen host session-worker composition for main sessions and 
 
 ## Phase 2 - Host Runtime Boundaries
 
-- [ ] M3. Deepen host session-worker composition for main sessions and tangents.
+- [x] M3. Deepen host session-worker composition for main sessions and tangents.
 - [ ] M4. Deepen host tool registration into a composable `ToolRegistry`.
 - [ ] M5. Deepen provider selection and catalog into one model-source resolver.
 
