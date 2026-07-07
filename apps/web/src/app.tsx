@@ -1,8 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  activeTurnRunId,
   DEFAULT_SESSION_ID,
-  foldLucidReview,
   type LoopControl,
   type ModelRef,
   PRODUCER_IDS,
@@ -68,35 +66,13 @@ import { activeMention } from "./composer/active-mention";
 import { type FileIndexAsked, shouldRequestFileIndex } from "./composer/file-index-request";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
 import {
-  catalogFrom,
-  commandsFrom,
-  defaultProviderFrom,
   detectOrphanedSubagents,
   detectOrphanedTurn,
-  hostAnnouncement,
-  hostStatus,
-  isHostlessPendingPrompt,
-  isSessionArchived,
   jobsFrom,
-  lastUserModelFrom,
-  latestSessionSwitch,
-  modelPrefsFrom,
   parseBangShell,
   parseCommand,
-  pendingHandoffFrom,
-  pendingQuestionFrom,
-  providerModelsFrom,
   resolveKnownRoot,
-  sourceSignInFrom,
-  sourcesFrom,
-  tasksFrom,
-  tasksStale,
-  truncate,
-  turnStatusHeaderFrom,
   unreconciledSubagents,
-  vimEnabledFrom,
-  workspaceBasename,
-  worktreesFrom,
 } from "./derive";
 import { type EscState, escapeAction } from "./esc-action";
 import { useActiveModel } from "./hooks/use-active-model";
@@ -110,6 +86,14 @@ import { useScrollFollow } from "./hooks/use-scroll-follow";
 import { useSendQueue } from "./hooks/use-send-queue";
 import { useSlashMenu } from "./hooks/use-slash-menu";
 import { useFileIndex, useWorkspaceFileSearch } from "./hooks/use-workspace-file-search";
+import { createSessionReadModel } from "./session/projection";
+import {
+  selectHostlessPending,
+  selectHostStatus,
+  selectSessionName,
+  selectTabTitle,
+  selectTurnStatusHeader,
+} from "./session/selectors";
 import {
   archiveSession,
   deleteSession,
@@ -123,7 +107,7 @@ import {
   useSessionWithTransport,
   webTabId,
 } from "./session/use-session";
-import { type Message, panelModel, readOnlyToolBatches, toTranscript } from "./transcript";
+import type { Message } from "./transcript";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -299,31 +283,12 @@ export function App() {
   const tabId = useMemo(() => webTabId(), []);
   useDraftPersistence({ storage: window.sessionStorage, tabId, sessionId, draft, setDraft });
   const history = usePromptHistory({ storage: window.sessionStorage, tabId, sessionId });
-  // These scan the whole event log; without memoizing, every keystroke in the draft
-  // input (and the 4s clock tick) would rebuild them. host depends on now; the others
-  // only on events, so they skip the tick.
-  // The durable follow-up queue (plan 47): the transcript hides prompts superseded or still queued
-  // behind an in-flight turn (the queue panel renders those), excluding the host's own echoes.
-  const transcript = useMemo(
-    () => toTranscript(events, { selfProducerId: PRODUCER_IDS.host }),
-    [events],
-  );
-  // Openable artifacts come from BOTH submitted user-message attachments and published Lucid artifacts
-  // (plan 27): a Lucid card opens the addressable viewer, an attachment its plain viewer.
-  const transcriptArtifacts = useMemo(
-    () =>
-      transcript.flatMap((message) =>
-        message.kind === "user"
-          ? message.artifacts
-          : message.kind === "lucid"
-            ? [message.artifact]
-            : [],
-      ),
-    [transcript],
-  );
-  // The folded, per-artifact Lucid review state (delivered feedback + review status), so the panel can
-  // show already-delivered feedback and keep review status in sync across replay/resume.
-  const lucidReview = useMemo(() => foldLucidReview(events), [events]);
+  // The read model owns the full-log folds that app surfaces consume. Raw events remain available for
+  // compatibility paths that still need the event stream during the rest of this plan.
+  const readModel = useMemo(() => createSessionReadModel(events, { replayed }), [events, replayed]);
+  const transcript = readModel.transcript;
+  const transcriptArtifacts = readModel.transcriptArtifacts;
+  const lucidReview = readModel.lucidReview;
   const artifactPanelOpen = artifactPanel?.open ?? false;
   const selectedArtifactId = artifactPanel?.selectedArtifactId ?? null;
   const selectedPanelArtifact = useMemo(
@@ -351,11 +316,8 @@ export function App() {
     };
   }, [selectedPanelArtifact, lucidReview, deliverLucidFeedback, setLucidReview]);
   const switchTarget = useMemo(
-    () =>
-      replayThroughSeq === null
-        ? null
-        : latestSessionSwitch(events, { afterSeq: replayThroughSeq }),
-    [events, replayThroughSeq],
+    () => readModel.switchAfterReplay(replayThroughSeq),
+    [readModel, replayThroughSeq],
   );
   useEffect(() => {
     if (switchTarget && switchTarget !== target) {
@@ -364,41 +326,38 @@ export function App() {
   }, [navigateToSession, switchTarget, target]);
   // Runs of 2+ consecutive read-only tool rows were one concurrent batch (D-050); group them so
   // they render as a single compact block instead of stacked cards.
-  const toolBatches = useMemo(() => readOnlyToolBatches(transcript), [transcript]);
+  const toolBatches = readModel.toolBatches;
   const scroll = useScrollFollow(transcript.length);
-  const awaitingResponse = transcript.at(-1)?.kind === "user";
+  const awaitingResponse = readModel.awaitingResponse;
   const [now, setNow] = useState(() => Date.now());
   useInterval(() => setNow(Date.now()), 4000);
-  const announcement = useMemo(() => hostAnnouncement(events), [events]);
+  const announcement = readModel.announcement;
   const host = useMemo(
-    () => hostStatus(events, presence, now, announcement),
-    [events, presence, now, announcement],
+    () => selectHostStatus(readModel, presence, now),
+    [readModel, presence, now],
   );
   // Reflect WHERE we are in the tab/window title (not a bare "Trevor"): the project name - the
   // host-announced workspace basename when known, else the session-id slug (the `<name>-<hash>` the
   // launcher mints, hash stripped). The default shared session stays plain "Trevor".
   useEffect(() => {
-    const fromSession =
-      target === DEFAULT_SESSION ? null : target.replace(/-[0-9a-f]{8}$/, "") || target;
-    const label = workspaceBasename(host.workspace) ?? fromSession;
-    document.title = label ? `${label} · Trevor` : "Trevor";
+    document.title = selectTabTitle({ workspace: host.workspace }, target, DEFAULT_SESSION);
   }, [host.workspace, target]);
-  const hostModels = useMemo(() => providerModelsFrom(announcement), [announcement]);
+  const hostModels = readModel.providerModels;
   // The host-owned model sources + catalog (D-065): the real provider/runtime/subscription list with
   // auth state and each configured source's live model catalog. Empty until the host's first catalog
   // load re-announces, so the chooser falls back to the roster projection until then.
-  const hostSources = useMemo(() => sourcesFrom(announcement), [announcement]);
-  const hostCatalog = useMemo(() => catalogFrom(announcement), [announcement]);
+  const hostSources = readModel.sources;
+  const hostCatalog = readModel.catalog;
   // The host-owned model preference (plan 51): the durable default + favorites the chooser reads and the
   // fresh-session pick starts on. Empty until a host announces (then default/favorites come from here,
   // not a per-browser blob).
-  const hostModelPrefs = useMemo(() => modelPrefsFrom(announcement), [announcement]);
+  const hostModelPrefs = readModel.modelPrefs;
   // The in-flight source sign-in (D-065 M5): show the verification URL while the flow is active. A
   // device-code flow (Codex) carries a userCode; a browser+paste flow (Anthropic) carries acceptsCode
   // and the user pastes the returned code back. The `starting` phase (emitted the moment the host
   // receives /source-signin) renders as immediate progress - the login can take seconds to produce
   // its URL, and a silent gap reads as a dead button.
-  const signIn = useMemo(() => sourceSignInFrom(events), [events]);
+  const signIn = readModel.signIn;
   const signInStarting = signIn?.phase === "starting";
   const signInDeviceCode =
     signIn?.phase === "device-code" && signIn.verificationUri
@@ -410,15 +369,15 @@ export function App() {
       : null;
   // The host-announced default provider; the initial selection falls back to it when the
   // user hasn't chosen one, rather than to a hardcoded key.
-  const hostDefault = useMemo(() => defaultProviderFrom(announcement), [announcement]);
+  const hostDefault = readModel.defaultProvider;
   // The model/effort this session last ran a turn on (a handoff stamps it onto the first prompt); a
   // fresh session inherits it instead of falling to the host default - the qwen-on-handoff fix (09.1).
-  const lastUserModel = useMemo(() => lastUserModelFrom(events), [events]);
-  const active = useMemo(() => activeTurnRunId(events), [events]);
+  const lastUserModel = readModel.lastUserModel;
+  const active = readModel.activeRunId;
   const busy = active !== null || awaitingResponse;
   // Modal, drawer, inventory, and project scoping state are one App-owned view boundary shared by
   // /resume, /worktree, the left session sidebar, and the right details panel.
-  const worktrees = useMemo(() => worktreesFrom(announcement), [announcement]);
+  const worktrees = readModel.worktrees;
   const modal = useModalState({ worktrees, host, target, sessionId, busy });
   // The single open-picker entry (plan 44.2, D-001): both the sidebar `＋ New session` and the `/new`
   // command call this, so the two entry points can never drift.
@@ -500,17 +459,10 @@ export function App() {
   }, [target, resetSessionLaunch]);
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
-  const archived = useMemo(() => isSessionArchived(events), [events]);
+  const archived = readModel.archived;
   // A short, friendly name for the header strip (D-093): the first user prompt, one line and capped,
   // falling back to the session id before anything has been said.
-  const sessionName = useMemo(() => {
-    const firstUser = transcript.find((m) => m.kind === "user");
-    const text = firstUser && "text" in firstUser ? firstUser.text.trim().replace(/\s+/g, " ") : "";
-    if (!text) {
-      return target;
-    }
-    return truncate(text, 60);
-  }, [transcript, target]);
+  const sessionName = useMemo(() => selectSessionName(readModel, target), [readModel, target]);
   // Web stall guard: a turn left in flight by a host that crashed/restarted mid-turn (or a socket
   // flap that dropped the terminal event) with nothing rejoining to finish it would spin "Working"
   // forever. When no leader host is connected to ever close it, the browser closes it itself - the
@@ -533,21 +485,21 @@ export function App() {
   // host (which then runs the queued prompt via catch-up). It is presentation only; it never publishes.
   const hostlessPending = useMemo(
     () =>
-      isHostlessPendingPrompt(events, {
+      selectHostlessPending(readModel, {
         leaderPresent: host.leaderId !== null,
         connected: status === "open" && replayed,
         now,
         graceMs: ORPHAN_GRACE_MS,
       }),
-    [events, host.leaderId, status, replayed, now],
+    [readModel, host.leaderId, status, replayed, now],
   );
   // The ONE pinned live turn-status header (plan 50): the in-flight status line above the checklist,
   // undefined when no turn is active. `hostlessPending` suppresses it for a prompt stranded with no
   // host (the no-host status line carries that affordance instead), matching the retired working row's
   // gate; it composes elapsed/output-tokens/engine-state from events entirely web-side.
   const turnStatusHeader = useMemo(
-    () => turnStatusHeaderFrom(events, { awaitingResponse: awaitingResponse && !hostlessPending }),
-    [events, awaitingResponse, hostlessPending],
+    () => selectTurnStatusHeader(readModel, { hostlessPending }),
+    [readModel, hostlessPending],
   );
   const reconciledRunRef = useRef<string | null>(null);
   useEffect(() => {
@@ -595,10 +547,10 @@ export function App() {
   const compacting = useMemo(() => transcript.some((m) => m.kind === "compacting"), [transcript]);
 
   // The agent's live task checklist (host-published snapshots), rendered in the header.
-  const tasks = useMemo(() => tasksFrom(events), [events]);
+  const tasks = readModel.tasks;
   // Stale = the model hasn't touched the checklist since the user's last message (it may have moved on
   // to a new topic); drives the panel's "stale" badge + dismiss nudge (09.1).
-  const staleTasks = useMemo(() => tasksStale(events), [events]);
+  const staleTasks = readModel.staleTasks;
   // The support panel's background work (plan 09): promoted jobs the host announces live, and the
   // running subagent delegations from the transcript. Both derived from the live session, never cached.
   // One scan over the events feeds both the panel rows and the job-detail lookup below.
@@ -607,25 +559,22 @@ export function App() {
   const jobs = useMemo(() => jobsFrom(announcement, host.leaderId), [announcement, host.leaderId]);
   const subagents = useMemo(() => runningSubagents(transcript), [transcript]);
   // The pending ask_user question (M5): projected from the log, it takes over the composer until answered.
-  const pendingQuestion = useMemo(() => pendingQuestionFrom(events), [events]);
+  const pendingQuestion = readModel.pendingQuestion;
   // The pending generated handoff (02.10): a `/handoff` draft awaiting approve/edit/reject. Like a
   // question, it takes over the composer until resolved.
-  const pendingHandoff = useMemo(() => pendingHandoffFrom(events), [events]);
+  const pendingHandoff = readModel.pendingHandoff;
   const loopInventoryRows = useLoopInventory(events);
 
   // The SidePanel's whole view-model in one pure selector: live-vs-completed precedence
   // for the Request data (ctx meter + treemap) and the per-category context aggregation,
   // folded from the transcript (+ raw events for the live snapshot). Spread into
   // <SidePanel> below. host depends on `now`; this only on transcript/events.
-  const panel = useMemo(
-    () => panelModel(transcript, events, { replayed }),
-    [transcript, events, replayed],
-  );
+  const panel = readModel.panel;
   // Immediate host commands the host announced, plus the set of names used to tell a
   // command from an ordinary prompt at submit time.
-  const commands = useMemo(() => commandsFrom(announcement), [announcement]);
+  const commands = readModel.commands;
   // The host-owned Vim prompt preference (plan 06): gates the composer + full-surface editor Vim layer.
-  const vimEnabled = useMemo(() => vimEnabledFrom(announcement), [announcement]);
+  const vimEnabled = readModel.vimEnabled;
   const commandSpecs = useMemo(() => {
     const announced = new Set(commands.map((c) => c.name));
     return [...BUILT_IN_COMMANDS.filter((c) => !announced.has(c.name)), ...commands];
