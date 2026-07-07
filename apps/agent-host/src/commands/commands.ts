@@ -196,6 +196,40 @@ function buildJobsCommand(): Command {
   };
 }
 
+function buildJobsDismissCommand(): Command {
+  return {
+    spec: {
+      name: "/jobs-dismiss",
+      summary: "Dismiss a completed background process",
+      usage: "/jobs-dismiss <id>",
+    },
+    select: noContext,
+    run: (args): CommandRunResult => {
+      const id = args.trim();
+      if (!id) {
+        return { text: "usage: /jobs-dismiss <id>", ok: false };
+      }
+      const result = supervisor.dismiss(id);
+      return { text: `${result.id} dismissed` };
+    },
+  };
+}
+
+function buildJobsClearCompletedCommand(): Command {
+  return {
+    spec: {
+      name: "/jobs-clear-completed",
+      summary: "Dismiss completed background processes",
+    },
+    select: noContext,
+    run: () => {
+      const result = supervisor.clearCompleted();
+      const label = result.dismissed === 1 ? "job" : "jobs";
+      return `Dismissed ${result.dismissed} completed ${label}.`;
+    },
+  };
+}
+
 /**
  * `/style [id|reset]` (plan 03): bare renders the output-style chooser as a nested command-menu payload
  * (the web's generic renderer draws it); `/style <id>` (or a menu-row dispatch) selects + persists a
@@ -341,6 +375,8 @@ export function buildCommandRegistry(
   add(buildTrevorExportCommand());
   add(buildVimCommand());
   add(buildJobsCommand());
+  add(buildJobsDismissCommand());
+  add(buildJobsClearCompletedCommand());
   add(buildJobsStopCommand());
   // `/loop` + `/loops`: the host-owned recurring-work command family (plan 17). Both parse authoritatively
   // through the shared parser and return a structured, UI-neutral result.

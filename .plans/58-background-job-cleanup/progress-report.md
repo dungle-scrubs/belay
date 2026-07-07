@@ -1,11 +1,11 @@
 # Background Job Cleanup - Progress Report
 
-Current focus: Phase 2 M2 - Slash Commands
+Current focus: Phase 3 M4 - Support Panel and Detail Actions
 
 ## Summary
 
-- **Current cutoff blockers:** 38
-- **Completed current cutoff:** 10
+- **Current cutoff blockers:** 25
+- **Completed current cutoff:** 23
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -31,25 +31,25 @@ Current focus: Phase 2 M2 - Slash Commands
 
 ### M2: Slash Commands
 
-- [ ] RED: Add command tests for `/jobs-dismiss <id>` against completed, running, and unknown jobs.
-- [ ] GREEN: Add `/jobs-dismiss <id>` wired to `supervisor.dismiss`.
-- [ ] RED: Add command tests for `/jobs-clear-completed` with mixed running/terminal jobs.
-- [ ] GREEN: Add `/jobs-clear-completed` returning a concise count summary.
-- [ ] REFACTOR: Share result text helpers so command output stays consistent with `/jobs-stop`.
+- [x] RED: Add command tests for `/jobs-dismiss <id>` against completed, running, and unknown jobs.
+- [x] GREEN: Add `/jobs-dismiss <id>` wired to `supervisor.dismiss`.
+- [x] RED: Add command tests for `/jobs-clear-completed` with mixed running/terminal jobs.
+- [x] GREEN: Add `/jobs-clear-completed` returning a concise count summary.
+- [x] REFACTOR: Share result text helpers so command output stays consistent with `/jobs-stop`.
 
 ### M3: Process Tool Actions
 
-- [ ] RED: Add process tool tests for `action: "dismiss"` and `action: "clear_completed"`.
-- [ ] GREEN: Extend the process tool schema and executor with the cleanup actions.
-- [ ] RED: Add tests proving running-job dismissal returns a tool error and does not kill the child.
-- [ ] GREEN: Preserve the existing kill-only path for stopping live jobs.
-- [ ] REFACTOR: Update the tool description so the model distinguishes stop, dismiss, and clear-completed.
+- [x] RED: Add process tool tests for `action: "dismiss"` and `action: "clear_completed"`.
+- [x] GREEN: Extend the process tool schema and executor with the cleanup actions.
+- [x] RED: Add tests proving running-job dismissal returns a tool error and does not kill the child.
+- [x] GREEN: Preserve the existing kill-only path for stopping live jobs.
+- [x] REFACTOR: Update the tool description so the model distinguishes stop, dismiss, and clear-completed.
 
 ### Gate 2 to 3
 
-- [ ] Slash command tests pass.
-- [ ] Process tool tests pass.
-- [ ] The model-facing tool description clearly says dismissal is terminal-only.
+- [x] Slash command tests pass.
+- [x] Process tool tests pass.
+- [x] The model-facing tool description clearly says dismissal is terminal-only.
 
 ## Phase 3: Web Dismiss Affordance
 

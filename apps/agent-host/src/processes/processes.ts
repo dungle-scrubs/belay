@@ -17,7 +17,7 @@ export type {
 } from "./process-registry";
 
 const ProcessParams = Schema.Struct({
-  action: Schema.Literal("start", "poll", "kill", "list"),
+  action: Schema.Literal("start", "poll", "kill", "list", "dismiss", "clear_completed"),
   command: Schema.optional(Schema.String).annotations({
     description: "Shell command to start (action=start)",
   }),
@@ -37,7 +37,7 @@ export class ProcessSupervisor extends ProcessRegistry {
     return {
       name: "process",
       description:
-        "Run and manage long-lived background processes (dev servers, watchers, builds). The bash tool blocks until a command finishes; use this for anything meant to keep running. Actions: start {command} -> begins it, returns an id; poll {id, stdoutCursor?, stderrCursor?} -> new output since the cursor plus an updated cursor; kill {id} -> SIGTERM; list -> all jobs.",
+        "Run and manage long-lived background processes (dev servers, watchers, builds). The bash tool blocks until a command finishes; use this for anything meant to keep running. Actions: start {command} -> begins it, returns an id; poll {id, stdoutCursor?, stderrCursor?} -> new output since the cursor plus an updated cursor; kill {id} -> SIGTERM for a running job; dismiss {id} -> remove a completed job from tracking without killing anything; clear_completed -> remove all completed jobs, keeping running jobs; list -> all jobs.",
       params: ProcessParams,
       execute: (args) =>
         Effect.try({
@@ -59,6 +59,10 @@ export class ProcessSupervisor extends ProcessRegistry {
                 );
               case "kill":
                 return JSON.stringify(this.kill(args.id ?? ""));
+              case "dismiss":
+                return JSON.stringify(this.dismiss(args.id ?? ""));
+              case "clear_completed":
+                return JSON.stringify(this.clearCompleted());
               case "list":
                 return JSON.stringify(this.list());
             }

@@ -65,6 +65,57 @@ test("kill on an unknown id surfaces a ProcessError in the E channel", async () 
   assert.ok(err instanceof ProcessError);
 });
 
+test("dismiss removes completed jobs and refuses running jobs in the E channel", async () => {
+  const sup = new ProcessSupervisor();
+  const completed = sup.start("true", process.cwd()).id;
+  const running = sup.start("sleep 5", process.cwd()).id;
+  await sup.awaitExit(completed);
+
+  const out = await Effect.runPromise(
+    sup.buildTool().execute({ action: "dismiss", id: completed, stdoutCursor: 0, stderrCursor: 0 }),
+  );
+  assert.deepEqual(JSON.parse(out), { id: completed, status: "dismissed" });
+  assert.equal(
+    sup.list().find((job) => job.id === completed),
+    undefined,
+  );
+
+  const err = await Effect.runPromise(
+    Effect.flip(
+      sup.buildTool().execute({ action: "dismiss", id: running, stdoutCursor: 0, stderrCursor: 0 }),
+    ),
+  );
+  assert.ok(err instanceof ProcessError);
+  assert.match(err.detail, /stop it first/u);
+  assert.equal(sup.list().find((job) => job.id === running)?.status, "running");
+  sup.killAll();
+});
+
+test("clear_completed removes terminal jobs through the process tool", async () => {
+  const sup = new ProcessSupervisor();
+  const completed = sup.start("true", process.cwd()).id;
+  const killed = sup.start("sleep 5", process.cwd()).id;
+  const running = sup.start("sleep 5", process.cwd()).id;
+  sup.kill(killed);
+  await sup.awaitExit(completed);
+
+  const out = await Effect.runPromise(
+    sup.buildTool().execute({ action: "clear_completed", stdoutCursor: 0, stderrCursor: 0 }),
+  );
+
+  assert.deepEqual(JSON.parse(out), { dismissed: 2 });
+  assert.equal(
+    sup.list().find((job) => job.id === completed),
+    undefined,
+  );
+  assert.equal(
+    sup.list().find((job) => job.id === killed),
+    undefined,
+  );
+  assert.equal(sup.list().find((job) => job.id === running)?.status, "running");
+  sup.killAll();
+});
+
 test("list returns a JSON array of the supervisor's jobs", async () => {
   const sup = new ProcessSupervisor();
   sup.start("true", process.cwd());

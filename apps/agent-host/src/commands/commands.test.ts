@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { supervisor } from "@host/processes/processes";
 import { buildSkillCommand } from "@host/skills/skills";
-import { test } from "vitest";
+import { afterEach, test } from "vitest";
 import { buildCommandRegistry, type CommandContext } from "./commands";
 
 /**
@@ -21,6 +22,11 @@ const baseCtx: CommandContext = {
     role: "leader",
   },
 };
+
+afterEach(() => {
+  supervisor.killAll();
+  supervisor.clearCompleted();
+});
 
 function tree(): string {
   return mkdtempSync(join(tmpdir(), "init-command-"));
@@ -194,6 +200,54 @@ test("/doctor's select threads the MCP rollup through to the snapshot (plan 23 M
   const mcp = areas.find((area) => area.id === "mcp");
   assert.equal(mcp?.status, "warn", "the injected MCP state survives the command's context slice");
   assert.match(mcp?.verdict ?? "", /"linear"/);
+});
+
+test("/jobs-dismiss removes a completed job and refuses running or unknown jobs", async () => {
+  const registry = buildCommandRegistry();
+  const completed = supervisor.start("true", process.cwd()).id;
+  const running = supervisor.start("sleep 5", process.cwd()).id;
+  await supervisor.awaitExit(completed);
+
+  const dismissed = await registry.run("/jobs-dismiss", completed, baseCtx);
+  assert.equal(dismissed.ok, true);
+  assert.equal(dismissed.text, `${completed} dismissed`);
+  assert.equal(
+    supervisor.list().find((job) => job.id === completed),
+    undefined,
+    "dismissed jobs leave /jobs",
+  );
+
+  const runningResult = await registry.run("/jobs-dismiss", running, baseCtx);
+  assert.equal(runningResult.ok, false);
+  assert.match(runningResult.text, /stop it first/u);
+  assert.equal(supervisor.list().find((job) => job.id === running)?.status, "running");
+
+  const unknown = await registry.run("/jobs-dismiss", "nope", baseCtx);
+  assert.equal(unknown.ok, false);
+  assert.match(unknown.text, /no such process "nope"/u);
+});
+
+test("/jobs-clear-completed removes terminal jobs and reports a concise count", async () => {
+  const registry = buildCommandRegistry();
+  const completed = supervisor.start("true", process.cwd()).id;
+  const killed = supervisor.start("sleep 5", process.cwd()).id;
+  const running = supervisor.start("sleep 5", process.cwd()).id;
+  supervisor.kill(killed);
+  await supervisor.awaitExit(completed);
+
+  const result = await registry.run("/jobs-clear-completed", "", baseCtx);
+
+  assert.equal(result.ok, true);
+  assert.equal(result.text, "Dismissed 2 completed jobs.");
+  assert.equal(
+    supervisor.list().find((job) => job.id === completed),
+    undefined,
+  );
+  assert.equal(
+    supervisor.list().find((job) => job.id === killed),
+    undefined,
+  );
+  assert.equal(supervisor.list().find((job) => job.id === running)?.status, "running");
 });
 
 test("a loaded command file is announced as a spec and resolvable via commandFile (44.5 M4)", () => {
