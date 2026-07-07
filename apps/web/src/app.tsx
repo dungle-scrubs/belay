@@ -68,6 +68,7 @@ import { type ActiveTangent, useTangent } from "@/tangent/use-tangent";
 import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
+import { BUILT_IN_COMMANDS } from "./built-in-commands";
 import { activeMention } from "./composer/active-mention";
 import { type FileIndexAsked, shouldRequestFileIndex } from "./composer/file-index-request";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
@@ -122,15 +123,6 @@ const ARTIFACT_PANEL_KEY = "trevor.artifactPanel";
 // wiring; override with ?session=<id> in the URL. The id is owned in @trevor/session so
 // this and the host's SESSION_ID default cannot drift into two different sessions.
 const DEFAULT_SESSION = DEFAULT_SESSION_ID;
-const BUILT_IN_COMMANDS = [
-  // /clear is retired from visible surfaces (plan 58 M4): /new replaces it. The programmatic
-  // /clear handler stays in the host for replay compatibility with legacy sessions.
-  NEW_SESSION_COMMAND,
-  { name: "/cd", summary: "Alias for /new <path>", usage: "/cd <directory>" },
-  { name: "/resume", summary: "Open a prior session (no implicit resume)" },
-  { name: "/worktree", summary: "Switch a Trevor-managed worktree" },
-] as const;
-
 /** Commands that still WORK when typed but are hidden from the slash autocomplete menu (a dev toggle
  *  the host always announces; we don't want it cluttering the picker). Stays in `commandNames` so
  *  `parseCommand` routes it as a command, just filtered out of the menu list. */

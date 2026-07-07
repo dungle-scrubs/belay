@@ -17,6 +17,7 @@ import {
   removeHost,
 } from "./host-registry";
 import { resolveProjectRoot, resolveSession } from "./project";
+import { touchProject } from "./project-registry";
 import {
   classifyService,
   RESERVED_PORTS,
@@ -48,6 +49,8 @@ export interface Reporter {
 export interface LaunchPlatform {
   readonly fs: LauncherFs;
   readonly home: string;
+  /** The config home (TREVOR_HOME) for home-abbreviation in the project registry displayPath. */
+  readonly configHome: string;
   readonly cwd: string;
   /** This launcher process's pid (for the lock owner). */
   readonly pid: number;
@@ -151,6 +154,15 @@ async function launchInner(
   const sessionId =
     options.session?.sessionId ?? resolveSession(platform.fs, platform.home, root, platform.now());
   const url = sessionUrl(sessionId);
+
+  // Touch the project registry (plan 58 M8): so the launched project appears in the sidebar's project
+  // list without waiting for a live host. Best-effort: a registry write failure must never block a
+  // launch (the host can still start; the sidebar just won't show the project until the next touch).
+  try {
+    touchProject(platform.fs, platform.home, root, platform.now(), platform.configHome);
+  } catch {
+    // Swallow: registry persistence is a UI-side concern, not a launch gate.
+  }
 
   // 1. Shared services: probe the reserved ports, start the missing ones (never one set per project),
   //    surface conflicts, and wait for the store before touching the host.

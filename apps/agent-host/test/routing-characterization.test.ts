@@ -98,6 +98,16 @@ const UNROUTED: readonly string[] = [
   "folder.pick.result",
   "projects.list.requested",
   "projects.list.result",
+  // The project-registry side-channel (plan 58 M2): add/rename/collapse/remove requests + results
+  // ride the reserved control session, handled by the supervisor daemon - never by handleEvent.
+  "project.add.requested",
+  "project.add.result",
+  "project.collapse.requested",
+  "project.collapse.result",
+  "project.remove.requested",
+  "project.remove.result",
+  "project.rename.requested",
+  "project.rename.result",
   "session.launch.requested",
   "session.launch.result",
   "session.archived",

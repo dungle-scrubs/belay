@@ -171,3 +171,32 @@ token spaces (`$` vs `!`), see the reconciliation note below.
   interpolated first (author-controlled `!command` sites), then user arguments are substituted into the
   result - so a user-supplied `$0` value containing `!cmd` lands as inert literal text and can never
   introduce an interpolation site.
+
+## Project sidebar vocabulary (`.plans/58-project-sidebar-sessions`)
+
+The left sidebar is a project-first navigation surface. A **project** is a user-visible folder record
+keyed by canonical absolute path, stored as local launcher/supervisor state under `TREVOR_STATE_HOME`
+(not a session-store row, not browser storage). Sessions remain durable session-store logs; project
+membership is a join over the session inventory by each session's resolved project path, never a
+duplicated list stored on the project record.
+
+| Term | Meaning | Notes |
+|---|---|---|
+| **Project registry** | Canonical-path-keyed project metadata (display name, collapsed state, timestamps) with NO session ids. Stored as `project-registry.json` under `TREVOR_STATE_HOME`. | `packages/launcher/src/project-registry.ts`. Replaces the old one-root-one-session `projects.json` (kept only for migration). CRUD lives in the launcher; the supervisor exposes it over the control session. |
+| **Project-scoped session** | A session bound to one immutable project path for its whole life. `/cd` and `/new <path>` create a FRESH session instead of moving the current one. | Fresh context is a real new session, never an in-place clear. The `session.project` marker stamps the binding durably. |
+| **`session.project` marker** | The durable, immutable project-path marker on a session log: wins over `host.online` workspace/cwd for resolving a session's project path. | Plan 58 M3. Lets the sidebar/archive group sessions without a live host. Folded into `SessionSummary.projectPath`. |
+| **Project sidebar read model** | A pure projection: groups active (non-archived, non-deleted, non-tangent) sessions under their project by resolved project path, merging known registry records with transient projects (sessions whose path has no record). | `apps/web/src/sidebar/project-sidebar-model.ts` (`buildProjectSidebar`). The browser owns it; it never scans local state. Lists ALL projects, not just the current one. |
+| **Transient project** | A project with active sessions but no registry record. Surfaced as a group using the path basename as the display name. | Live work stays visible even without a saved record (D-004). |
+| **Archive-only project** | A registry project with no active sessions (all its sessions are archived). The sidebar renders a "View archive" link that opens the archive browser filtered to that project's path. | Plan 58 M7. Delete stays in the archive browser only; the normal sidebar offers Archive, never Delete. |
+
+### Reconciliation with existing terms
+
+- **Project registry is NOT `projects.json`.** The legacy `projects.json` mapped root -> single
+  session id (one stable session per root). The registry stores metadata only (no session ids);
+  membership is derived from the session inventory + `session.project`. The legacy file is read once
+  for migration, then the registry is the source of truth.
+- **`/new` is NOT `/clear`.** `/clear` is retired from visible command surfaces (plan 58 M4); its
+  programmatic host handler stays for replay compatibility with legacy sessions. `/new` (and its alias
+  `/cd <path>`) mint a fresh project-scoped session with a new id and a `session.project` marker.
+- **Project identity is canonical path.** The browser never canonicalizes; the supervisor/launcher
+  returns the canonical path and display path. A normal session has one immutable project path.
