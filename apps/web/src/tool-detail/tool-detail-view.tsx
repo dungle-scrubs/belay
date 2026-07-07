@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { type ToolStatus, toolStatusColor } from "@/components/chat/tool-status";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { DetailBody } from "./detail-body";
 import type { ToolDetailModel } from "./detail-model";
@@ -60,13 +61,15 @@ export function ToolDetailView({
         <h2 className="font-mono text-base font-medium">{model.toolName}</h2>
         <StatusPill status={model.status} aborted={model.aborted} />
         {action ? (
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="xs"
             onClick={action.onClick}
-            className="ml-auto rounded border border-border px-2 py-1 text-label tracking-wider uppercase text-muted-foreground hover:text-foreground"
+            className="ml-auto"
           >
             {action.label}
-          </button>
+          </Button>
         ) : null}
       </header>
 

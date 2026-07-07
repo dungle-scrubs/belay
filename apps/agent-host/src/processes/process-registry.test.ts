@@ -134,6 +134,23 @@ test("clearCompleted removes terminal jobs, keeps running jobs, and triggers one
   assert.equal(changes.length, 1);
 });
 
+test("removed jobs do not re-announce when their child exits later", async () => {
+  const { id } = reg.start("sleep 5", CWD);
+  reg.kill(id);
+  const exited = reg.awaitExit(id);
+  const changes: string[] = [];
+  reg.onChange = () => changes.push("changed");
+
+  reg.clearCompleted();
+  await exited;
+
+  assert.equal(changes.length, 1);
+  assert.equal(
+    reg.list().find((job) => job.id === id),
+    undefined,
+  );
+});
+
 test("successful exited jobs are auto-pruned after the grace period", async () => {
   vi.useFakeTimers();
   const { id } = reg.start("true", CWD);

@@ -148,6 +148,12 @@ export class ProcessRegistry {
     this.onChange?.();
   }
 
+  private dropProcess(proc: ManagedProcess): boolean {
+    this.clearAutoPrune(proc.id);
+    this.processes.delete(proc.id);
+    return isVisible(proc);
+  }
+
   private clearAutoPrune(id: string): void {
     const timer = this.pruneTimers.get(id);
     if (timer) {
@@ -167,9 +173,7 @@ export class ProcessRegistry {
       if (!current || !isSuccessfulExit(current)) {
         return;
       }
-      const visible = isVisible(current);
-      this.processes.delete(proc.id);
-      if (visible) {
+      if (this.dropProcess(current)) {
         this.changedVisible();
       }
     }, ProcessRegistry.SUCCESS_AUTO_PRUNE_MS);
@@ -225,6 +229,9 @@ export class ProcessRegistry {
       proc.exitCode = code;
       proc.signal = signal;
       markDone();
+      if (this.processes.get(proc.id) !== proc) {
+        return;
+      }
       this.scheduleAutoPrune(proc);
       this.changed(proc);
     });
@@ -234,6 +241,9 @@ export class ProcessRegistry {
         proc.status = "exited";
       }
       markDone();
+      if (this.processes.get(proc.id) !== proc) {
+        return;
+      }
       this.changed(proc);
     });
     this.processes.set(id, proc);
@@ -276,10 +286,7 @@ export class ProcessRegistry {
     if (!isTerminal(proc)) {
       throw new ProcessError({ detail: `cannot dismiss running process "${id}"; stop it first` });
     }
-    const visible = isVisible(proc);
-    this.clearAutoPrune(id);
-    this.processes.delete(id);
-    if (visible) {
+    if (this.dropProcess(proc)) {
       this.changedVisible();
     }
     return { id, status: "dismissed" };
@@ -291,9 +298,8 @@ export class ProcessRegistry {
     for (const proc of this.processes.values()) {
       if (isTerminal(proc)) {
         dismissed += 1;
-        changed ||= isVisible(proc);
-        this.clearAutoPrune(proc.id);
-        this.processes.delete(proc.id);
+        const visible = this.dropProcess(proc);
+        changed ||= visible;
       }
     }
     if (changed) {

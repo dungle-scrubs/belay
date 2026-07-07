@@ -113,12 +113,13 @@ test("terminal job rows expose dismiss while running jobs do not", () => {
       job({ id: "p1", status: "running" }),
       job({ id: "p2", status: "exited", exitCode: 0 }),
       job({ id: "p3", status: "killed" }),
+      { ...job({ id: "p4", status: "running" }), interrupted: true },
     ],
   }).background;
 
   assert.deepEqual(
     rows.map((row) => row.dismissEligible),
-    [false, true, true],
+    [false, true, true, false],
   );
 });
 

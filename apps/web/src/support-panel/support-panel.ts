@@ -110,6 +110,10 @@ export function jobOutcome(
   return job.status === "killed" || (job.exitCode ?? 0) !== 0 ? "error" : "done";
 }
 
+export function jobDismissEligible(job: PanelJob): boolean {
+  return !job.interrupted && jobOutcome(job) !== "running";
+}
+
 /**
  * Maps a promoted job to the shared tool-detail model (plan 09 M8 REFACTOR), so a job opens the SAME
  * detail takeover as a transcript tool row. The command + cwd ride the args (the bash detail body reads
@@ -193,6 +197,6 @@ function jobRow(job: PanelJob): SupportBackgroundRow {
     statusLabel,
     tone,
     detailEligible: true,
-    dismissEligible: tone !== "running",
+    dismissEligible: jobDismissEligible(job),
   };
 }

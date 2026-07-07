@@ -54,7 +54,11 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
-import { jobToDetailModel, runningSubagents } from "@/support-panel/support-panel";
+import {
+  jobDismissEligible,
+  jobToDetailModel,
+  runningSubagents,
+} from "@/support-panel/support-panel";
 import { type FoldBackContent, foldBackPreview } from "@/tangent/foldback";
 import { LiveTangentShell } from "@/tangent/live-tangent-shell";
 import { TangentDiscovery } from "@/tangent/tangent-discovery";
@@ -762,18 +766,21 @@ export function App() {
   // A promoted background job's detail takeover (plan 09 M8): hold the job id and re-derive its detail
   // model from the live job snapshots, so the takeover updates as the host re-announces (run -> exit).
   const [jobDetailId, setJobDetailId] = useState<string | null>(null);
-  const jobDetail = useMemo(() => {
+  const jobDetailJob = useMemo(() => {
     if (jobDetailId === null) {
       return null;
     }
-    const snap = jobs.find((j) => j.id === jobDetailId);
-    return snap ? jobToDetailModel(snap) : null;
+    return jobs.find((j) => j.id === jobDetailId) ?? null;
   }, [jobDetailId, jobs]);
+  const jobDetail = useMemo(
+    () => (jobDetailJob ? jobToDetailModel(jobDetailJob) : null),
+    [jobDetailJob],
+  );
   useEffect(() => {
-    if (jobDetailId !== null && !jobs.some((job) => job.id === jobDetailId)) {
+    if (jobDetailId !== null && jobDetailJob === null) {
       setJobDetailId(null);
     }
-  }, [jobDetailId, jobs]);
+  }, [jobDetailId, jobDetailJob]);
   // The full-surface prompt editor (02.12): a takeover for editing long prompts with room. The composer
   // expand button opens the current draft here; 02.10's generated-handoff edit opens it programmatically.
   const editor = usePromptEditor();
@@ -1310,7 +1317,7 @@ export function App() {
         model={jobDetail}
         onBack={closeJobDetail}
         action={
-          jobDetail.status === "running"
+          jobDetailJob === null || !jobDismissEligible(jobDetailJob)
             ? undefined
             : { label: "Dismiss job", onClick: () => onDismissJob(jobDetail.id) }
         }
