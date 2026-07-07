@@ -14,8 +14,8 @@ import { isCompactEligible } from "@/components/chat/compact-display";
 import { compactLeadingGaps } from "@/components/chat/compact-spacing";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { cn } from "@/lib/utils";
-import { atBottomOf, liveEdgeOffset } from "@/scroll";
-import type { ScrollFollowController, ScrollWriter } from "@/scroll-follow";
+import { atBottomOf } from "@/scroll";
+import type { ScrollFollowController } from "@/scroll-follow";
 import type { Message } from "../../transcript";
 import { type TranscriptRow, transcriptRowKey } from "../../transcript-rows";
 
@@ -254,28 +254,26 @@ export function VirtualTranscript({
   // `writer` label names which effect asked, for the controller's dev-only denied-write log. Explicit
   // jump-to-bottom (`scrollToBottomRequest`) stays on `scrollToLiveEdge` - it re-pins first.
   const followLiveEdge = useCallback(
-    (writer: ScrollWriter, behavior: ScrollBehavior = "auto") => {
-      const scrollElement = scrollRef.current;
-      const decision = scrollElement
-        ? controller.requestWrite("follow", {
-            writer,
-            resultingOffset: liveEdgeOffset(scrollElement),
-            scrollHeight: scrollElement.scrollHeight,
-            clientHeight: scrollElement.clientHeight,
-          })
-        : controller.requestWrite("follow", { writer });
-      if (decision.allowed) {
+    (behavior: ScrollBehavior = "auto") => {
+      // Only check the pin gate here — do NOT record a ledger entry. The virtualizer's scrollToFn
+      // (called inside scrollToLiveEdge → virtualizer.scrollToEnd) issues the actual scroll and records
+      // the real target offset. Recording a predicted offset here that doesn't match the actual scroll
+      // target creates a ledger mismatch: the scroll event lands at a different offset, fails to match
+      // the ledger, and is misread as user movement (causing an unpin). This was the root cause of the
+      // scroll not following when tool-call rows were added (their size estimate is badly wrong until
+      // measured, so the virtualizer's scroll target diverged from liveEdgeOffset).
+      if (controller.mayFollow()) {
         scrollToLiveEdge(behavior);
       }
     },
-    [controller, scrollRef, scrollToLiveEdge],
+    [controller, scrollToLiveEdge],
   );
   const totalSize = virtualizer.getTotalSize();
 
   useLayoutEffect(() => {
     const last = rows.at(-1)?.id ?? null;
     if (last !== lastRowIdRef.current) {
-      followLiveEdge("append");
+      followLiveEdge();
     }
     lastRowIdRef.current = last;
   });
@@ -284,7 +282,7 @@ export function VirtualTranscript({
     if (!pinned) {
       return;
     }
-    const frame = requestAnimationFrame(() => followLiveEdge("pinned-change"));
+    const frame = requestAnimationFrame(() => followLiveEdge());
     return () => cancelAnimationFrame(frame);
   }, [pinned, followLiveEdge]);
 
@@ -329,7 +327,7 @@ export function VirtualTranscript({
           setReadyToReveal(true);
           return;
         }
-        followLiveEdge("settle-loop");
+        followLiveEdge();
         setSettleTick((tick) => tick + 1);
       });
     });
@@ -357,7 +355,7 @@ export function VirtualTranscript({
     if (!pinned) {
       return;
     }
-    const frame = requestAnimationFrame(() => followLiveEdge("post-ready"));
+    const frame = requestAnimationFrame(() => followLiveEdge());
     return () => cancelAnimationFrame(frame);
   }, [pinned, readyToReveal, followLiveEdge]);
 
@@ -372,8 +370,8 @@ export function VirtualTranscript({
     }
     let secondFrame: number | null = null;
     const frame = requestAnimationFrame(() => {
-      followLiveEdge("total-size");
-      secondFrame = requestAnimationFrame(() => followLiveEdge("total-size"));
+      followLiveEdge();
+      secondFrame = requestAnimationFrame(() => followLiveEdge());
     });
     return () => {
       cancelAnimationFrame(frame);

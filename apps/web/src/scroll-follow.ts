@@ -109,6 +109,12 @@ export interface ScrollFollowController {
   repin(reason: "jump" | "submit"): void;
   /** Ask whether a programmatic scroll write may run, and record it for self-write recognition. */
   requestWrite(writeClass: WriteClass, options: RequestWriteOptions): WriteDecision;
+  /** Check whether a follow-class write would be allowed RIGHT NOW (the pin gate), WITHOUT recording a
+   *  ledger entry. Use this when the caller will NOT perform the scroll itself - the virtualizer's
+   *  scrollToFn will issue the real scroll and record its own offset. Recording a phantom offset here
+   *  that doesn't match the actual scroll target creates a ledger mismatch: the scroll event lands at
+   *  a different offset, fails to match the ledger, and is misread as user movement (causing an unpin). */
+  mayFollow(): boolean;
 }
 
 /** Sub-pixel slack: scroll positions within this many px count as "the same place" (rounding, clamping). */
@@ -352,5 +358,6 @@ export function createScrollFollowController(
     scrolled,
     repin,
     requestWrite,
+    mayFollow: () => pinned,
   };
 }

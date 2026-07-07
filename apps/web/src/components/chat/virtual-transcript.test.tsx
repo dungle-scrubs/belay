@@ -273,7 +273,9 @@ describe("VirtualTranscript", () => {
 
   test("does not follow the live edge on appended rows while unpinned", async () => {
     // jsdom has no real geometry (scrollHeight 0), so a yank and a benign top-anchored compensation both
-    // target scrollTop 0 - the meaningful signal is that NO follow write is APPROVED while unpinned. The
+    // target scrollTop 0 - the meaningful signal is that NO follow write reaches the virtualizer's
+    // scrollToFn while unpinned. followLiveEdge checks mayFollow() (the pin gate) without recording a
+    // ledger entry, so a denied follow while unpinned never calls scrollToLiveEdge at all. The
     // real-position "no yank" assertion lives in the Lane B e2e specs.
     const controller = createScrollFollowController();
     controller.gesture("up"); // the user has scrolled up
@@ -297,8 +299,6 @@ describe("VirtualTranscript", () => {
       0,
       "append while unpinned must not approve a follow write to the live edge",
     );
-    // The append effect DID ask the controller (and was denied): the writer is named for the dev log.
-    assert.equal(controller.snapshot().lastDeniedWrite?.writeClass, "follow");
   });
 
   test("abandons auto-follow once the user unpins, even as rows keep appending", async () => {
