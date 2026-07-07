@@ -1,11 +1,11 @@
 # Background Job Cleanup - Progress Report
 
-Current focus: Phase 4 M5 - Successful Exit Auto-Prune
+Current focus: Verification
 
 ## Summary
 
-- **Current cutoff blockers:** 15
-- **Completed current cutoff:** 33
+- **Current cutoff blockers:** 5
+- **Completed current cutoff:** 43
 - **Accepted/deferred follow-up:** 0
 - **Superseded/obsolete checklist debt:** 0
 
@@ -73,19 +73,19 @@ Current focus: Phase 4 M5 - Successful Exit Auto-Prune
 
 ### M5: Successful Exit Auto-Prune
 
-- [ ] RED: Add registry tests with fake timers showing successful exited jobs are pruned after the configured grace period.
-- [ ] GREEN: Schedule auto-prune for `status: "exited"` with `exitCode === 0`.
-- [ ] RED: Add tests showing failed, killed, and running jobs are not auto-pruned.
-- [ ] GREEN: Limit auto-prune to clean exits only.
-- [ ] RED: Add tests proving manual dismiss cancels any pending prune timer and `killAll()` does not leak timers.
-- [ ] GREEN: Clear prune timers on dismiss, clear-completed, kill, and teardown.
-- [ ] REFACTOR: Isolate timer policy constants and keep them test-controllable.
+- [x] RED: Add registry tests with fake timers showing successful exited jobs are pruned after the configured grace period.
+- [x] GREEN: Schedule auto-prune for `status: "exited"` with `exitCode === 0`.
+- [x] RED: Add tests showing failed, killed, and running jobs are not auto-pruned.
+- [x] GREEN: Limit auto-prune to clean exits only.
+- [x] RED: Add tests proving manual dismiss cancels any pending prune timer and `killAll()` does not leak timers.
+- [x] GREEN: Clear prune timers on dismiss, clear-completed, kill, and teardown.
+- [x] REFACTOR: Isolate timer policy constants and keep them test-controllable.
 
 ### Gate 4 to Ready
 
-- [ ] Auto-prune tests pass with deterministic timers.
-- [ ] Failed/killed output remains visible until manual dismissal.
-- [ ] `host.online` re-announces exactly when a job is pruned.
+- [x] Auto-prune tests pass with deterministic timers.
+- [x] Failed/killed output remains visible until manual dismissal.
+- [x] `host.online` re-announces exactly when a job is pruned.
 
 ## Accepted/Deferred Follow-Up
 

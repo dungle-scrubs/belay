@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { afterEach, test } from "vitest";
+import { afterEach, test, vi } from "vitest";
 import { type JobOrigin, ProcessRegistry } from "./process-registry";
 
 /**
@@ -17,6 +17,7 @@ afterEach(() => {
   reg.killAll();
   reg.clearCompleted();
   reg.onChange = undefined;
+  vi.useRealTimers();
 });
 
 const bashOrigin: JobOrigin = { source: "bash", runId: "r1", callId: "c1" };
@@ -131,4 +132,61 @@ test("clearCompleted removes terminal jobs, keeps running jobs, and triggers one
   );
   assert.equal(reg.list().find((j) => j.id === running)?.status, "running");
   assert.equal(changes.length, 1);
+});
+
+test("successful exited jobs are auto-pruned after the grace period", async () => {
+  vi.useFakeTimers();
+  const { id } = reg.start("true", CWD);
+  await waitForExit(id);
+  const changes: string[] = [];
+  reg.onChange = () => changes.push("changed");
+
+  await vi.advanceTimersByTimeAsync(ProcessRegistry.SUCCESS_AUTO_PRUNE_MS - 1);
+  assert.ok(
+    reg.list().some((job) => job.id === id),
+    "job remains visible during the grace period",
+  );
+
+  await vi.advanceTimersByTimeAsync(1);
+
+  assert.equal(
+    reg.list().find((job) => job.id === id),
+    undefined,
+  );
+  assert.equal(
+    reg.snapshots().find((snapshot) => snapshot.id === id),
+    undefined,
+  );
+  assert.equal(changes.length, 1);
+});
+
+test("auto-prune keeps failed, killed, and running jobs", async () => {
+  vi.useFakeTimers();
+  const failed = reg.start("false", CWD).id;
+  const killed = reg.start("sleep 5", CWD).id;
+  const running = reg.start("sleep 5", CWD).id;
+  reg.kill(killed);
+  await waitForExit(failed);
+
+  await vi.advanceTimersByTimeAsync(ProcessRegistry.SUCCESS_AUTO_PRUNE_MS);
+
+  assert.equal(reg.list().find((job) => job.id === failed)?.status, "exited");
+  assert.equal(reg.list().find((job) => job.id === killed)?.status, "killed");
+  assert.equal(reg.list().find((job) => job.id === running)?.status, "running");
+});
+
+test("manual cleanup cancels pending auto-prune timers", async () => {
+  vi.useFakeTimers();
+  const dismissed = reg.start("true", CWD).id;
+  const cleared = reg.start("true", CWD).id;
+  const killed = reg.start("true", CWD).id;
+  await waitForExit(dismissed);
+  await waitForExit(cleared);
+  await waitForExit(killed);
+
+  reg.dismiss(dismissed);
+  reg.clearCompleted();
+  reg.killAll();
+
+  assert.equal(vi.getTimerCount(), 0);
 });

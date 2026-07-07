@@ -127,7 +127,10 @@ export interface DismissResult {
 }
 
 export class ProcessRegistry {
+  static readonly SUCCESS_AUTO_PRUNE_MS = 30_000;
+
   private readonly processes = new Map<string, ManagedProcess>();
+  private readonly pruneTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private seq = 0;
   /** Called after a *visible* job changes (a `process` start or a promoted command: start / exit / kill /
    *  promote / remove), so the host re-announces its job snapshots and the support panel updates live
@@ -143,6 +146,35 @@ export class ProcessRegistry {
 
   private changedVisible(): void {
     this.onChange?.();
+  }
+
+  private clearAutoPrune(id: string): void {
+    const timer = this.pruneTimers.get(id);
+    if (timer) {
+      clearTimeout(timer);
+      this.pruneTimers.delete(id);
+    }
+  }
+
+  private scheduleAutoPrune(proc: ManagedProcess): void {
+    this.clearAutoPrune(proc.id);
+    if (!isSuccessfulExit(proc)) {
+      return;
+    }
+    const timer = setTimeout(() => {
+      this.pruneTimers.delete(proc.id);
+      const current = this.processes.get(proc.id);
+      if (!current || !isSuccessfulExit(current)) {
+        return;
+      }
+      const visible = isVisible(current);
+      this.processes.delete(proc.id);
+      if (visible) {
+        this.changedVisible();
+      }
+    }, ProcessRegistry.SUCCESS_AUTO_PRUNE_MS);
+    timer.unref?.();
+    this.pruneTimers.set(proc.id, timer);
   }
 
   start(command: string, cwd: string, origin?: JobOrigin): { id: string; status: ProcessStatus } {
@@ -193,6 +225,7 @@ export class ProcessRegistry {
       proc.exitCode = code;
       proc.signal = signal;
       markDone();
+      this.scheduleAutoPrune(proc);
       this.changed(proc);
     });
     child.on("error", (error) => {
@@ -228,6 +261,7 @@ export class ProcessRegistry {
         // already gone
       }
     }
+    this.clearAutoPrune(id);
     this.processes.delete(id);
     if (proc) {
       this.changed(proc);
@@ -243,6 +277,7 @@ export class ProcessRegistry {
       throw new ProcessError({ detail: `cannot dismiss running process "${id}"; stop it first` });
     }
     const visible = isVisible(proc);
+    this.clearAutoPrune(id);
     this.processes.delete(id);
     if (visible) {
       this.changedVisible();
@@ -257,6 +292,7 @@ export class ProcessRegistry {
       if (isTerminal(proc)) {
         dismissed += 1;
         changed ||= isVisible(proc);
+        this.clearAutoPrune(proc.id);
         this.processes.delete(proc.id);
       }
     }
@@ -301,6 +337,7 @@ export class ProcessRegistry {
     }
     if (proc.status === "running") {
       proc.status = "killed";
+      this.clearAutoPrune(id);
       try {
         proc.child.kill("SIGTERM");
       } catch {
@@ -357,6 +394,7 @@ export class ProcessRegistry {
 
   killAll(): void {
     for (const proc of this.processes.values()) {
+      this.clearAutoPrune(proc.id);
       if (proc.status === "running") {
         proc.status = "killed";
         try {
@@ -377,6 +415,10 @@ function isVisible(proc: ManagedProcess): boolean {
 
 function isTerminal(proc: ManagedProcess): boolean {
   return proc.status !== "running";
+}
+
+function isSuccessfulExit(proc: ManagedProcess): boolean {
+  return proc.status === "exited" && proc.exitCode === 0;
 }
 
 /** The bounded combined-output tail a snapshot carries: stdout then stderr, capped to the last few KB. */
