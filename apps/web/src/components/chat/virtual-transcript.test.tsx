@@ -461,6 +461,26 @@ describe("VirtualTranscript", () => {
     assert.equal(container.querySelector(".-mt-6"), null);
   });
 
+  test("regular mode keeps full space after the last tool before assistant markdown", async () => {
+    const rows = [
+      toolRow(1, false),
+      toolRow(2, true),
+      assistantRow("a-after-tools", "Yes - the tool returned rows."),
+      toolRow(3, false),
+      toolRow(4, true),
+    ];
+    const { container } = render(<Harness rows={rows} compact={false} />);
+
+    await waitFor(() => {
+      assert.ok(container.querySelector('[data-index="4"]'), "all rows mounted");
+    });
+
+    assert.ok(container.querySelector('[data-index="0"]')?.classList.contains("pb-2"));
+    assert.ok(container.querySelector('[data-index="1"]')?.classList.contains("pb-8"));
+    assert.ok(container.querySelector('[data-index="2"]')?.classList.contains("pb-8"));
+    assert.ok(container.querySelector('[data-index="3"]')?.classList.contains("pb-2"));
+  });
+
   test("toggling compact mode mid-stream (streaming + running rows) keeps every row mounted", async () => {
     const rows = liveRows();
     const { container, rerender } = render(<Harness rows={rows} compact={false} />);

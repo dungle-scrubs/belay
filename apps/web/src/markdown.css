@@ -5,6 +5,8 @@
   /* Never inherit a pre-wrap ancestor: marked emits newlines between block tags
      that would otherwise render as stray blank lines. */
   white-space: normal;
+  color: hsl(var(--foreground) / 0.82);
+  line-height: 1.65;
 }
 
 /* The reasoning ("thinking") trace: same markdown, rendered dim + italic. */
@@ -15,55 +17,88 @@
   font-size: 0.85rem;
 }
 
-/* Collapse outer margins so a message bubble doesn't gain stray top/bottom gaps. */
-.trevor-md > :first-child,
-.trevor-md__html > :first-child {
-  margin-top: 0;
+.trevor-md
+  :where(
+    p,
+    ul,
+    ol,
+    blockquote,
+    pre,
+    table,
+    hr,
+    h1,
+    h2,
+    h3,
+    h4,
+    h5,
+    h6,
+    .trevor-md-codeblock,
+    .trevor-md-table-scroll
+  ) {
+  margin-block: 0;
 }
-.trevor-md > :last-child,
-.trevor-md__html > :last-child {
-  margin-bottom: 0;
+
+.trevor-md__html > * + *,
+.trevor-md > * + * {
+  margin-top: 1em;
 }
 
 .trevor-md p {
-  margin: 0.5em 0;
+  margin-inline: 0;
 }
 
 .trevor-md ul,
 .trevor-md ol {
-  margin: 0.5em 0;
-  padding-left: 1.4em;
+  padding-left: 0;
 }
 /* Tailwind's preflight resets every list to `list-style: none`, so restore the markers - otherwise a
    markdown numbered or bulleted list (in a user OR assistant message) renders with no numbers/bullets. */
 .trevor-md ul {
-  list-style: disc outside;
+  list-style: none;
 }
 .trevor-md ol {
-  list-style: decimal outside;
+  list-style: none;
+  counter-reset: trevor-md-list;
 }
 .trevor-md li {
-  margin: 0.15em 0;
+  position: relative;
+  margin: 0.2em 0 0;
+  padding-left: 1.45em;
+}
+.trevor-md li:first-child {
+  margin-top: 0;
+}
+.trevor-md li > ul,
+.trevor-md li > ol {
+  margin-top: 0.35em;
+}
+.trevor-md ul > li::before {
+  position: absolute;
+  left: 0.25em;
+  content: "•";
+  color: hsl(var(--muted-foreground));
+}
+.trevor-md ol > li {
+  counter-increment: trevor-md-list;
+}
+.trevor-md ol > li::before {
+  position: absolute;
+  left: 0;
+  width: 1em;
+  color: hsl(var(--muted-foreground));
+  content: counter(trevor-md-list) ".";
+  text-align: right;
 }
 
 .trevor-md h1,
 .trevor-md h2,
 .trevor-md h3,
-.trevor-md h4 {
-  margin: 0.8em 0 0.4em;
-  line-height: 1.25;
-}
-.trevor-md h1 {
-  font-size: 1.4em;
-}
-.trevor-md h2 {
-  font-size: 1.25em;
-}
-.trevor-md h3 {
-  font-size: 1.1em;
-}
-.trevor-md h4 {
+.trevor-md h4,
+.trevor-md h5,
+.trevor-md h6 {
   font-size: 1em;
+  font-weight: 700;
+  line-height: 1.25;
 }
 
 .trevor-md code {
@@ -74,7 +109,6 @@
   border-radius: 4px;
 }
 .trevor-md pre {
-  margin: 0.6em 0;
   padding: 0.7em 0.85em;
   background: #f6f6f7;
   border: 1px solid #ececed;
@@ -160,7 +194,6 @@
 
 .trevor-md-codeblock {
   position: relative;
-  margin: 0.6em 0;
 }
 
 .trevor-md-codeblock pre {
@@ -203,14 +236,12 @@
 }
 
 .trevor-md blockquote {
-  margin: 0.6em 0;
   padding: 0.1em 0 0.1em 0.8em;
   border-left: 3px solid #ddd;
   color: #666;
 }
 
 .trevor-md-table-scroll {
-  margin: 0.6em 0;
   max-width: 100%;
   overflow-x: auto;
 }
@@ -235,7 +266,6 @@
   max-width: 100%;
 }
 .trevor-md hr {
-  margin: 0.8em 0;
   border: none;
   border-top: 1px solid #e3e3e3;
 }

@@ -106,6 +106,55 @@ const routes = ["mermaid", "highlight", "plain"] as const;
 
 See [the renderer](https://example.com) and the \`markdown.css\` tokens.`;
 
+const FULL_MARKDOWN = `# Evidence
+
+Trevor already has the core job registry, and this paragraph checks the default prose color, line height, wrapping, **strong text**, *emphasis*, \`inline code\`, and [links](https://example.com).
+
+## Existing behavior
+
+- Host tracks promoted and direct background jobs in memory.
+- On exit it marks the status and re-announces the job.
+- Snapshots include terminal jobs.
+
+### Plan scope
+
+1. Add host-owned terminal job cleanup primitives.
+2. Expose cleanup through command surfaces.
+3. Add a direct UI affordance.
+
+#### Nested list alignment
+
+- Process registry
+  - \`dismiss(id)\` removes exited or killed jobs.
+  - \`clearCompleted()\` keeps running jobs.
+- Transcript UI
+  1. Finished rows show dismiss.
+  2. Running rows keep stop.
+
+##### Blockquote
+
+> Manual dismiss remains the deterministic cleanup path, while successful jobs can prune themselves after a short grace period.
+
+###### Table
+
+| Surface | Behavior | Status |
+| --- | --- | --- |
+| Host | Tracks jobs | Ready |
+| Commands | Dismisses terminal jobs | Ready |
+| UI | Shows the affordance | Ready |
+
+---
+
+\`\`\`ts
+type CleanupAction = "dismiss" | "clear_completed";
+
+export function canDismiss(status: "running" | "exited" | "killed") {
+  return status !== "running";
+}
+\`\`\`
+
+Closing paragraph after the code block, so the full vertical rhythm can be checked in one scan.`;
+
 const LONG = `A long block scrolls vertically inside the code chrome:
 
 \`\`\`ts
@@ -129,6 +178,14 @@ export const TypeScript: Story = {
   render: () => (
     <Frame>
       <MarkdownBody text={TYPESCRIPT} />
+    </Frame>
+  ),
+};
+
+export const FullMarkdown: Story = {
+  render: () => (
+    <Frame>
+      <MarkdownBody text={FULL_MARKDOWN} />
     </Frame>
   ),
 };

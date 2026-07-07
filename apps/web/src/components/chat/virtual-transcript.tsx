@@ -104,6 +104,15 @@ function repeatsPreviousTool(row: TranscriptRow, previous: TranscriptRow | undef
   );
 }
 
+function isAdjacentToolPair(row: TranscriptRow, next: TranscriptRow | undefined): boolean {
+  return (
+    row.kind === "message" &&
+    next?.kind === "message" &&
+    row.message.kind === "tool" &&
+    next.message.kind === "tool"
+  );
+}
+
 // The compact-mode trailing gap after a row (plan 58): rows sharing a type key sit flush (`pb-1`); a
 // type change opens exactly one blank line (`pb-6`). The px values mirror those Tailwind classes, and
 // `COMPACT_GAP_DELTA` is the extra height a gap-opening row adds to its size estimate so the pre-measure
@@ -391,12 +400,14 @@ export function VirtualTranscript({
         // rows sits flush (`pb-1`) and a type change opens exactly one blank line (`pb-6`), driven by
         // `compactLeadingGaps` - so read-only tools group, same-name tools group, and MCP/other types
         // each separate. Outside compact mode the historical spacing holds: a full gap, tightened only
-        // for the existing consecutive read-only tool case (`compactAbove`).
+        // between adjacent tool rows. The old `compactAbove` check described the current row's previous
+        // neighbor, which accidentally kept the row after a tool tight even when the next row was assistant
+        // markdown.
         const padClass = compact
           ? compactGaps?.[item.index + 1]
             ? COMPACT_GAP_PB
             : COMPACT_FLUSH_PB
-          : row.kind === "message" && row.compactAbove
+          : isAdjacentToolPair(row, rows[item.index + 1])
             ? "pb-2"
             : "pb-8";
         return (

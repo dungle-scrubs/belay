@@ -228,7 +228,7 @@ export function ToolCall({
   }
 
   return (
-    <Collapsible defaultOpen={defaultOpen} className={cn("flex flex-col gap-1", className)}>
+    <Collapsible defaultOpen={defaultOpen} className={cn("flex flex-col gap-2", className)}>
       <ToolCallRow
         name={name}
         args={args}
