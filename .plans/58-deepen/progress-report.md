@@ -4,10 +4,10 @@
 
 - Original audit candidate total: 8
 - Implementation milestones: 10
-- Completed milestones: 1
-- Active blockers: 9
-- Current status: planner state normalized; plan docs are committed to `main`; source implementation is ready to start.
-Current focus: M1. Deepen `@trevor/session` protocol into a registry-backed event grammar.
+- Completed milestones: 2
+- Active blockers: 8
+- Current status: M1 protocol boundary complete; web read-model implementation is next.
+Current focus: M2. Deepen web event-log projection into session read models and selectors.
 
 ## Audit Passes
 
@@ -22,7 +22,7 @@ Current focus: M1. Deepen `@trevor/session` protocol into a registry-backed even
 
 ## Phase 1 - Protocol And Read-Model Foundations
 
-- [ ] M1. Deepen `@trevor/session` protocol into a registry-backed event grammar.
+- [x] M1. Deepen `@trevor/session` protocol into a registry-backed event grammar.
 - [ ] M2. Deepen web event-log projection into session read models and selectors.
 
 ## Phase 2 - Host Runtime Boundaries
