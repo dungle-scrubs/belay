@@ -12,6 +12,12 @@ const COMMANDS: CommandSpec[] = [
   { name: "/help", summary: "List available commands" },
 ];
 
+/** A synthetic 40-command set to exercise the shared `AutocompleteMenu` height cap. */
+const MANY_COMMANDS: CommandSpec[] = Array.from({ length: 40 }, (_, i) => ({
+  name: `/cmd-${String(i).padStart(2, "0")}`,
+  summary: `Synthetic command ${i} to exercise the shared height cap`,
+}));
+
 const meta: Meta = {
   title: "Chat/CommandMenu",
   parameters: { layout: "padded" },
@@ -118,15 +124,9 @@ export const Highlighted: Story = {
  * holds for both.
  */
 export const Overflow: Story = {
-  render: () => {
-    const many: CommandSpec[] = Array.from({ length: 40 }, (_, i) => ({
-      name: `/cmd-${String(i).padStart(2, "0")}`,
-      summary: `Synthetic command ${i} to exercise the shared height cap`,
-    }));
-    return (
-      <div className="mx-auto w-[34rem] max-w-full">
-        <CommandMenu matches={many} activeIndex={0} query="" onPick={() => {}} />
-      </div>
-    );
-  },
+  render: () => (
+    <div className="mx-auto w-[34rem] max-w-full">
+      <CommandMenu matches={MANY_COMMANDS} activeIndex={0} query="" onPick={() => {}} />
+    </div>
+  ),
 };

@@ -9,11 +9,11 @@ const ROWS = Array.from({ length: 40 }, (_, i) => ({
 
 /**
  * The height cap is a structural contract (jsdom does not compute layout, so scrollHeight is
- * unavailable): the row listbox lives inside a bounded `overflow-y-auto` container, and the summary
- * footer is a SIBLING outside that container so it stays pinned below the scroll area.
+ * unavailable): the listbox itself is the capped `overflow-y-auto` scroll container, and the summary
+ * footer is a SIBLING outside it so it stays pinned below the scroll area.
  */
 describe("AutocompleteMenu height cap", () => {
-  test("wraps the listbox in a bounded overflow-y-auto scroll container", () => {
+  test("the listbox is a bounded overflow-y-auto scroll container", () => {
     render(
       <AutocompleteMenu
         rows={ROWS}
@@ -24,13 +24,12 @@ describe("AutocompleteMenu height cap", () => {
       />,
     );
     const listbox = screen.getByRole("listbox");
-    // The immediate parent is the scroll container: capped and vertically scrollable.
-    const scroll = listbox.parentElement;
-    expect(scroll?.className).toMatch(/max-h-\[/);
-    expect(scroll?.className).toContain("overflow-y-auto");
+    // The listbox carries the cap and is vertically scrollable.
+    expect(listbox.className).toMatch(/max-h-\[/);
+    expect(listbox.className).toContain("overflow-y-auto");
   });
 
-  test("the summary footer is outside the scroll container so it stays pinned", () => {
+  test("the summary footer is a sibling of the listbox so it stays pinned", () => {
     render(
       <AutocompleteMenu
         rows={ROWS}
@@ -42,10 +41,9 @@ describe("AutocompleteMenu height cap", () => {
       />,
     );
     const listbox = screen.getByRole("listbox");
-    const scroll = listbox.parentElement; // the overflow container
     const footer = screen.getByText("40 items");
-    // The footer is NOT inside the scroll container; it is a sibling of it.
-    expect(scroll?.contains(footer)).toBe(false);
+    // The footer is NOT inside the scrollable listbox; it is a sibling of it.
+    expect(listbox.contains(footer)).toBe(false);
   });
 
   test("an empty state renders without a scroll container or listbox", () => {
@@ -63,7 +61,7 @@ describe("AutocompleteMenu height cap", () => {
     expect(screen.getByText("Nothing here")).toBeTruthy();
   });
 
-  test("a short list still wraps the listbox in the same capped container (no fixed height)", () => {
+  test("a short list still carries the cap (no fixed height)", () => {
     render(
       <AutocompleteMenu
         rows={[{ key: "only", primary: "Only" }]}
@@ -74,11 +72,9 @@ describe("AutocompleteMenu height cap", () => {
       />,
     );
     const listbox = screen.getByRole("listbox");
-    const scroll = listbox.parentElement;
     // max-h (not a fixed h) so a short list renders at natural height - the cap is an upper bound only.
-    expect(scroll?.className).toMatch(/max-h-\[/);
-    // No standalone fixed-height class token (a leading `h-[`), only the `max-h-[` upper bound.
-    const tokens = scroll?.className.split(/\s+/) ?? [];
+    expect(listbox.className).toMatch(/max-h-\[/);
+    const tokens = listbox.className.split(/\s+/);
     expect(tokens.every((token) => !token.startsWith("h-["))).toBe(true);
   });
 });

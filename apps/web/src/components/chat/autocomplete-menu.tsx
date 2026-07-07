@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -53,6 +53,22 @@ export function AutocompleteMenu({
   empty,
   className,
 }: AutocompleteMenuProps) {
+  const listboxRef = useRef<HTMLDivElement>(null);
+
+  // Arrow-key navigation moves `activeIndex` while focus stays in the composer; without this the
+  // highlight can scroll out of the capped list. Scroll the active option back into view, cheapest
+  // first (`block: "nearest"` only scrolls when the option is already out of view).
+  useEffect(() => {
+    const listbox = listboxRef.current;
+    if (!listbox) {
+      return;
+    }
+    const active = listbox.querySelector<HTMLElement>(
+      `[id="${activeOptionId(listboxId, activeIndex)}"]`,
+    );
+    active?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, listboxId]);
+
   return (
     <div className={cn("overflow-hidden border border-border bg-popover shadow-lg", className)}>
       {rows.length === 0 && empty ? (
@@ -61,33 +77,37 @@ export function AutocompleteMenu({
         // The row list is capped at 60vh and scrolls internally so a long match list (e.g. dozens of
         // workspace files) can never grow the popover off the top of the screen. `max-h` (not `h`)
         // keeps a short list at natural height - no empty box. The empty/loading state and the summary
-        // footer stay OUTSIDE this container, so an empty menu never scrolls and the footer stays pinned.
-        <div className="max-h-[60vh] overflow-y-auto">
-          <div id={listboxId} role="listbox" aria-label={ariaLabel} className="flex flex-col">
-            {rows.map((row, i) => (
-              <button
-                key={row.key}
-                id={activeOptionId(listboxId, i)}
-                type="button"
-                role="option"
-                aria-selected={i === activeIndex}
-                // onMouseDown (not onClick) so the composer input keeps focus through the pick.
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  onPick(row.key);
-                }}
-                className={cn(
-                  // Stable row height (single-line, py-1.5, baseline-aligned) so the list never jitters
-                  // as matches change.
-                  "flex w-full items-baseline gap-2 px-3 py-1.5 text-left",
-                  i === activeIndex ? "bg-accent" : "hover:bg-secondary",
-                )}
-              >
-                {row.primary}
-                {row.secondary}
-              </button>
-            ))}
-          </div>
+        // footer stay OUTSIDE the scroll area, so an empty menu never scrolls and the footer stays pinned.
+        <div
+          id={listboxId}
+          ref={listboxRef}
+          role="listbox"
+          aria-label={ariaLabel}
+          className="max-h-[60vh] flex flex-col overflow-y-auto"
+        >
+          {rows.map((row, i) => (
+            <button
+              key={row.key}
+              id={activeOptionId(listboxId, i)}
+              type="button"
+              role="option"
+              aria-selected={i === activeIndex}
+              // onMouseDown (not onClick) so the composer input keeps focus through the pick.
+              onMouseDown={(event) => {
+                event.preventDefault();
+                onPick(row.key);
+              }}
+              className={cn(
+                // Stable row height (single-line, py-1.5, baseline-aligned) so the list never jitters
+                // as matches change.
+                "flex w-full items-baseline gap-2 px-3 py-1.5 text-left",
+                i === activeIndex ? "bg-accent" : "hover:bg-secondary",
+              )}
+            >
+              {row.primary}
+              {row.secondary}
+            </button>
+          ))}
         </div>
       )}
       {summary ? (
