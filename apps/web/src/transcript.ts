@@ -194,6 +194,10 @@ function asInlineAgentStatus(status: string): InlineAgentStatus {
 // (D-001); `delegate_inline`/`delegate_background` render as their `delegated.to` link - an inline-
 // agent row or the background block (plan 09.4) - so the delegation is never shown twice.
 const SUPPRESSED_TOOL_ROWS = new Set(["ask_user", "delegate_inline", "delegate_background"]);
+// Task tools mutate the task snapshot consumed by the support panel. They should act without
+// transcript presence, including avoiding the assistant segment split that visible tools need.
+const INVISIBLE_TOOL_ROWS = new Set(["task_create", "task_update", "task_list"]);
+const HIDDEN_TOOL_ROWS = new Set([...SUPPRESSED_TOOL_ROWS, ...INVISIBLE_TOOL_ROWS]);
 // A prompt-shell-lane run (D-082): a leading `!` published a `user.shell`, and the leader's
 // `shell.result` carries the output. The web reduces the pair (keyed by `requestId`) to one terminal
 // block - pending while only the request is in, then the output once the result lands. `ok` is false
@@ -1020,6 +1024,9 @@ export function toTranscript(
         break;
       }
       case "tool.started": {
+        if (INVISIBLE_TOOL_ROWS.has(decoded.name)) {
+          break;
+        }
         // Finalize the open segment so the next thinking/text starts a new one below the tool.
         const open = openByRun.get(decoded.runId);
         if (open) {
@@ -1067,9 +1074,8 @@ export function toTranscript(
       }
       case "tool.guardrail": {
         // A redacted guardrail marker for the call that just ran (07): render it inline right after
-        // its tool card. A suppressed tool (ask_user, delegate_*) has no transcript row, so suppress
-        // its (never-emitted) marker too.
-        if (SUPPRESSED_TOOL_ROWS.has(decoded.name)) {
+        // its tool card. Hidden tools have no transcript row, so suppress their marker too.
+        if (HIDDEN_TOOL_ROWS.has(decoded.name)) {
           break;
         }
         messages.push({

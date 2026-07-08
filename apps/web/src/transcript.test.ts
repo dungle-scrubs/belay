@@ -663,6 +663,74 @@ test("09.4 M3: delegate_inline / delegate_background tool calls are suppressed (
   );
 });
 
+test("task tools act invisibly in the transcript", () => {
+  const log = [
+    ev(1, events.userMessage({ text: "track the work", provider: "qwen" })),
+    ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" })),
+    ev(3, events.assistantDelta({ runId: "r1", text: "before " })),
+    ev(
+      4,
+      events.toolStarted({
+        runId: "r1",
+        callId: "create",
+        name: "task_create",
+        arguments: '{"title":"Do it"}',
+      }),
+    ),
+    ev(
+      5,
+      events.toolCompleted({
+        runId: "r1",
+        callId: "create",
+        name: "task_create",
+        result: "created",
+      }),
+    ),
+    ev(
+      6,
+      events.toolStarted({
+        runId: "r1",
+        callId: "update",
+        name: "task_update",
+        arguments: '{"id":"t1","status":"done"}',
+      }),
+    ),
+    ev(
+      7,
+      events.toolCompleted({
+        runId: "r1",
+        callId: "update",
+        name: "task_update",
+        result: "updated",
+      }),
+    ),
+    ev(8, events.toolStarted({ runId: "r1", callId: "list", name: "task_list", arguments: "{}" })),
+    ev(
+      9,
+      events.toolCompleted({
+        runId: "r1",
+        callId: "list",
+        name: "task_list",
+        result: "1 task",
+      }),
+    ),
+    ev(10, events.assistantDelta({ runId: "r1", text: "after" })),
+    ev(11, events.assistantCompleted({ runId: "r1", text: "before after" })),
+  ];
+  const messages = toTranscript(log);
+
+  assert.equal(
+    messages.some((m) => m.kind === "tool"),
+    false,
+  );
+  assert.deepEqual(
+    messages.map((m) => m.kind),
+    ["user", "assistant"],
+  );
+  const assistant = messages.find((m) => m.kind === "assistant");
+  assert.equal(assistant?.kind === "assistant" && assistant.text, "before after");
+});
+
 test("09.4: a workflow-leaf inline delegation stays a delegation block, NOT an inlineAgent row", () => {
   // Workflow leaves reuse mode:"inline" but have their own rendering, so isInlineAgentDelegation
   // excludes them: they must keep the delegation block, not become an inline-agent row.
