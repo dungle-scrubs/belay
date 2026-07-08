@@ -667,7 +667,7 @@ export function runAgent(
     // Re-clamp reasoning to the (possibly new) provider's surface. Skip when the request names neither a
     // model nor a level - there is nothing to carry, and clamping a null request would push an
     // undefined-reasoning turn onto the provider default rather than leaving it as-is.
-    const requested = req.reasoning ?? req.model?.reasoning ?? currentReasoning ?? null;
+    const requested = req.model?.reasoning ?? req.reasoning ?? currentReasoning ?? null;
     if (requested !== null || req.model) {
       currentReasoning =
         constrainReasoning(

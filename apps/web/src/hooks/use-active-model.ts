@@ -186,7 +186,11 @@ export function useActiveModel({
 
   return {
     activeProvider,
-    reasoning,
+    // The published/sidebar `reasoning` is the EFFECTIVE effort (activeReasoning), so the top-level
+    // reasoning stamped on a user.message matches model.reasoning (sendModelRef.reasoning) and the
+    // host - which runs the turn on the top-level field - executes at the chosen effort, not a stale
+    // legacy provider value.
+    reasoning: activeReasoning,
     setReasoning,
     selection,
     sendModel,
