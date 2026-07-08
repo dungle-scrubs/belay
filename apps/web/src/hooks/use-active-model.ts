@@ -7,10 +7,11 @@ import {
   type ProviderModel,
   type SourceSummary,
 } from "@trevor/session";
-import { useCallback } from "react";
+import { useLocalStorageState } from "ahooks";
+import { useCallback, useEffect } from "react";
 import type { ModelPrefsView } from "@/derive";
 import { useModelSelection } from "@/hooks/use-model-selection";
-import { activeModelLabel, resolveReasoning } from "@/model-selection";
+import { activeModelLabel, resolveReasoning, sessionScopedKey } from "@/model-selection";
 
 type LastUserModel = {
   readonly provider?: string;
@@ -47,16 +48,30 @@ export function useActiveModel({
   readonly activeRunId: string | null;
   readonly switchModel: (runId: string, model: ModelRef) => void | Promise<void>;
 }) {
+  // HMR resilience: the last known-good model for this session, persisted whenever the host roster
+  // resolves a real one. A Vite HMR can momentarily blank the in-memory host.online fold (events state
+  // resets and re-replays), and during that window the roster lacks the active provider. Without this,
+  // the model field degenerates to the provider id and reasoning to "off" - an invalid ref that blocks
+  // prompting. The recovered ref keeps the real modelId + reasoning until host.online re-folds.
+  const [lastKnownModel, setLastKnownModel] = useLocalStorageState<ModelRef>(
+    sessionScopedKey("trevor.lastModel", sessionId),
+    { defaultValue: undefined },
+  );
   const firstAnnouncedProvider = Object.keys(hostModels)[0];
   const activeProvider =
     provider ?? lastUserModel?.provider ?? hostDefault ?? firstAnnouncedProvider ?? "default";
   const seededReasoning =
     lastUserModel?.provider === activeProvider ? lastUserModel.reasoning : undefined;
-  const modelMeta = hostModels[activeProvider] ?? {
-    label: activeProvider,
-    model: activeProvider,
-    reasoningLevels: [],
-    defaultReasoning: "off",
+  const rosterMeta = hostModels[activeProvider];
+  // When the roster lacks the active provider, recover the last known-good model so the model field
+  // keeps its real modelId and reasoning instead of degenerating to the provider id + "off".
+  const recoveredModel =
+    lastKnownModel && lastKnownModel.sourceId === activeProvider ? lastKnownModel : undefined;
+  const modelMeta = rosterMeta ?? {
+    label: recoveredModel?.modelId ?? activeProvider,
+    model: recoveredModel?.modelId ?? activeProvider,
+    reasoningLevels: recoveredModel?.reasoning ? [recoveredModel.reasoning] : [],
+    defaultReasoning: recoveredModel?.reasoning ?? "off",
     kind: "local" as const,
   };
   const reasoning = resolveReasoning(
@@ -86,6 +101,19 @@ export function useActiveModel({
   // never null for a fresh session (it is qwen) and would short-circuit the default. `selection.preferences`
   // is the EFFECTIVE preferences with the host default overlaid.
   const sendModel = selection.preferences.active ?? selection.preferences.default ?? activeModelRef;
+  // Persist the last known-good model whenever the roster resolves a real one (write only on change),
+  // so a later empty roster (HMR) recovers a valid ref.
+  useEffect(() => {
+    if (
+      rosterMeta &&
+      sendModel &&
+      (lastKnownModel?.sourceId !== sendModel.sourceId ||
+        lastKnownModel?.modelId !== sendModel.modelId ||
+        (lastKnownModel?.reasoning ?? null) !== (sendModel.reasoning ?? null))
+    ) {
+      setLastKnownModel(sendModel);
+    }
+  }, [rosterMeta, sendModel, lastKnownModel, setLastKnownModel]);
   const activeEntry = catalogEntryFor(selection.catalogBySource, sendModel);
   const activeLabel = activeModelLabel({
     entry: activeEntry,

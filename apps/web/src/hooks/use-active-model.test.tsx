@@ -86,3 +86,32 @@ test("an explicit per-session active wins over the host default", () => {
   });
   assert.equal(result.current.sendModel.sourceId, "qwen", "the explicit session active wins");
 });
+
+test("an empty roster (HMR) recovers the last known-good model, not provider-as-model", () => {
+  // Simulate the post-HMR window: the in-memory host.online fold blanked, so the roster lacks the
+  // provider and there is no per-session active. Seed the last known-good model from before HMR.
+  const last: ModelRef = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
+  localStorage.setItem(sessionScopedKey("trevor.lastModel", "hmr"), JSON.stringify(last));
+
+  const { result } = renderHook(() =>
+    useActiveModel({
+      hostModels: {}, // empty roster (the HMR window)
+      hostSources: [],
+      hostCatalog: {},
+      hostModelPrefs: { default: null, pinned: [] },
+      provider: "deepseek",
+      setProvider: noop,
+      reasoningMap: undefined,
+      setReasoningMap: noop,
+      hostDefault: undefined,
+      lastUserModel: null,
+      sessionId: "hmr",
+      activeRunId: null,
+      switchModel: noop,
+    }),
+  );
+  // The recovered model keeps its real modelId + reasoning, instead of degenerating to the provider
+  // id + "off" (which produced an invalid ref that blocked prompting).
+  assert.equal(result.current.sendModel.modelId, "deepseek-v4", "recovers the real modelId");
+  assert.equal(result.current.sendModelRef.reasoning, "high", "preserves the reasoning level");
+});
