@@ -1,8 +1,10 @@
-import { Waypoints } from "lucide-react";
+import { useBoolean } from "ahooks";
+import { ChevronDown, Waypoints } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { cn } from "@/lib/utils";
+import { atBottomOf } from "@/scroll";
 import { type TranscriptRow, transcriptRowKey } from "@/transcript-rows";
 
 /**
@@ -42,6 +44,8 @@ export function AgentDetailShell({
 }) {
   const ref = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [atBottom, { set: setAtBottom, setFalse: markAwayFromBottom, setTrue: markAtBottom }] =
+    useBoolean(true);
 
   // Own Escape + focus on mount, matching the tool-detail takeover so the two takeovers behave alike.
   useEffect(() => {
@@ -60,10 +64,33 @@ export function AgentDetailShell({
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-pin whenever the stream advances.
   useEffect(() => {
     const el = scrollRef.current;
-    if (el) {
+    if (el && atBottom) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [pinSignal]);
+  }, [pinSignal, atBottom]);
+
+  const updateBottomState = () => {
+    const el = scrollRef.current;
+    if (!el) {
+      return;
+    }
+    setAtBottom(
+      atBottomOf({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        scrollTop: el.scrollTop,
+      }),
+    );
+  };
+
+  const scrollToBottom = () => {
+    const el = scrollRef.current;
+    if (!el) {
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
+    markAtBottom();
+  };
 
   return (
     <section
@@ -78,28 +105,46 @@ export function AgentDetailShell({
         <Waypoints className="size-3.5" />
         Inline agent{agent ? <span className="normal-case"> · {agent}</span> : null}
       </div>
-      <div
-        ref={scrollRef}
-        data-agent-transcript
-        className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-4"
-      >
-        {rows.length === 0 ? (
-          <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
-            {replayed
-              ? "This agent hasn't produced any output yet."
-              : "Loading the agent's transcript…"}
-          </div>
-        ) : (
-          rows.map((row) => (
-            <TranscriptRowView
-              key={transcriptRowKey(row)}
-              row={row}
-              showThinking
-              onOpenPath={onOpenPath}
-              onDoctorRefresh={NOOP}
-            />
-          ))
-        )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          ref={scrollRef}
+          data-agent-transcript
+          onScroll={updateBottomState}
+          onWheel={(event) => {
+            if (event.deltaY < 0) {
+              markAwayFromBottom();
+            }
+          }}
+          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-4"
+        >
+          {rows.length === 0 ? (
+            <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+              {replayed
+                ? "This agent hasn't produced any output yet."
+                : "Loading the agent's transcript…"}
+            </div>
+          ) : (
+            rows.map((row) => (
+              <TranscriptRowView
+                key={transcriptRowKey(row)}
+                row={row}
+                showThinking
+                onOpenPath={onOpenPath}
+                onDoctorRefresh={NOOP}
+              />
+            ))
+          )}
+        </div>
+        {!atBottom ? (
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            aria-label="Scroll to bottom"
+            className="absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-foreground"
+          >
+            <ChevronDown className="size-4" />
+          </button>
+        ) : null}
       </div>
     </section>
   );
