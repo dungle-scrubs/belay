@@ -49,6 +49,8 @@ export interface ProjectGroup {
   readonly activeCount: number;
   /** The max of the registry updatedAt and the project's session updatedAt values. */
   readonly updatedAt: string;
+  /** ISO timestamp of first registration (creation order). */
+  readonly createdAt: string;
 }
 
 /** The default number of sessions shown per project before a "Show more" affordance (M6). */
@@ -93,10 +95,9 @@ function canonicalizePath(rawPath: string, allPaths: readonly string[]): string 
  * sessions under their project by resolved project path, merging known registry records with
  * transient projects (sessions whose path has no registry record).
  *
- * Ordering: most recently active first, by the max `updatedAt` across the project record + its
- * sessions. Sessions within a project are sorted by `updatedAt` descending. A project with only
- * archived sessions appears as an empty group (so the UI can show an archive link). Pure; never
- * mutates the inputs.
+ * Ordering: creation order (oldest first), by the registry record's `createdAt`. Transient
+ * projects (sessions with no registry record) sort after known projects. Sessions within a
+ * project are sorted by `updatedAt` descending.
  */
 export function buildProjectSidebar(
   projects: readonly ProjectSidebarRecord[],
@@ -156,6 +157,7 @@ export function buildProjectSidebar(
     // when the absolute form is known).
     const displayPath = key;
     const collapsed = record?.collapsed ?? false;
+    const createdAt = record?.createdAt ?? projectSessions[0]?.createdAt ?? updatedAt;
 
     groups.push({
       key,
@@ -166,11 +168,18 @@ export function buildProjectSidebar(
       sessions: projectSessions,
       activeCount: projectSessions.length,
       updatedAt,
+      createdAt,
     });
   }
 
-  // Most recently active first.
-  return groups.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // Creation order: oldest first (by the registry record's createdAt). Transient projects
+  // (sessions without a registry record) sort after known projects so the pinned registry order
+  // is stable; they order among themselves by their earliest session's createdAt.
+  return groups.sort((a, b) => {
+    const aTime = a.isTransient ? "9999" : a.createdAt;
+    const bTime = b.isTransient ? "9999" : b.createdAt;
+    return aTime.localeCompare(bTime);
+  });
 }
 
 /**
