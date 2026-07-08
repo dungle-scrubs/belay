@@ -146,3 +146,51 @@ test("a fresh handoff session inherits the stamped model + effort before host.on
   assert.equal(result.current.sendModelRef.reasoning, "high", "inherits the stamped effort");
   assert.equal(result.current.activeLabel, "deepseek-v4", "displays the model, not the provider");
 });
+
+test("an inherited model keeps its effort once the roster arrives; the host default does not overtake it", () => {
+  // The roster is now populated (host.online arrived) and there IS a host default pointing at a
+  // different model. The /handoff-stamped model + effort must still win, or the effort reverts to the
+  // stamped model's defaultReasoning once the roster resolves.
+  const { result } = renderHook(() =>
+    useActiveModel({
+      hostModels: {
+        deepseek: {
+          label: "DeepSeek V4 Pro",
+          model: "deepseek-v4",
+          reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
+          defaultReasoning: "medium",
+          kind: "cloud",
+        },
+      },
+      hostSources: [],
+      hostCatalog: {},
+      hostModelPrefs: {
+        default: { sourceId: "qwen", modelId: "qwen3-coder", reasoning: null },
+        pinned: [],
+      },
+      provider: undefined,
+      setProvider: noop,
+      reasoningMap: undefined,
+      setReasoningMap: noop,
+      hostDefault: undefined,
+      lastUserModel: {
+        provider: "deepseek",
+        model: { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "xhigh" },
+        reasoning: "xhigh",
+      },
+      sessionId: "handoff-roster",
+      activeRunId: null,
+      switchModel: noop,
+    }),
+  );
+  assert.equal(
+    result.current.sendModel.modelId,
+    "deepseek-v4",
+    "keeps the inherited model, not the host default",
+  );
+  assert.equal(
+    result.current.sendModelRef.reasoning,
+    "xhigh",
+    "keeps the inherited effort, not the model's medium default",
+  );
+});

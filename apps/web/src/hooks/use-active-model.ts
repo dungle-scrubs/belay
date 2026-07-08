@@ -100,11 +100,21 @@ export function useActiveModel({
   });
 
   // The initial-model pick (plan 51 D-005, the "reset to qwen" fix): an explicit per-session `active`
-  // wins; otherwise the user's host-owned DEFAULT drives a fresh session; only then the legacy fallback
-  // (qwen). `selection.active` cannot be used here - it already collapses `active ?? legacyRef`, so it is
-  // never null for a fresh session (it is qwen) and would short-circuit the default. `selection.preferences`
-  // is the EFFECTIVE preferences with the host default overlaid.
-  const sendModel = selection.preferences.active ?? selection.preferences.default ?? activeModelRef;
+  // wins; then the model this session INHERITED (the one a /handoff stamped onto the first prompt, or
+  // the last turn's model) so a fresh handoff session keeps its carried-over model + effort instead of
+  // falling to the host default once host.online arrives; then the host default; then the legacy ref.
+  // `selection.active` cannot be used here - it already collapses `active ?? legacyRef`, so it is never
+  // null for a fresh session and would short-circuit the default. `selection.preferences` is the
+  // EFFECTIVE preferences with the host default overlaid.
+  const inheritedModel =
+    lastUserModel?.model && lastUserModel.model.sourceId === activeProvider
+      ? lastUserModel.model
+      : undefined;
+  const sendModel =
+    selection.preferences.active ??
+    inheritedModel ??
+    selection.preferences.default ??
+    activeModelRef;
   // Persist the last known-good model whenever the roster resolves a real one (write only on change),
   // so a later empty roster (HMR) recovers a valid ref.
   useEffect(() => {
