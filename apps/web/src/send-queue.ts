@@ -1,6 +1,7 @@
 import {
   type ArtifactRef,
   decodeTrevorEvent,
+  isControlProducer,
   type ModelRef,
   type PastePayload,
   pendingFollowUps,
@@ -44,6 +45,39 @@ export interface QueuedPrompt extends UserTurnInput {
 }
 
 /**
+ * The target session's first prompt from `/handoff` is written as a runnable control-lane
+ * `user.message` before the target host can claim it with `assistant.started`. The host scheduler must
+ * still see that prompt, but the browser queue panel must not duplicate it beside the transcript's first
+ * user row during that startup window.
+ */
+function initialHandoffPromptIds(
+  events: readonly SessionEvent[],
+  selfProducerId: string | undefined,
+): Set<string> {
+  const hidden = new Set<string>();
+  const pendingPrompts: string[] = [];
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (!decoded) {
+      continue;
+    }
+    if (decoded.type === "handoff.accepted") {
+      pendingPrompts.push(decoded.prompt);
+      continue;
+    }
+    if (decoded.type !== "user.message" || !isControlProducer(event.producerId, selfProducerId)) {
+      continue;
+    }
+    const index = pendingPrompts.indexOf(decoded.text);
+    if (index !== -1) {
+      hidden.add(event.eventId);
+      pendingPrompts.splice(index, 1);
+    }
+  }
+  return hidden;
+}
+
+/**
  * Projects the still-queued follow-ups out of the durable log (plan 47 M1): every unanswered,
  * not-superseded `user.message` behind the active turn, in submit order, each carrying its durable
  * `eventId` as its `id`. That id is what the Escape-fold / unqueue / recall-pull supersede references,
@@ -54,19 +88,22 @@ export function queuedPromptsFrom(
   events: readonly SessionEvent[],
   selfProducerId?: string,
 ): QueuedPrompt[] {
-  return pendingFollowUps(events, selfProducerId).map((event) => {
-    const decoded = decodeTrevorEvent(event);
-    const message = decoded?.type === "user.message" ? decoded : null;
-    return {
-      id: event.eventId,
-      text: message?.text ?? "",
-      provider: message?.provider ?? "",
-      ...(message?.reasoning ? { reasoning: message.reasoning } : {}),
-      ...(message?.model ? { model: message.model } : {}),
-      ...(message?.artifacts?.length ? { artifacts: message.artifacts } : {}),
-      ...(message?.pastes?.length ? { pastes: message.pastes } : {}),
-    };
-  });
+  const hiddenInitialHandoffPrompts = initialHandoffPromptIds(events, selfProducerId);
+  return pendingFollowUps(events, selfProducerId)
+    .filter((event) => !hiddenInitialHandoffPrompts.has(event.eventId))
+    .map((event) => {
+      const decoded = decodeTrevorEvent(event);
+      const message = decoded?.type === "user.message" ? decoded : null;
+      return {
+        id: event.eventId,
+        text: message?.text ?? "",
+        provider: message?.provider ?? "",
+        ...(message?.reasoning ? { reasoning: message.reasoning } : {}),
+        ...(message?.model ? { model: message.model } : {}),
+        ...(message?.artifacts?.length ? { artifacts: message.artifacts } : {}),
+        ...(message?.pastes?.length ? { pastes: message.pastes } : {}),
+      };
+    });
 }
 
 /**

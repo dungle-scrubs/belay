@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import {
   type ArtifactRef,
+  controlProducerId,
   events,
   type PastePayload,
   PRODUCER_IDS,
+  pendingFollowUps,
   type SessionEvent,
   type TrevorEventInput,
 } from "@trevor/session";
@@ -18,6 +20,7 @@ import {
   queuedPromptsFrom,
   sendQueueReducer,
 } from "./send-queue";
+import { toTranscript } from "./transcript";
 
 /**
  * Characterization tests for the web send-queue / steering machine (M7 / D-007).
@@ -253,5 +256,41 @@ test("queuedPromptsFrom excludes a superseded prompt (folded/unqueued)", () => {
   assert.deepEqual(
     queuedPromptsFrom(log, PRODUCER_IDS.host).map((q) => q.text),
     ["keep"],
+  );
+});
+
+test("queuedPromptsFrom hides the initial handoff target prompt without hiding it from transcript or scheduler", () => {
+  const log = [
+    storedEvent(
+      events.handoffAccepted({ handoffId: "h1", targetSessionId: "target", prompt: "go" }),
+      {
+        seq: queueSeq++,
+        producerId: PRODUCER_IDS.host,
+      },
+    ),
+    storedEvent(events.userMessage({ text: "go", provider: "qwen" }), {
+      seq: queueSeq++,
+      eventId: "handoff-prompt",
+      producerId: controlProducerId(PRODUCER_IDS.host),
+    }),
+  ];
+
+  assert.deepEqual(
+    pendingFollowUps(log, PRODUCER_IDS.host).map((event) => event.eventId),
+    ["handoff-prompt"],
+    "the host scheduler still sees and can claim the target handoff prompt",
+  );
+  assert.deepEqual(
+    queuedPromptsFrom(log, PRODUCER_IDS.host).map((q) => q.text),
+    [],
+    "the browser queue panel must not duplicate the target session's first transcript row",
+  );
+  assert.deepEqual(
+    toTranscript(log, { selfProducerId: PRODUCER_IDS.host }).map((message) => ({
+      kind: message.kind,
+      text: message.kind === "user" ? message.text : null,
+    })),
+    [{ kind: "user", text: "go" }],
+    "the prompt remains visible as the target transcript's first user message",
   );
 });
