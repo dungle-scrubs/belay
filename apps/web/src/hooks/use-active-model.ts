@@ -15,6 +15,7 @@ import { activeModelLabel, resolveReasoning, sessionScopedKey } from "@/model-se
 
 type LastUserModel = {
   readonly provider?: string;
+  readonly model?: ModelRef;
   readonly reasoning?: string;
 } | null;
 
@@ -63,10 +64,13 @@ export function useActiveModel({
   const seededReasoning =
     lastUserModel?.provider === activeProvider ? lastUserModel.reasoning : undefined;
   const rosterMeta = hostModels[activeProvider];
-  // When the roster lacks the active provider, recover the last known-good model so the model field
-  // keeps its real modelId and reasoning instead of degenerating to the provider id + "off".
+  // When the roster lacks the active provider (a fresh handoff session before host.online arrives, or
+  // an HMR-blanked fold), recover a real model: the model the handoff stamped onto the first prompt
+  // (lastUserModel.model) first, then the persisted last known-good model. Without this the model field
+  // degenerates to the provider id + "off" - the incomplete piece of the 09.1 carry-over fix.
   const recoveredModel =
-    lastKnownModel && lastKnownModel.sourceId === activeProvider ? lastKnownModel : undefined;
+    lastUserModel?.model ??
+    (lastKnownModel && lastKnownModel.sourceId === activeProvider ? lastKnownModel : undefined);
   const modelMeta = rosterMeta ?? {
     label: recoveredModel?.modelId ?? activeProvider,
     model: recoveredModel?.modelId ?? activeProvider,
@@ -119,7 +123,7 @@ export function useActiveModel({
     entry: activeEntry,
     registeredProvider: Boolean(hostModels[activeProvider]),
     rosterLabel: modelMeta.label,
-    selectionLabel: selection.activeLabel,
+    selectionLabel: !rosterMeta && recoveredModel ? recoveredModel.modelId : selection.activeLabel,
   });
   const activeReasoningLevels =
     activeEntry && activeEntry.reasoningLevels.length > 0

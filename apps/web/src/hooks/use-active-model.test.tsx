@@ -115,3 +115,34 @@ test("an empty roster (HMR) recovers the last known-good model, not provider-as-
   assert.equal(result.current.sendModel.modelId, "deepseek-v4", "recovers the real modelId");
   assert.equal(result.current.sendModelRef.reasoning, "high", "preserves the reasoning level");
 });
+
+test("a fresh handoff session inherits the stamped model + effort before host.online arrives", () => {
+  // /handoff stamps the source session's model onto the new session's first prompt. Before the host
+  // announces host.online for the new session the roster is empty; the carry-over must still resolve
+  // the real modelId + reasoning (not the provider id + "none").
+  const { result } = renderHook(() =>
+    useActiveModel({
+      hostModels: {}, // empty roster (fresh session, host.online not yet received)
+      hostSources: [],
+      hostCatalog: {},
+      hostModelPrefs: { default: null, pinned: [] },
+      provider: undefined,
+      setProvider: noop,
+      reasoningMap: undefined,
+      setReasoningMap: noop,
+      hostDefault: undefined,
+      lastUserModel: {
+        provider: "deepseek",
+        model: { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" },
+        reasoning: "high",
+      },
+      sessionId: "handoff",
+      activeRunId: null,
+      switchModel: noop,
+    }),
+  );
+  assert.equal(result.current.activeProvider, "deepseek", "inherits the stamped provider");
+  assert.equal(result.current.sendModel.modelId, "deepseek-v4", "inherits the stamped modelId");
+  assert.equal(result.current.sendModelRef.reasoning, "high", "inherits the stamped effort");
+  assert.equal(result.current.activeLabel, "deepseek-v4", "displays the model, not the provider");
+});
