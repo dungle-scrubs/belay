@@ -131,23 +131,25 @@ describe("buildProjectSidebar", () => {
     expect(group.sessions.map((s) => s.sessionId)).toEqual(["normal"]);
   });
 
-  test("projects ordered by most recent activity (max of project + session updatedAt)", () => {
+  test("projects ordered by creation order (oldest first), independent of activity", () => {
     const groups = buildProjectSidebar(
       [
-        project({ path: "/dev/old", updatedAt: "2026-06-01T00:00:00.000Z" }),
-        project({ path: "/dev/new", updatedAt: "2026-06-02T00:00:00.000Z" }),
-        project({ path: "/dev/session-newer", updatedAt: "2026-06-01T00:00:00.000Z" }),
-      ],
-      [
-        // session on the "old"-timestamped registry project has the newest activity -> it should win
-        sessionSummary({
-          sessionId: "hot",
-          projectPath: "/dev/session-newer",
+        project({
+          path: "/dev/newest",
+          createdAt: "2026-06-03T00:00:00.000Z",
+          updatedAt: "2026-06-01T00:00:00.000Z",
+        }),
+        project({
+          path: "/dev/oldest",
+          createdAt: "2026-06-01T00:00:00.000Z",
           updatedAt: "2026-06-05T00:00:00.000Z",
         }),
+        project({ path: "/dev/mid", createdAt: "2026-06-02T00:00:00.000Z" }),
       ],
+      [],
     );
-    expect(groups.map((g) => g.key)).toEqual(["/dev/session-newer", "/dev/new", "/dev/old"]);
+    // Creation order wins (oldest first) even when a newer-created project has older activity.
+    expect(groups.map((g) => g.key)).toEqual(["/dev/oldest", "/dev/mid", "/dev/newest"]);
   });
 
   test("sessions within a project sorted by updatedAt descending", () => {
