@@ -120,6 +120,120 @@ export async function appendExchange(
   );
 }
 
+function paragraph(label: string, lines: number): string {
+  return Array.from(
+    { length: lines },
+    (_, index) =>
+      `${label} line ${index}: this row intentionally has enough text to wrap and vary transcript height.`,
+  ).join("\n\n");
+}
+
+/** Seed a transcript with a running tool near the top and varied-height rows below it. The browser
+ *  scroll tests complete that tool after the user is reading below it, which forces a real
+ *  above-viewport re-measure. */
+export async function seedMixedToolTranscript(
+  transport: SessionTransport,
+  sessionId: string,
+): Promise<{ runId: string; callId: string; anchorText: string }> {
+  await transport.ensureSession(sessionId);
+  const runId = `mixed-${sessionId}`;
+  const callId = `tool-${sessionId}`;
+  const anchorText = "anchor exchange 12";
+
+  for (let i = 0; i < 4; i += 1) {
+    await publish(
+      transport,
+      sessionId,
+      events.userMessage({ text: `warmup prompt ${i}`, provider: "fake" }),
+      WEB,
+    );
+    await publish(
+      transport,
+      sessionId,
+      events.assistantCompleted({
+        runId: `warmup-${i}`,
+        text: paragraph(`warmup answer ${i}`, i % 2 === 0 ? 2 : 5),
+      }),
+      HOST,
+    );
+  }
+
+  await publish(
+    transport,
+    sessionId,
+    events.userMessage({ text: "please inspect the repo with tools", provider: "fake" }),
+    WEB,
+  );
+  await publish(
+    transport,
+    sessionId,
+    events.assistantStarted({ runId, warm: true, model: "fake-1", provider: "fake" }),
+    HOST,
+  );
+  await publish(
+    transport,
+    sessionId,
+    events.assistantDelta({
+      runId,
+      text: "I will inspect the workspace and then summarize the relevant files.",
+    }),
+    HOST,
+  );
+  await publish(
+    transport,
+    sessionId,
+    events.toolStarted({
+      runId,
+      callId,
+      name: "grep",
+      arguments: JSON.stringify({ pattern: "scroll", path: "apps/web/src" }),
+    }),
+    HOST,
+  );
+
+  for (let i = 0; i < 28; i += 1) {
+    await publish(
+      transport,
+      sessionId,
+      events.userMessage({
+        text: i === 12 ? anchorText : `mixed prompt ${i}`,
+        provider: "fake",
+      }),
+      WEB,
+    );
+    await publish(
+      transport,
+      sessionId,
+      events.assistantCompleted({
+        runId: `mixed-answer-${i}`,
+        text: paragraph(`mixed answer ${i}`, i % 3 === 0 ? 7 : i % 3 === 1 ? 1 : 4),
+      }),
+      HOST,
+    );
+  }
+
+  return { runId, callId, anchorText };
+}
+
+/** Complete the seeded running tool with a large result, expanding a row that can be above the viewport. */
+export async function completeMixedTool(
+  transport: SessionTransport,
+  sessionId: string,
+  ids: { runId: string; callId: string },
+): Promise<void> {
+  await publish(
+    transport,
+    sessionId,
+    events.toolCompleted({
+      runId: ids.runId,
+      callId: ids.callId,
+      name: "grep",
+      result: paragraph("apps/web/src/components/chat/virtual-transcript.tsx: scroll match", 80),
+    }),
+    HOST,
+  );
+}
+
 /** Begin a streaming assistant turn (started, no completion yet) and return a handle to grow it delta by
  *  delta - the "mid-stream growing row" case. The row's height increases as deltas land. */
 export async function startStreamingTurn(

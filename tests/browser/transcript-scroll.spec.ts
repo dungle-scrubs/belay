@@ -1,7 +1,9 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
 import {
   appendExchange,
+  completeMixedTool,
   seedExchanges,
+  seedMixedToolTranscript,
   startStreamingTurn,
   storeTransport,
 } from "./lane-b-fixtures";
@@ -53,6 +55,73 @@ async function openTallTranscript(
 /** Distance from the scroller's current position to the live (bottom) edge, in px. ~0 when pinned. */
 function bottomDeltaPx(scroller: Locator): Promise<number> {
   return scroller.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+}
+
+interface ScrollProbe {
+  readonly bottomDistance: number;
+  readonly clientHeight: number;
+  readonly pinned: string | null;
+  readonly scrollHeight: number;
+  readonly scrollTop: number;
+  readonly topVisibleId: string | null;
+  readonly topVisibleOffset: number | null;
+  readonly visibleIds: readonly string[];
+  readonly visibleIndexes: readonly number[];
+  readonly visibleRows: readonly {
+    readonly id: string;
+    readonly index: number;
+    readonly top: number;
+  }[];
+}
+
+function scrollProbe(scroller: Locator): Promise<ScrollProbe> {
+  return scroller.evaluate((el) => {
+    const scrollerRect = el.getBoundingClientRect();
+    const rows = Array.from(el.querySelectorAll<HTMLElement>("[data-transcript-virtual-row]"));
+    const visible = rows
+      .map((row) => {
+        const rect = row.getBoundingClientRect();
+        const message = row.querySelector<HTMLElement>("[data-message-id]");
+        return {
+          id: message?.dataset.messageId ?? null,
+          index: Number(row.dataset.index ?? "-1"),
+          top: rect.top - scrollerRect.top,
+          visible: rect.bottom > scrollerRect.top && rect.top < scrollerRect.bottom,
+        };
+      })
+      .filter((row) => row.visible)
+      .sort((a, b) => a.top - b.top);
+    const top = visible[0];
+
+    return {
+      bottomDistance: el.scrollHeight - el.scrollTop - el.clientHeight,
+      clientHeight: el.clientHeight,
+      pinned: el.getAttribute("data-transcript-pinned"),
+      scrollHeight: el.scrollHeight,
+      scrollTop: el.scrollTop,
+      topVisibleId: top?.id ?? null,
+      topVisibleOffset: top?.top ?? null,
+      visibleIds: visible.map((row) => row.id ?? `index:${row.index}`),
+      visibleIndexes: visible.map((row) => row.index),
+      visibleRows: visible.map((row) => ({
+        id: row.id ?? `index:${row.index}`,
+        index: row.index,
+        top: row.top,
+      })),
+    };
+  });
+}
+
+async function wheelUntilVisible(page: Page, scroller: Locator, text: string): Promise<void> {
+  await scroller.hover();
+  for (let attempt = 0; attempt < 24; attempt += 1) {
+    if (await page.getByText(text, { exact: true }).isVisible()) {
+      return;
+    }
+    await page.mouse.wheel(0, -650);
+    await settleFrames(page, 2);
+  }
+  throw new Error(`could not wheel to visible transcript text: ${text}`);
 }
 
 const jumpButton = (page: Page): Locator =>
@@ -279,4 +348,56 @@ test("a rapid wheel flick from the bottom unpins, stays unpinned, and never snap
   }
   // Final position reflects the gesture (scrolled well up), not a reset back to the live edge.
   expect(await bottomDeltaPx(scroller)).toBeGreaterThan(OLD_TOLERANCE_PX);
+});
+
+test("a tool result expanding above the viewport preserves the reader's visual anchor", async ({
+  page,
+}, testInfo) => {
+  const transport = storeTransport();
+  const sessionId = `tool-anchor-${test.info().workerIndex}-${Date.now()}`;
+  const tool = await seedMixedToolTranscript(transport, sessionId);
+  await page.goto(`/?session=${sessionId}`);
+  await expect(page.locator("[data-transcript-virtual-list]")).toHaveAttribute(
+    "data-transcript-ready",
+    "true",
+  );
+
+  const scroller = page.locator("[data-transcript-scroll]");
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+
+  await wheelUntilVisible(page, scroller, tool.anchorText);
+  await expectPinned(scroller, false);
+  await expect(jumpButton(page)).toHaveCount(1);
+
+  const before = await scrollProbe(scroller);
+  await completeMixedTool(transport, sessionId, tool);
+  await expect
+    .poll(async () => Math.abs((await scrollProbe(scroller)).scrollHeight - before.scrollHeight))
+    .toBeGreaterThan(20);
+  await settleFrames(page, 6);
+  const after = await scrollProbe(scroller);
+
+  await testInfo.attach("tool-anchor-scroll-metrics.json", {
+    body: JSON.stringify({ before, after }, null, 2),
+    contentType: "application/json",
+  });
+
+  expect(after.pinned).toBe("false");
+  const anchor = before.visibleRows.find(
+    (row) => row.top >= 40 && row.top <= before.clientHeight - 120,
+  );
+  expect(anchor, `expected an interior visible anchor row: ${JSON.stringify(before)}`).toBeTruthy();
+  const afterAnchor = after.visibleRows.find((row) => row.id === anchor?.id);
+  expect(
+    afterAnchor,
+    `anchor row disappeared: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
+  ).toBeTruthy();
+  expect(
+    Math.abs((afterAnchor?.top ?? 0) - (anchor?.top ?? 0)),
+    `visible anchor row moved: before=${JSON.stringify(before)} after=${JSON.stringify(after)}`,
+  ).toBeLessThanOrEqual(2);
+  expect(
+    after.bottomDistance,
+    "expanding an above-viewport tool must not pull the viewport toward the live edge",
+  ).toBeGreaterThanOrEqual(before.bottomDistance - MONOTONIC_SLACK_PX);
 });
