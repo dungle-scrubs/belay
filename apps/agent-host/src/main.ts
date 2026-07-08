@@ -1,4 +1,5 @@
-import { execFile } from "node:child_process";
+import { execFile, execSync } from "node:child_process";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { leaseOptions, makeLeadership } from "@host/boot/leadership";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
@@ -15,6 +16,8 @@ import { mcpRuntime } from "@host/mcp/host-runtime";
 import { MODEL_PREFS_COMMANDS, runModelPrefsCommand } from "@host/prefs/model-prefs-command";
 import { modelPrefs, saveModelPrefs } from "@host/prefs/model-prefs-store";
 import { BUILTIN_STYLES, buildStyleMenu, DEFAULT_STYLE_ID } from "@host/prefs/styles";
+import { createJobLedger } from "@host/processes/job-ledger";
+import { processAlive } from "@host/processes/process-liveness";
 import { supervisor } from "@host/processes/processes";
 import {
   acquireCwdLock,
@@ -47,6 +50,7 @@ import {
   toPublishInput,
   viewerIdentity,
 } from "@trevor/session";
+import { storagePathByName } from "@trevor/session/node-paths";
 import { serviceUrl } from "@trevor/session/ports";
 import { resolveTelemetryConfig } from "@trevor/session/telemetry";
 import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
@@ -563,6 +567,43 @@ const { currentGit, currentWorktrees, announceOnline } = makePresence({
 // harmless no-op for consumers (it is not debounced - the gating is what bounds the volume).
 supervisor.onChange = announceOnline;
 
+// The background-job watchdog (plan 09 hardening): a per-session persisted ledger of running jobs, so a
+// restarting host reaps the dev servers/watchers a CRASHED prior host left running (a graceful STOP
+// already killAll()s them) instead of trusting its last published snapshot. Attached after the module
+// singleton is constructed (it can't take the per-session path at import time); the reconcile itself is
+// leader-gated (boot/leadership), so it runs once on takeover, never from a standby.
+supervisor.attachLedger(
+  createJobLedger(join(storagePathByName("jobs-ledger"), `${SESSION_ID}.json`)),
+);
+/** The full command line of a pid (`ps -p <pid> -ww -o command=`), or null when unknown/gone. Used ONLY
+ *  to confirm a ledger pid is really one of this session's jobs before reaping it - never to decide alone. */
+function pidCommand(pid: number): string | null {
+  try {
+    return execSync(`ps -p ${pid} -ww -o command=`, { encoding: "utf8" }).trim();
+  } catch {
+    return null;
+  }
+}
+/** Leader-gated: reap background jobs a prior crashed host left running. Command-verified SIGTERM (a
+ *  reused pid is spared), then the host.online announce boot/leadership already fires publishes the
+ *  corrected snapshot. Best-effort logging - a reap failure never affects a turn. */
+const reapOrphanJobs = (): void => {
+  const { killed, spared } = supervisor.reconcileOrphans({
+    isAlive: processAlive,
+    commandOf: pidCommand,
+    terminate: (pid) => {
+      try {
+        process.kill(pid, "SIGTERM");
+      } catch {
+        // raced out between the liveness check and the signal - already gone
+      }
+    },
+  });
+  if (killed.length > 0 || spared.length > 0) {
+    log("host", "job watchdog reconcile", { killed: killed.length, spared: spared.length });
+  }
+};
+
 // Go-live + leadership transitions (plan 22.3, boot/leadership): the once-only lease/heartbeat
 // start + reconnect reconcile, and the leader-transition reconcile (cwd lock, orphan reap,
 // dangling-/compact result, catch-up, pre-warm) - wired over the lease/scheduler and the
@@ -592,6 +633,7 @@ const { goLive, onBecomeLeader } = makeLeadership({
   reapOrphans,
   reapOrphanSubagents,
   reapOrphanQuestions,
+  reapOrphanJobs,
   maybeAutoResume,
 });
 

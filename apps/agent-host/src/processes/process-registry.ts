@@ -9,6 +9,13 @@ import { combineStreams } from "@host/tools/shared";
 import { invariant } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { JobLifecycle, JobSource } from "@trevor/session";
+import {
+  type JobLedger,
+  type ReconcileDeps,
+  type ReconcileOutcome,
+  type RunningJobRecord,
+  reconcileOrphanJobs,
+} from "./job-ledger";
 
 const RING_LIMIT = 64 * 1024;
 /** How much combined output tail a job snapshot carries for the detail takeover (host.online is announced
@@ -137,15 +144,60 @@ export class ProcessRegistry {
    *  (plan 09 M7). A foreground bash/shell command that never promotes is invisible, so its
    *  start+exit+remove churn fires nothing - no announce storm for ordinary commands. */
   onChange: (() => void) | undefined;
+  /** The optional persisted running-job ledger (the watchdog, plan 09 hardening). When wired by main.ts,
+   *  every job mutation rewrites it, and {@link reconcileOrphans} reaps orphans a prior crashed host left. */
+  private ledger?: JobLedger;
+
+  constructor(deps: { readonly ledger?: JobLedger } = {}) {
+    this.ledger = deps.ledger;
+  }
+
+  /** Wires the persisted ledger at boot (the watchdog). The module singleton is constructed before main.ts
+   *  resolves the per-session ledger path, so the ledger is attached here rather than passed in. Safe
+   *  because no job mutates before boot completes and reconcile is leader-gated. */
+  attachLedger(ledger: JobLedger): void {
+    this.ledger = ledger;
+  }
 
   private changed(proc: ManagedProcess): void {
+    this.syncLedger();
     if (isVisible(proc)) {
       this.onChange?.();
     }
   }
 
   private changedVisible(): void {
+    this.syncLedger();
     this.onChange?.();
+  }
+
+  /** Syncs the persisted ledger to the running jobs THIS host tracks right now, so a later host can tell
+   *  its own orphans apart. Called on every mutation (visible or not): a crashed host's leaked children
+   *  include pre-promotion commands, so the ledger is not gated on visibility. A no-op when no ledger. */
+  private syncLedger(): void {
+    this.ledger?.replaceAll(this.runningJobs());
+  }
+
+  /** The running jobs this host tracks right now (all live children, not just visible ones), keyed by id
+   *  with the pid + command a reconcile needs to verify-before-kill. */
+  private runningJobs(): Record<string, RunningJobRecord> {
+    const out: Record<string, RunningJobRecord> = {};
+    for (const [id, proc] of this.processes) {
+      if (proc.status === "running" && proc.child.pid !== undefined) {
+        out[id] = { pid: proc.child.pid, command: proc.command, startedAt: proc.startedAt };
+      }
+    }
+    return out;
+  }
+
+  /** Reconciles the ledger: SIGTERMs orphaned jobs a prior crashed host left running (command-verified, so
+   *  a reused pid is never killed) and rewrites the ledger to this host's set. Leader-only - only the
+   *  session's active host should reap. A no-op when no ledger is wired (tests + pre-boot). */
+  reconcileOrphans(deps: ReconcileDeps): ReconcileOutcome {
+    if (this.ledger === undefined) {
+      return { killed: [], spared: [] };
+    }
+    return reconcileOrphanJobs(this.ledger, this.runningJobs(), deps);
   }
 
   private dropProcess(proc: ManagedProcess): boolean {

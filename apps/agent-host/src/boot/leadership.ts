@@ -92,6 +92,11 @@ export interface LeadershipDeps {
    *  un-submittable (AQ001 no-ops) with the composer unmounted behind it. Fires at the same two
    *  takeover triggers as reapOrphanSubagents. */
   reapOrphanQuestions(): void;
+  /** Reap background JOBS a previous leader left running (processes/process-registry, wired through
+   *  main.ts): a host that crashed without a clean STOP left its dev servers/watchers running with no
+   *  owner. Command-verified SIGTERM (a reused pid is spared), then the host.online announce main.ts
+   *  already fires publishes the corrected snapshot. Fires at the same two takeover triggers. */
+  reapOrphanJobs(): void;
   /** Auto-resume an un-continued trailing interrupt (agent/control-prompts, wired through main.ts). */
   maybeAutoResume(): void;
 }
@@ -120,6 +125,7 @@ export function makeLeadership(deps: LeadershipDeps) {
     reapOrphans,
     reapOrphanSubagents,
     reapOrphanQuestions,
+    reapOrphanJobs,
     maybeAutoResume,
   } = deps;
 
@@ -144,6 +150,10 @@ export function makeLeadership(deps: LeadershipDeps) {
     // the run as interrupted but pre-fix left the question pending), so it is keyed by the question's
     // own requested/resolved log pair, not the turn set.
     reapOrphanQuestions();
+    // Reap background jobs a previous leader left running: a crashed host's killAll never ran, so its
+    // dev servers/watchers are still alive on the machine with no owner. Done here (not the hasInFlight
+    // branch) because a job outlives its spawning turn - its orphan can exist with no in-flight run.
+    reapOrphanJobs();
     if (turnMachine.hasInFlight) {
       // A previous leader left turns dangling (crashed / hot-reloaded mid-turn). Close them so every
       // client stops reading them as active (unfreezes the send queue, makes ESC meaningful), and drop
@@ -245,6 +255,9 @@ export function makeLeadership(deps: LeadershipDeps) {
       // And for dangling ask_user questions: a restart mid-question dropped the in-memory waiter, so
       // resolve the question as cancelled here or the browser's panel stays un-submittable forever.
       reapOrphanQuestions();
+      // And for orphaned background jobs a dead leader left running (same reconnect-as-leader path the
+      // cold-leadership case below misses): a store-reconnect takeover reaps them too.
+      reapOrphanJobs();
       // After reaping, auto-resume an un-continued trailing interrupt that is already settled in the log
       // (the browser recovered the orphan while no host was up - tonight's nimoy/lucid case). A run this
       // reap just closed is still mid-echo, so it is picked up by the completion handler, not here.

@@ -305,6 +305,13 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description: "Per-session leader lock files.",
   },
   {
+    name: "jobs-ledger",
+    category: "state",
+    relativePath: "jobs-ledger",
+    description:
+      "Per-session background-job pid ledgers: the running jobs a host spawned, so a restarting host can reconcile (reap) orphans a crashed prior host left instead of trusting its last published snapshot.",
+  },
+  {
     name: "cwd-locks",
     category: "state",
     relativePath: "cwd-locks",
