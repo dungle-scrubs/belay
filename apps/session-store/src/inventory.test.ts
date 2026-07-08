@@ -88,6 +88,26 @@ test("recordAppend folds each event into the row, matching a fresh projectRow sc
   assert.equal(row?.projectMarker?.type, "session.project");
 });
 
+test("updatedAt ignores session.title so renaming a session does not bump its recency", () => {
+  const log = new SessionLog(":memory:");
+  log.append(
+    "s1",
+    { type: "user.message", producerId: "web", payload: { text: "hi" } },
+    "e1",
+    "2026-06-24T00:05:00.000Z",
+  );
+  // A rename appended AFTER the last real activity must NOT become the updatedAt (it is not activity).
+  log.append(
+    "s1",
+    { type: "session.title", producerId: "web", payload: { title: "Renamed" } },
+    "e2",
+    "2026-06-24T00:09:00.000Z",
+  );
+  const row = log.summaryRow("s1");
+  assert.equal(row?.updatedAt, "2026-06-24T00:05:00.000Z"); // the message, not the later title
+  assert.equal(row?.rename?.type, "session.title"); // the rename marker is still recorded for display
+});
+
 test("ensure creates an empty row (matching an empty session), idempotently; remove drops it", () => {
   const log = new SessionLog(":memory:");
   const projection = new InventoryProjection(log);

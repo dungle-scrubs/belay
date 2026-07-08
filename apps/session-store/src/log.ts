@@ -448,7 +448,7 @@ export class SessionLog {
               `SELECT s.sessionId AS sessionId,
                 s.createdAt  AS createdAt,
                 COUNT(e.seq) AS eventCount,
-                COALESCE(MAX(e.createdAt), s.createdAt) AS updatedAt
+                COALESCE(MAX(CASE WHEN e.type != 'session.title' THEN e.createdAt END), s.createdAt) AS updatedAt
            FROM sessions s
            LEFT JOIN events e ON e.sessionId = s.sessionId
           GROUP BY s.sessionId, s.createdAt`,
@@ -474,7 +474,7 @@ export class SessionLog {
             `SELECT s.sessionId AS sessionId,
                 s.createdAt  AS createdAt,
                 COUNT(e.seq) AS eventCount,
-                COALESCE(MAX(e.createdAt), s.createdAt) AS updatedAt
+                COALESCE(MAX(CASE WHEN e.type != 'session.title' THEN e.createdAt END), s.createdAt) AS updatedAt
            FROM sessions s
            LEFT JOIN events e ON e.sessionId = s.sessionId
           WHERE s.sessionId = ?
