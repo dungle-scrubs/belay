@@ -243,16 +243,20 @@ function RenameInput({
   );
 }
 
-/** The context menu for a project row: Rename and Remove, positioned below the trigger. */
+/** The context menu for a project row: New Session, Rename, Remove, View Archive. */
 function ProjectContextMenu({
   hasActive,
+  onNewSession,
   onRename,
   onRemove,
+  onViewArchive,
   onClose,
 }: {
   hasActive: boolean;
+  onNewSession?: () => void;
   onRename: () => void;
   onRemove: () => void;
+  onViewArchive?: () => void;
   onClose: () => void;
 }) {
   const menuRef = useRef<HTMLDivElement>(null);
@@ -272,6 +276,19 @@ function ProjectContextMenu({
       ref={menuRef}
       className="absolute right-0 top-full z-50 mt-1 min-w-32 rounded-md border border-border bg-popover py-1 shadow-md"
     >
+      {onNewSession ? (
+        <button
+          type="button"
+          onClick={() => {
+            onNewSession();
+            onClose();
+          }}
+          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui text-foreground hover:bg-card/60"
+        >
+          <Plus className="size-3" />
+          <span>New session</span>
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={() => {
@@ -304,6 +321,19 @@ function ProjectContextMenu({
           <span className="ml-auto text-label text-muted-foreground/40">busy</span>
         ) : null}
       </button>
+      {onViewArchive ? (
+        <button
+          type="button"
+          onClick={() => {
+            onViewArchive();
+            onClose();
+          }}
+          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui text-muted-foreground hover:bg-card/60 hover:text-foreground"
+        >
+          <Inbox className="size-3" />
+          <span>View archive</span>
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -317,6 +347,7 @@ function ProjectRow({
   onNewSession,
   onRenameProject,
   onRemoveProject,
+  onViewArchive,
   renaming,
   onStartRename,
   onRenameSave,
@@ -327,6 +358,7 @@ function ProjectRow({
   onNewSession?: (projectKey: string) => void;
   onRenameProject?: (key: string, name: string) => void;
   onRemoveProject?: (key: string) => void;
+  onViewArchive?: (projectKey: string) => void;
   renaming: boolean;
   onStartRename: () => void;
   onRenameSave: (name: string) => void;
@@ -436,8 +468,10 @@ function ProjectRow({
       {menuOpen ? (
         <ProjectContextMenu
           hasActive={hasActive}
+          onNewSession={onNewSession ? () => onNewSession(group.key) : undefined}
           onRename={onStartRename}
           onRemove={() => onRemoveProject?.(group.key)}
+          onViewArchive={onViewArchive ? () => onViewArchive(group.key) : undefined}
           onClose={() => setMenuOpen(false)}
         />
       ) : null}
@@ -450,26 +484,25 @@ function ProjectRow({
  *  filtered to this project's path; otherwise it is a static label. */
 function EmptyProjectState({
   projectKey,
-  onViewArchive,
+  onNewSession,
 }: {
   projectKey: string;
-  onViewArchive?: (projectKey: string) => void;
+  onNewSession?: (projectKey: string) => void;
 }) {
-  if (onViewArchive) {
+  if (onNewSession) {
     return (
       <button
         type="button"
-        onClick={() => onViewArchive(projectKey)}
+        onClick={() => onNewSession(projectKey)}
         className="flex w-full items-center gap-1.5 py-1.5 pl-7 pr-2.5 text-left text-label tracking-wider text-muted-foreground/50 hover:text-foreground"
       >
-        <Inbox className="size-3" />
-        <span>View archive</span>
+        <Plus className="size-3" />
+        <span>New session</span>
       </button>
     );
   }
   return (
     <div className="flex items-center gap-1.5 py-1.5 pl-7 pr-2.5 text-label tracking-wider text-muted-foreground/50">
-      <Inbox className="size-3" />
       <span>No active sessions</span>
     </div>
   );
@@ -558,6 +591,7 @@ export function ProjectSidebar({
                     onNewSession={onNewSession}
                     onRenameProject={onRenameProject}
                     onRemoveProject={onRemoveProject}
+                    onViewArchive={onViewArchive}
                     renaming={renamingKey === group.key}
                     onStartRename={() => setRenamingKey(group.key)}
                     onRenameSave={handleRenameSave(group.key)}
@@ -566,7 +600,7 @@ export function ProjectSidebar({
                   {!group.collapsed ? (
                     <div>
                       {group.sessions.length === 0 ? (
-                        <EmptyProjectState projectKey={group.key} onViewArchive={onViewArchive} />
+                        <EmptyProjectState projectKey={group.key} onNewSession={onNewSession} />
                       ) : (
                         visible.map((summary) => (
                           <SessionRow

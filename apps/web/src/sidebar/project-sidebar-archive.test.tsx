@@ -11,10 +11,9 @@ function renderWithTooltip(ui: ReactElement) {
 }
 
 /**
- * Plan 58 M7 (RED): the project sidebar's presentational behavior for archive-filter access and the
- * Delete-absence guarantee. An archive-only project (a registry record with no active sessions)
- * renders a "View archive" link that fires `onViewArchive` with the project's path; and the normal
- * sidebar never renders a Delete affordance on session rows (Delete stays in the archive browser only).
+ * Plan 58 M7: the project sidebar's presentational behavior for archive access and the
+ * Delete-absence guarantee. "View archive" is available ONLY from the project context menu,
+ * never inline. An empty project (no active sessions) shows a "New session" button instead.
  */
 
 function project(over: Partial<ProjectSidebarRecord> & { path: string }): ProjectSidebarRecord {
@@ -28,11 +27,18 @@ function project(over: Partial<ProjectSidebarRecord> & { path: string }): Projec
   };
 }
 
+function openMenu(container: HTMLElement) {
+  const actionsBtn = container.querySelector(
+    'button[aria-label="Project actions"]',
+  ) as HTMLButtonElement;
+  expect(actionsBtn).toBeTruthy();
+  fireEvent.click(actionsBtn);
+}
+
 describe("ProjectSidebar archive access (M7)", () => {
-  test("an archive-only project renders a 'View archive' link that fires onViewArchive with the path", () => {
-    // A registry record with NO active sessions => the project's only content is archived sessions.
+  test("an empty project renders a 'New session' button that fires onNewSession with the path", () => {
     const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], []);
-    const onViewArchive = vi.fn<(projectKey: string) => void>();
+    const onNewSession = vi.fn<(projectKey: string) => void>();
     const { getByText } = renderWithTooltip(
       <ProjectSidebar
         groups={groups}
@@ -40,15 +46,15 @@ describe("ProjectSidebar archive access (M7)", () => {
         onSelectSession={() => {}}
         onShowMore={() => {}}
         searchQuery=""
-        onViewArchive={onViewArchive}
+        onNewSession={onNewSession}
       />,
     );
-    const link = getByText("View archive");
+    const link = getByText("New session");
     fireEvent.click(link);
-    expect(onViewArchive).toHaveBeenCalledWith("/dev/trevor");
+    expect(onNewSession).toHaveBeenCalledWith("/dev/trevor");
   });
 
-  test("without onViewArchive, the empty state shows 'No active sessions' and is not a link", () => {
+  test("without onNewSession, the empty state shows 'No active sessions' and is not a link", () => {
     const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], []);
     const { getByText, queryByText } = renderWithTooltip(
       <ProjectSidebar
@@ -63,8 +69,28 @@ describe("ProjectSidebar archive access (M7)", () => {
     expect(queryByText("View archive")).toBeNull();
   });
 
+  test("'View archive' is available from the project context menu and fires onViewArchive", () => {
+    const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], []);
+    const onViewArchive = vi.fn<(projectKey: string) => void>();
+    const { getByText, container } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groups}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onViewArchive={onViewArchive}
+        onRenameProject={() => {}}
+        onRemoveProject={() => {}}
+      />,
+    );
+    openMenu(container);
+    const link = getByText("View archive");
+    fireEvent.click(link);
+    expect(onViewArchive).toHaveBeenCalledWith("/dev/trevor");
+  });
+
   test("the normal sidebar renders NO Delete button on session rows (Delete is archive-only)", () => {
-    // A project with an active session: the session row must offer no permanent-delete affordance.
     const groups = buildProjectSidebar(
       [project({ path: "/dev/trevor" })],
       [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
