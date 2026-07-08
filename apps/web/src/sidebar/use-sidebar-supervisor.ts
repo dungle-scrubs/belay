@@ -31,6 +31,8 @@ function toSidebarRecord(p: SupervisorProject): ProjectSidebarRecord {
   const basename = p.root.split("/").filter(Boolean).pop() ?? p.root;
   return {
     path: p.root,
+    // displayPath: the raw root; the read model will canonicalize for grouping but display
+    // should show what the user expects (the raw supervisor value).
     displayPath: p.root,
     displayName: basename,
     collapsed: false,

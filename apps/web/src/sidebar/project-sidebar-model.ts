@@ -68,6 +68,26 @@ function pathBasename(path: string): string {
   return path.split("/").filter(Boolean).pop() ?? path;
 }
 
+/** Canonicalizes a project path so `~` and its absolute expansion (`/Users/<name>`) don't appear as
+ *  duplicate projects. The browser can't call `os.homedir()`, so it expands a leading `~` to the
+ *  best-known home prefix from the OTHER paths it sees: if any session or registry record has an
+ *  absolute `/Users/<seg>` path, that prefix replaces `~`. Falls back to leaving `~` as-is when no
+ *  absolute sibling is available (so a lone `~/foo` still renders, just un-expanded). Pure. */
+function canonicalizePath(rawPath: string, allPaths: readonly string[]): string {
+  if (!rawPath.startsWith("~")) {
+    return rawPath;
+  }
+  // Find an absolute path that looks like a home dir (`/Users/<name>/...`).
+  const homePrefix = allPaths
+    .filter((p) => p.startsWith("/Users/"))
+    .map((p) => p.split("/").slice(0, 3).join("/"))
+    .find((prefix, i, arr) => prefix && arr.indexOf(prefix) === i);
+  if (!homePrefix) {
+    return rawPath;
+  }
+  return rawPath.replace(/^~/, homePrefix);
+}
+
 /**
  * Builds the project sidebar read model: groups active (non-archived, non-deleted, non-tangent)
  * sessions under their project by resolved project path, merging known registry records with
@@ -86,10 +106,17 @@ export function buildProjectSidebar(
   // their parent session, never in ordinary top-level navigation (see activeSessions).
   const active = sessions.filter((s) => !s.archived && !s.deleted && !s.tangentOf);
 
+  // Collect all raw paths (from registry records + sessions) so canonicalization can infer the home
+  // prefix from absolute siblings (e.g. resolve `~` to `/Users/<name>` when both are present).
+  const allRawPaths = [
+    ...projects.map((p) => p.path),
+    ...active.map((s) => sessionProjectPath(s) ?? ""),
+  ];
+
   // Index registry records by canonical path.
   const byPath = new Map<string, ProjectSidebarRecord>();
   for (const record of projects) {
-    byPath.set(record.path, record);
+    byPath.set(canonicalizePath(record.path, allRawPaths), record);
   }
 
   // Group active sessions by resolved project path. A null path (ungrouped) is skipped: a session
@@ -100,11 +127,12 @@ export function buildProjectSidebar(
     if (path == null) {
       continue;
     }
-    const list = sessionsByPath.get(path);
+    const canon = canonicalizePath(path, allRawPaths);
+    const list = sessionsByPath.get(canon);
     if (list) {
       list.push(summary);
     } else {
-      sessionsByPath.set(path, [summary]);
+      sessionsByPath.set(canon, [summary]);
     }
   }
 
@@ -124,7 +152,9 @@ export function buildProjectSidebar(
 
     const isTransient = record == null;
     const displayName = record?.displayName ?? pathBasename(key);
-    const displayPath = record?.displayPath ?? key;
+    // Use the canonical key for display so the path matches what the user sees elsewhere (no `~`
+    // when the absolute form is known).
+    const displayPath = key;
     const collapsed = record?.collapsed ?? false;
 
     groups.push({
