@@ -70,3 +70,39 @@ test("an empty child shows a clear placeholder, not a blank void (M6)", () => {
   render(<AgentDetailShell agent="planner" rows={[]} onBack={NOOP} onOpenPath={NOOP} />);
   assert.ok(screen.getByText(/hasn't produced any output/));
 });
+
+test("scrolling away from the child transcript shows a bottom jump button", () => {
+  const { container } = render(
+    <AgentDetailShell agent="explorer" rows={doneRows} onBack={NOOP} onOpenPath={NOOP} />,
+  );
+  const transcript = container.querySelector<HTMLElement>("[data-agent-transcript]");
+  assert.ok(transcript);
+  Object.defineProperties(transcript, {
+    clientHeight: { configurable: true, value: 200 },
+    scrollHeight: { configurable: true, value: 1000 },
+    scrollTop: { configurable: true, writable: true, value: 400 },
+  });
+
+  fireEvent.scroll(transcript);
+
+  assert.ok(screen.getByRole("button", { name: "Scroll to bottom" }));
+});
+
+test("the bottom jump button scrolls the child transcript back to the live edge", () => {
+  const { container } = render(
+    <AgentDetailShell agent="explorer" rows={doneRows} onBack={NOOP} onOpenPath={NOOP} />,
+  );
+  const transcript = container.querySelector<HTMLElement>("[data-agent-transcript]");
+  assert.ok(transcript);
+  Object.defineProperties(transcript, {
+    clientHeight: { configurable: true, value: 200 },
+    scrollHeight: { configurable: true, value: 1000 },
+    scrollTop: { configurable: true, writable: true, value: 400 },
+  });
+  fireEvent.scroll(transcript);
+
+  fireEvent.click(screen.getByRole("button", { name: "Scroll to bottom" }));
+
+  assert.equal(transcript.scrollTop, transcript.scrollHeight);
+  assert.equal(screen.queryByRole("button", { name: "Scroll to bottom" }), null);
+});
