@@ -543,7 +543,7 @@ export function ProjectSidebar({
   }
 
   return (
-    <div className={cn("flex h-full flex-col", className)}>
+    <div className={cn("flex h-full min-w-0 flex-col overflow-hidden", className)}>
       {/* Header: the "Projects" title + optional "Add Project" button + optional search. */}
       <header className="flex h-8 shrink-0 items-center gap-1.5 px-2.5 text-label tracking-wider text-muted-foreground">
         <span className="flex-1">Projects</span>

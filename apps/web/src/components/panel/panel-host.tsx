@@ -346,7 +346,7 @@ export function PanelHost(props: {
       {/* The project sidebar (plan 58 M6): a collapsible left rail listing all projects and
         their sessions. Switching routes through the same safe path as `/resume`. */}
       {sidebar.open ? (
-        <div className="relative flex shrink-0" style={{ width: sidebar.width }}>
+        <div className="relative flex shrink-0 overflow-hidden" style={{ width: sidebar.width }}>
           <ProjectSidebar
             groups={sidebar.groups}
             searchQuery={sidebar.searchQuery}
@@ -364,7 +364,7 @@ export function PanelHost(props: {
             liveActivity={sidebar.liveActivity}
             currentSessionId={sidebar.currentSessionId}
             nowMs={sidebar.nowMs}
-            className="h-full flex-1"
+            className="h-full min-w-0 flex-1"
           />
           {/* Drag-to-resize handle: a thin strip on the sidebar's right edge. Pointer events
               drive the width directly (no HTML5 drag ghost); clamped to [180, 480]. */}
