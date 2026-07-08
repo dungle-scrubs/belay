@@ -194,3 +194,45 @@ test("an inherited model keeps its effort once the roster arrives; the host defa
     "keeps the inherited effort, not the model's medium default",
   );
 });
+
+test("the carried-over effort comes from the ModelRef, not the stale top-level reasoning", () => {
+  // A user.message can carry model.reasoning (the chooser's effort) separately from the top-level
+  // reasoning (the legacy provider field). They drift: here the chosen effort was xhigh but the
+  // top-level field is "off". The carried-over effort must follow the ModelRef, or it reverts to the
+  // model's default once the roster/catalog resolves.
+  const { result } = renderHook(() =>
+    useActiveModel({
+      hostModels: {
+        zai: {
+          label: "GLM 5.2",
+          model: "glm-5.2",
+          reasoningLevels: ["off", "low", "medium", "high", "xhigh"],
+          defaultReasoning: "medium",
+          kind: "cloud",
+        },
+      },
+      hostSources: [],
+      hostCatalog: {},
+      hostModelPrefs: { default: null, pinned: [] },
+      provider: undefined,
+      setProvider: noop,
+      reasoningMap: undefined,
+      setReasoningMap: noop,
+      hostDefault: undefined,
+      lastUserModel: {
+        provider: "zai",
+        model: { sourceId: "zai", modelId: "glm-5.2", reasoning: "xhigh" },
+        reasoning: "off", // stale legacy field - must NOT win
+      },
+      sessionId: "handoff-mismatch",
+      activeRunId: null,
+      switchModel: noop,
+    }),
+  );
+  assert.equal(result.current.sendModel.modelId, "glm-5.2");
+  assert.equal(
+    result.current.sendModelRef.reasoning,
+    "xhigh",
+    "uses the ModelRef effort (xhigh), not the stale top-level (off) or the default (medium)",
+  );
+});
