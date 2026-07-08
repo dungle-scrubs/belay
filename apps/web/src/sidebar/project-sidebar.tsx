@@ -105,25 +105,27 @@ function SessionRow({
   return (
     <div
       className={cn(
-        "group relative flex w-full items-center gap-2 overflow-hidden py-1.5 pl-7 pr-2.5 text-left text-ui",
+        "group relative flex w-full items-center overflow-hidden py-1.5 pl-7 pr-2.5 text-left text-ui",
         selected
           ? "bg-card text-foreground"
           : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
       )}
+      style={{
+        ["--row-bg" as string]: selected ? "hsl(var(--card))" : "hsl(var(--smui-surface-sunken))",
+      }}
     >
       <button
         type="button"
         onClick={() => onSelect(summary.sessionId)}
-        className="min-w-0 flex-1 truncate text-left"
+        className="min-w-0 flex-1 truncate pr-16 text-left"
       >
         {summary.title}
       </button>
-      {/* Right slot: a stacked container holding both the time/dots and the action buttons.
-          They're positioned over each other (absolute) so the hover fade cross-fades smoothly
-          instead of jumping as one appends before the other collapses. */}
-      <span className="relative flex h-4 shrink-0 items-center justify-end gap-0.5">
+      {/* Right slot: absolutely positioned so long titles never push it off-screen. The title
+          gets right padding (pr-16) so its truncated ellipsis lands before this overlay. */}
+      <span className="pointer-events-none absolute right-1.5 top-1/2 flex h-4 -translate-y-1/2 items-center justify-end gap-0.5">
         {hasActions ? (
-          <span className="absolute right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+          <span className="pointer-events-auto absolute right-0 flex items-center gap-0.5 bg-[var(--row-bg,hsl(var(--smui-surface-sunken)))] opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
             {onRenameSession ? (
               <button
                 type="button"
@@ -154,7 +156,7 @@ function SessionRow({
         ) : null}
         <span
           className={cn(
-            "whitespace-nowrap text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
+            "pointer-events-auto whitespace-nowrap bg-[var(--row-bg,hsl(var(--smui-surface-sunken)))] pl-1 text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
             hasActions && "group-hover:opacity-0",
           )}
         >
