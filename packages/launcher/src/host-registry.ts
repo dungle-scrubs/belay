@@ -51,6 +51,38 @@ export function removeHost(fs: LauncherFs, home: string, sessionId: string): voi
 }
 
 /**
+ * Reaps EVERY host record whose process is no longer alive, returning the reaped session ids. This is
+ * the sweep {@link decideHostAction} cannot perform on its own: it only inspects the ONE session a
+ * launch targets, so a host that died without a clean shutdown (SIGKILL, machine restart, a killed
+ * terminal) leaves a stale record that lingers until some later launch happens to target THAT session
+ * - meanwhile hosts.json (and anything reading it) keeps reporting a dead host as "running".
+ *
+ * Running it once per launch keeps the registry honest: a record is removed only when its pid is
+ * provably gone. Safety is the never-reap-a-live-host bias - a live host's pid is alive so it is kept,
+ * and a dead host whose pid was reused by an unrelated process stays (a missed reap, not a wrong one).
+ * Pure over the injected `processAlive` (kill(pid,0) semantics), so it is unit-tested without real
+ * processes; writes only when something actually changed, so an all-alive registry is a no-op.
+ */
+export function reapDeadHosts(
+  fs: LauncherFs,
+  home: string,
+  processAlive: (pid: number) => boolean,
+): string[] {
+  const hosts = loadHosts(fs, home);
+  const reaped: string[] = [];
+  for (const [sessionId, record] of Object.entries(hosts)) {
+    if (!processAlive(record.pid)) {
+      delete hosts[sessionId];
+      reaped.push(sessionId);
+    }
+  }
+  if (reaped.length > 0) {
+    writeJson(fs, hostsPath(home), hosts);
+  }
+  return reaped;
+}
+
+/**
  *  - reuse         : a recorded host is alive AND answering this session - open the tab against it,
  *  - replace-stale : a record exists but its process is dead, or alive yet not answering the session
  *                    (a leftover record) - drop it and spawn,

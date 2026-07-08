@@ -12,6 +12,7 @@ import {
   decideHostAction,
   type HostAction,
   loadHosts,
+  reapDeadHosts,
   recordHost,
   releaseLock,
   removeHost,
@@ -181,6 +182,14 @@ async function launchInner(
   await platform.waitForStore();
 
   // 2. Host lifecycle behind the per-session lock, so two concurrent launches can't both spawn.
+  //    First sweep the whole registry: a host that died without a clean shutdown (SIGKILL, machine
+  //    restart) leaves a stale record that otherwise lingers until a launch targets THAT session, so
+  //    hosts.json would keep reporting a dead host as "running". Cheap (kill(pid,0) per record) and a
+  //    no-op write when nothing is dead.
+  const reaped = reapDeadHosts(platform.fs, platform.home, platform.processAlive);
+  if (reaped.length > 0) {
+    platform.reporter.step(`reaped ${reaped.length} stale host record(s)…`);
+  }
   const lock = acquireLock(platform.fs, platform.home, sessionId, {
     pid: platform.pid,
     now: platform.now(),

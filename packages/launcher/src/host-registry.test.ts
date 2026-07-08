@@ -6,6 +6,7 @@ import {
   decideHostAction,
   type HostRecord,
   loadHosts,
+  reapDeadHosts,
   recordHost,
   releaseLock,
   removeHost,
@@ -58,6 +59,32 @@ test("decideHostAction: spawn (no record), reuse (alive + present), replace-stal
     decideHostAction(record(), { processAlive: alive, hostPresent: false }),
     "replace-stale",
   );
+});
+
+test("reapDeadHosts sweeps only dead-pid records and is a no-op write when all are alive", () => {
+  const fs = fakeFs();
+  recordHost(fs, "/home", record({ sessionId: "alive-a", pid: 1 }));
+  recordHost(fs, "/home", record({ sessionId: "dead-b", pid: 2 }));
+  recordHost(fs, "/home", record({ sessionId: "dead-c", pid: 3 }));
+
+  // pid 1 is alive; pids 2 and 3 are gone.
+  const alive = (pid: number) => pid === 1;
+  const reaped = reapDeadHosts(fs, "/home", alive);
+  assert.deepEqual([...reaped].sort(), ["dead-b", "dead-c"]);
+
+  const remaining = loadHosts(fs, "/home");
+  assert.deepEqual(Object.keys(remaining), ["alive-a"]);
+  assert.equal(remaining["alive-a"]?.pid, 1);
+});
+
+test("reapDeadHosts never reaps a live host whose pid was reused (conservative bias)", () => {
+  const fs = fakeFs();
+  // A dead host whose pid (4242) was since taken by an UNRELATED live process: kill(pid,0) says alive.
+  recordHost(fs, "/home", record({ sessionId: "reused", pid: 4242 }));
+  const reaped = reapDeadHosts(fs, "/home", () => true);
+  assert.deepEqual(reaped, []);
+  // The record stays rather than being wrongly dropped.
+  assert.equal(loadHosts(fs, "/home").reused?.pid, 4242);
 });
 
 test("acquireLock blocks a live concurrent holder, takes over a dead one, and releases cleanly", () => {
