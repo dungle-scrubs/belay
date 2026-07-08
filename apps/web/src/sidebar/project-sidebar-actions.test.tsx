@@ -1,8 +1,15 @@
 import { fireEvent, render } from "@testing-library/react";
 import { sessionSummary } from "@trevor/test-kit";
+import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProjectSidebar } from "./project-sidebar";
 import { buildProjectSidebar, type ProjectSidebarRecord } from "./project-sidebar-model";
+
+/** Wraps the element in a TooltipProvider (needed by ProjectLabel's Radix tooltip). */
+function renderWithTooltip(ui: ReactElement) {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
+}
 
 /**
  * Plan 58 M8 (action UI): the project sidebar's presentational action surfaces - the header
@@ -42,7 +49,7 @@ function openMenu(container: HTMLElement) {
 describe("ProjectSidebar action UI", () => {
   test("the Add Project button renders and calls onAddProject on click", () => {
     const onAddProject = vi.fn<() => void>();
-    const { getByLabelText } = render(
+    const { getByLabelText } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession()}
         onToggleProject={() => {}}
@@ -57,7 +64,7 @@ describe("ProjectSidebar action UI", () => {
   });
 
   test("the Add Project button is absent when onAddProject is not provided", () => {
-    const { queryByLabelText } = render(
+    const { queryByLabelText } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession()}
         onToggleProject={() => {}}
@@ -71,7 +78,7 @@ describe("ProjectSidebar action UI", () => {
 
   test("the New Session button appears on expanded projects and calls onNewSession", () => {
     const onNewSession = vi.fn<(projectKey: string) => void>();
-    const { getByLabelText } = render(
+    const { getByLabelText } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession()}
         onToggleProject={() => {}}
@@ -90,7 +97,7 @@ describe("ProjectSidebar action UI", () => {
       [project({ path: "/dev/trevor", collapsed: true })],
       [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
     );
-    const { queryByLabelText } = render(
+    const { queryByLabelText } = renderWithTooltip(
       <ProjectSidebar
         groups={collapsedGroups}
         onToggleProject={() => {}}
@@ -104,7 +111,7 @@ describe("ProjectSidebar action UI", () => {
   });
 
   test("the Archive button appears on session rows when onArchiveSession is provided", () => {
-    const { getByLabelText } = render(
+    const { getByLabelText } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession()}
         onToggleProject={() => {}}
@@ -118,7 +125,7 @@ describe("ProjectSidebar action UI", () => {
   });
 
   test("the Archive button is absent when onArchiveSession is not provided", () => {
-    const { queryByLabelText } = render(
+    const { queryByLabelText } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession()}
         onToggleProject={() => {}}
@@ -132,7 +139,7 @@ describe("ProjectSidebar action UI", () => {
 
   test("clicking the Archive button calls onArchiveSession with the session id", () => {
     const onArchiveSession = vi.fn<(sessionId: string) => void>();
-    const { getByLabelText } = render(
+    const { getByLabelText } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession()}
         onToggleProject={() => {}}
@@ -147,7 +154,7 @@ describe("ProjectSidebar action UI", () => {
   });
 
   test("right-clicking a project row opens a context menu with Rename and Remove", () => {
-    const { getByText, container } = render(
+    const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession()}
         onToggleProject={() => {}}
@@ -158,8 +165,10 @@ describe("ProjectSidebar action UI", () => {
         onRemoveProject={() => {}}
       />,
     );
-    // The project row is the button whose aria-expanded reflects the collapse state.
-    const projectRow = container.querySelector('button[aria-expanded="true"]') as HTMLButtonElement;
+    // The project row is the role=button whose aria-expanded reflects the collapse state.
+    const projectRow = container.querySelector(
+      '[role="button"][aria-expanded="true"]',
+    ) as HTMLElement;
     expect(projectRow).toBeTruthy();
     fireEvent.contextMenu(projectRow);
     expect(getByText("Rename")).toBeTruthy();
@@ -167,7 +176,7 @@ describe("ProjectSidebar action UI", () => {
   });
 
   test("the Project actions button also opens the context menu", () => {
-    const { getByText, container } = render(
+    const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession()}
         onToggleProject={() => {}}
@@ -184,7 +193,7 @@ describe("ProjectSidebar action UI", () => {
   });
 
   test("clicking Rename enters inline rename mode with an input", () => {
-    const { getByText, container } = render(
+    const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession("Old Name")}
         onToggleProject={() => {}}
@@ -204,7 +213,7 @@ describe("ProjectSidebar action UI", () => {
 
   test("typing + Enter calls onRenameProject with the new name", () => {
     const onRenameProject = vi.fn<(key: string, name: string) => void>();
-    const { getByText, container } = render(
+    const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession("Old Name")}
         onToggleProject={() => {}}
@@ -226,7 +235,7 @@ describe("ProjectSidebar action UI", () => {
 
   test("Escape in the rename input cancels without calling onRenameProject", () => {
     const onRenameProject = vi.fn<(key: string, name: string) => void>();
-    const { getByText, container } = render(
+    const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession("Old Name")}
         onToggleProject={() => {}}
@@ -251,7 +260,7 @@ describe("ProjectSidebar action UI", () => {
       [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", activity: "running" })],
     );
     const onRemoveProject = vi.fn<(key: string) => void>();
-    const { getByText, container } = render(
+    const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
         groups={activeGroups}
         onToggleProject={() => {}}
@@ -273,7 +282,7 @@ describe("ProjectSidebar action UI", () => {
 
   test("clicking Remove (when not busy) calls onRemoveProject with the project key", () => {
     const onRemoveProject = vi.fn<(key: string) => void>();
-    const { getByText, container } = render(
+    const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
         groups={groupsWithSession("Idle")}
         onToggleProject={() => {}}

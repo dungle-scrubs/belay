@@ -106,6 +106,7 @@ import {
   ensureSession,
   permanentlyDeleteSession,
   recordTangentFoldBack,
+  renameSession,
   sessionTransport,
   useSession,
   useSessionActions,
@@ -373,7 +374,7 @@ export function App() {
   const active = readModel.activeRunId;
   const busy = active !== null || awaitingResponse;
   // Modal, drawer, inventory, and project scoping state are one App-owned view boundary shared by
-  // /resume, /worktree, the left session sidebar, and the right details panel.
+  // /resume, /worktree, the left project sidebar, and the right details panel.
   const worktrees = readModel.worktrees;
   const modal = useModalState({ worktrees, host, target, sessionId, busy });
   // The archive browser's optional project filter (plan 58 M7): set when the user clicks "View
@@ -1667,6 +1668,8 @@ export function App() {
           open: modal.sidebarOpen,
           onOpen: () => modal.setSidebarOpen(true),
           onClose: () => modal.setSidebarOpen(false),
+          width: modal.sidebarWidth,
+          onResize: modal.setSidebarWidth,
           groups: projectSidebar.groups,
           searchQuery: projectSidebar.searchQuery,
           onSearch: projectSidebar.onSearch,
@@ -1680,6 +1683,7 @@ export function App() {
           onAddProject: projectSidebar.onAddProject,
           onNewSession: projectSidebar.onNewSession,
           onArchiveSession: projectSidebar.onArchiveSession,
+          onRenameSession: (sessionId, title) => void renameSession(sessionId, title),
           onRenameProject: projectSidebar.onRenameProject,
           onRemoveProject: projectSidebar.onRemoveProject,
           onViewArchive: (projectKey) => {

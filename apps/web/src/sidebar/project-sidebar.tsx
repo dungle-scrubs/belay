@@ -1,8 +1,8 @@
 import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
 import {
   Archive,
-  ChevronDown,
-  ChevronRight,
+  Folder,
+  FolderOpen,
   Inbox,
   MoreVertical,
   Pencil,
@@ -50,6 +50,8 @@ export interface ProjectSidebarProps {
   readonly onNewSession?: (projectKey: string) => void;
   /** Archive a session (hover action on session rows). */
   readonly onArchiveSession?: (sessionId: string) => void;
+  /** Rename a session (hover edit action on session rows). */
+  readonly onRenameSession?: (sessionId: string, title: string) => void;
   /** Rename a project (context menu action). */
   readonly onRenameProject?: (key: string, name: string) => void;
   /** Remove a project (context menu action, with blocking). */
@@ -78,7 +80,9 @@ function effectiveActivity(
   return liveActivity?.get(summary.sessionId) ?? summary.activity;
 }
 
-/** A session row: title, branch, and an activity indicator (running dots, queued, or relative time). */
+/** A session row: title + activity indicator. On hover the time/dots are replaced by action buttons
+ *  (rename, archive) that appear in their place to the left of where the time was. In-flight sessions
+ *  show animated dots instead of a timestamp, regardless of hover. */
 function SessionRow({
   summary,
   activity,
@@ -86,6 +90,7 @@ function SessionRow({
   nowMs,
   onSelect,
   onArchiveSession,
+  onRenameSession,
 }: {
   summary: SessionSummary;
   activity: SessionActivity;
@@ -93,29 +98,19 @@ function SessionRow({
   nowMs: number;
   onSelect: (sessionId: string) => void;
   onArchiveSession?: (sessionId: string) => void;
+  onRenameSession?: (sessionId: string, title: string) => void;
 }) {
-  const active = activity === "running" || activity === "queued";
+  const hasActions = Boolean(onArchiveSession || onRenameSession);
+
   return (
     <div
       className={cn(
-        "group relative flex w-full items-center gap-2 py-1.5 pl-7 pr-2.5 text-left text-ui",
+        "group relative flex w-full items-center gap-2 overflow-hidden py-1.5 pl-7 pr-2.5 text-left text-ui",
         selected
           ? "bg-card text-foreground"
           : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
       )}
     >
-      {/* Activity bar pinned to the row's left edge (D-093): green when work is in flight. */}
-      <span
-        aria-hidden
-        className={cn(
-          "absolute inset-y-1.5 left-5 w-0.5 rounded-full",
-          active
-            ? "bg-smui-green"
-            : activity === "settled" || summary.host === "live"
-              ? "bg-muted-foreground/50"
-              : "bg-muted-foreground/20",
-        )}
-      />
       <button
         type="button"
         onClick={() => onSelect(summary.sessionId)}
@@ -123,35 +118,70 @@ function SessionRow({
       >
         {summary.title}
       </button>
-      {onArchiveSession ? (
-        <button
-          type="button"
-          aria-label="Archive session"
-          onClick={(e) => {
-            e.stopPropagation();
-            onArchiveSession(summary.sessionId);
-          }}
-          className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-smui-red focus-visible:opacity-100 group-hover:opacity-100"
-        >
-          <Archive className="size-3" />
-        </button>
-      ) : null}
-      <span className="shrink-0 text-label tracking-wider text-muted-foreground/60">
-        {activity === "running" ? (
-          <span className="inline-flex items-center gap-[3px]" role="status" aria-label="running">
-            {[0, 200, 400].map((delay) => (
-              <span
-                key={delay}
-                className="size-1 animate-pulse rounded-full bg-current"
-                style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
-              />
-            ))}
+      {/* Right slot: a stacked container holding both the time/dots and the action buttons.
+          They're positioned over each other (absolute) so the hover fade cross-fades smoothly
+          instead of jumping as one appends before the other collapses. */}
+      <span className="relative flex h-4 shrink-0 items-center justify-end gap-0.5">
+        {hasActions ? (
+          <span className="absolute right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+            {onRenameSession ? (
+              <button
+                type="button"
+                aria-label="Rename session"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRenameSession(summary.sessionId, summary.title);
+                }}
+                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <Pencil className="size-3" />
+              </button>
+            ) : null}
+            {onArchiveSession ? (
+              <button
+                type="button"
+                aria-label="Archive session"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onArchiveSession(summary.sessionId);
+                }}
+                className="rounded p-0.5 text-muted-foreground hover:text-smui-red"
+              >
+                <Archive className="size-3" />
+              </button>
+            ) : null}
           </span>
-        ) : activity === "queued" ? (
-          "queued"
-        ) : (
-          relativeTime(summary.updatedAt, nowMs)
-        )}
+        ) : null}
+        <span
+          className={cn(
+            "whitespace-nowrap text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
+            hasActions && "group-hover:opacity-0",
+          )}
+        >
+          {activity === "running" ? (
+            <span className="inline-flex items-center gap-[3px]" role="status" aria-label="running">
+              {[0, 200, 400].map((delay) => (
+                <span
+                  key={delay}
+                  className="size-1 animate-pulse rounded-full bg-current"
+                  style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
+                />
+              ))}
+            </span>
+          ) : activity === "queued" ? (
+            <span className="inline-flex items-center gap-[3px]" role="status" aria-label="queued">
+              {[0, 200, 400].map((delay) => (
+                <span
+                  key={delay}
+                  className="size-1 animate-pulse rounded-full bg-current"
+                  style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
+                />
+              ))}
+            </span>
+          ) : (
+            relativeTime(summary.updatedAt, nowMs)
+          )}
+        </span>
       </span>
     </div>
   );
@@ -304,9 +334,9 @@ function ProjectRow({
 }) {
   const hasActive = group.sessions.some((s) => s.activity === "running" || s.activity === "queued");
   const [menuOpen, setMenuOpen] = useState(false);
-  const rowRef = useRef<HTMLButtonElement>(null);
+  const rowRef = useRef<HTMLDivElement>(null);
 
-  function handleContextMenu(e: React.MouseEvent<HTMLButtonElement>) {
+  function handleContextMenu(e: React.MouseEvent<HTMLDivElement>) {
     if (!onRenameProject && !onRemoveProject) return;
     e.preventDefault();
     e.stopPropagation();
@@ -316,27 +346,28 @@ function ProjectRow({
   const canMenu = onRenameProject != null || onRemoveProject != null;
 
   return (
-    <div className="group relative">
-      <button
+    <div className="group relative [--row-bg:hsl(var(--smui-surface-sunken))]">
+      {/* biome-ignore lint/a11y/useSemanticElements: project row needs nested action buttons */}
+      <div
         ref={rowRef}
-        type="button"
+        role="button"
+        tabIndex={0}
         onClick={() => onToggle(group.key)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle(group.key);
+          }
+        }}
         onContextMenu={canMenu ? handleContextMenu : undefined}
-        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-card/40"
+        className="group/row flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-card/40"
         aria-expanded={!group.collapsed}
       >
         {group.collapsed ? (
-          <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" />
+          <Folder className="size-3.5 shrink-0 text-muted-foreground/60" />
         ) : (
-          <ChevronDown className="size-3.5 shrink-0 text-muted-foreground/60" />
+          <FolderOpen className="size-3.5 shrink-0 text-muted-foreground/60" />
         )}
-        <span
-          aria-hidden
-          className={cn(
-            "size-1.5 shrink-0 rounded-full",
-            hasActive ? "bg-smui-green" : "bg-muted-foreground/30",
-          )}
-        />
         {renaming ? (
           <RenameInput
             initial={group.displayName}
@@ -347,40 +378,61 @@ function ProjectRow({
           <ProjectLabel
             displayName={group.displayName}
             displayPath={group.displayPath}
-            className="flex-1 text-ui text-foreground"
+            className="min-w-0 flex-1 text-ui text-foreground"
             pathClassName="text-muted-foreground/50"
           />
         )}
-        <span className="shrink-0 text-label tracking-wider text-muted-foreground/60">
-          {group.activeCount > 0 ? group.activeCount : ""}
-        </span>
         {onNewSession && !group.collapsed ? (
-          <button
-            type="button"
-            aria-label="New session"
-            onClick={(e) => {
-              e.stopPropagation();
-              onNewSession(group.key);
-            }}
-            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-          >
-            <Plus className="size-3" />
-          </button>
+          <div className="pointer-events-none absolute right-0 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity group-hover/row:opacity-100">
+            <div className="pointer-events-auto flex items-center gap-0.5 bg-gradient-to-l from-[var(--row-bg)] from-50% to-transparent pl-3 pr-0.5">
+              <button
+                type="button"
+                aria-label="New session"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewSession(group.key);
+                }}
+                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <Plus className="size-3" />
+              </button>
+              {canMenu ? (
+                <button
+                  type="button"
+                  aria-label="Project actions"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.currentTarget.blur();
+                    setMenuOpen((v) => !v);
+                  }}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <MoreVertical className="size-3" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : canMenu ? (
+          <div className="pointer-events-none absolute right-0 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity group-hover/row:opacity-100">
+            <div className="pointer-events-auto flex items-center gap-0.5 bg-gradient-to-l from-[var(--row-bg)] from-50% to-transparent pl-3 pr-0.5">
+              <button
+                type="button"
+                aria-label="Project actions"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.currentTarget.blur();
+                  setMenuOpen((v) => !v);
+                }}
+                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <MoreVertical className="size-3" />
+              </button>
+            </div>
+          </div>
         ) : null}
-        {canMenu ? (
-          <button
-            type="button"
-            aria-label="Project actions"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpen((v) => !v);
-            }}
-            className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
-          >
-            <MoreVertical className="size-3" />
-          </button>
-        ) : null}
-      </button>
+      </div>
       {menuOpen ? (
         <ProjectContextMenu
           hasActive={hasActive}
@@ -434,6 +486,7 @@ export function ProjectSidebar({
   onAddProject,
   onNewSession,
   onArchiveSession,
+  onRenameSession,
   onRenameProject,
   onRemoveProject,
   liveActivity,
@@ -524,6 +577,7 @@ export function ProjectSidebar({
                             nowMs={nowMs}
                             onSelect={onSelectSession}
                             onArchiveSession={onArchiveSession}
+                            onRenameSession={onRenameSession}
                           />
                         ))
                       )}

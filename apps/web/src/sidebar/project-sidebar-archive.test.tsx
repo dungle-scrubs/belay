@@ -1,8 +1,14 @@
 import { fireEvent, render } from "@testing-library/react";
 import { sessionSummary } from "@trevor/test-kit";
+import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProjectSidebar } from "./project-sidebar";
 import { buildProjectSidebar, type ProjectSidebarRecord } from "./project-sidebar-model";
+
+function renderWithTooltip(ui: ReactElement) {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
+}
 
 /**
  * Plan 58 M7 (RED): the project sidebar's presentational behavior for archive-filter access and the
@@ -27,7 +33,7 @@ describe("ProjectSidebar archive access (M7)", () => {
     // A registry record with NO active sessions => the project's only content is archived sessions.
     const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], []);
     const onViewArchive = vi.fn<(projectKey: string) => void>();
-    const { getByText } = render(
+    const { getByText } = renderWithTooltip(
       <ProjectSidebar
         groups={groups}
         onToggleProject={() => {}}
@@ -44,7 +50,7 @@ describe("ProjectSidebar archive access (M7)", () => {
 
   test("without onViewArchive, the empty state shows 'No active sessions' and is not a link", () => {
     const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], []);
-    const { getByText, queryByText } = render(
+    const { getByText, queryByText } = renderWithTooltip(
       <ProjectSidebar
         groups={groups}
         onToggleProject={() => {}}
@@ -63,7 +69,7 @@ describe("ProjectSidebar archive access (M7)", () => {
       [project({ path: "/dev/trevor" })],
       [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
     );
-    const { queryByLabelText, queryByText } = render(
+    const { queryByLabelText, queryByText } = renderWithTooltip(
       <ProjectSidebar
         groups={groups}
         onToggleProject={() => {}}
@@ -83,7 +89,7 @@ describe("ProjectSidebar archive access (M7)", () => {
       [project({ path: "/dev/trevor", displayName: "My Trevor" })],
       [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
     );
-    const { getByText } = render(
+    const { getByText } = renderWithTooltip(
       <ProjectSidebar
         groups={groups}
         onToggleProject={() => {}}
