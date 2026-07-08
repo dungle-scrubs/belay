@@ -408,6 +408,7 @@ export function App() {
   // analogue) - a no-host session viewed idly holds no supervisor stream. The control log replays from
   // seq 0, so a subscription opened the instant the user clicks Start still catches the durable result.
   const [startRequested, setStartRequested] = useState(false);
+  const [freshLaunchSessionId, setFreshLaunchSessionId] = useState<string | null>(null);
   const startControl = useSessionWithTransport(
     sessionTransport,
     startRequested ? SUPERVISOR_SESSION_ID : null,
@@ -445,6 +446,7 @@ export function App() {
   const startFreshProjectSession = useCallback(
     (projectPath: string) => {
       const sessionId = crypto.randomUUID();
+      setFreshLaunchSessionId(sessionId);
       setStartRequested(true);
       sessionLaunch.launch(projectPath, { sessionId, projectPath });
     },
@@ -453,13 +455,25 @@ export function App() {
   // Once a host is present (the badge flips to "host active", so the launch UI is gone) or the viewed
   // session changes, disarm the subscription and reset the launch - the reset bumps useLaunch's guard
   // token so a superseded launch's pending host.online never navigates the new session late.
+  //
+  // BUT only for the session-view "start host" path (no freshLaunchSessionId), NOT for a fresh-project
+  // session launch. A fresh launch navigates to a NEW session; resetting when host.present (which is
+  // the CURRENT session's host) would fire immediately and kill the launch before the result arrives.
   const resetSessionLaunch = sessionLaunch.reset;
   useEffect(() => {
-    if (startRequested && host.present) {
+    if (startRequested && host.present && !freshLaunchSessionId) {
       setStartRequested(false);
       resetSessionLaunch();
     }
-  }, [startRequested, host.present, resetSessionLaunch]);
+  }, [startRequested, host.present, freshLaunchSessionId, resetSessionLaunch]);
+  // A fresh-project launch disarms once it has navigated to its target session (target changes to
+  // the fresh session). The navigate-to effect below already resets on target change; this just
+  // clears the fresh marker so a subsequent session-view start works normally.
+  useEffect(() => {
+    if (freshLaunchSessionId && target === freshLaunchSessionId) {
+      setFreshLaunchSessionId(null);
+    }
+  }, [freshLaunchSessionId, target]);
   // Reset the launch (and disarm) whenever the viewed session changes, so a launch started on the
   // previous session cannot navigate the new one late (reset bumps useLaunch's guard token). The ref
   // compare makes `target` a real read, not a trigger-only dep.
