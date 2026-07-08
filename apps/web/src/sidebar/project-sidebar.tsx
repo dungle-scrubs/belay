@@ -111,7 +111,7 @@ function SessionRow({
           : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
       )}
       style={{
-        ["--row-bg" as string]: selected ? "hsl(var(--card))" : "hsl(var(--smui-surface-sunken))",
+        ["--row-bg" as string]: selected ? "hsl(var(--card))" : "transparent",
       }}
     >
       <button
@@ -125,7 +125,7 @@ function SessionRow({
           gets right padding (pr-16) so its truncated ellipsis lands before this overlay. */}
       <span className="pointer-events-none absolute right-1.5 top-1/2 flex h-4 -translate-y-1/2 items-center justify-end gap-0.5">
         {hasActions ? (
-          <span className="pointer-events-auto absolute right-0 flex items-center gap-0.5 bg-[var(--row-bg,hsl(var(--smui-surface-sunken)))] opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
+          <span className="pointer-events-auto absolute right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
             {onRenameSession ? (
               <button
                 type="button"
@@ -156,7 +156,7 @@ function SessionRow({
         ) : null}
         <span
           className={cn(
-            "pointer-events-auto whitespace-nowrap bg-[var(--row-bg,hsl(var(--smui-surface-sunken)))] pl-1 text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
+            "pointer-events-auto whitespace-nowrap pl-1 text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
             hasActions && "group-hover:opacity-0",
           )}
         >
@@ -380,7 +380,7 @@ function ProjectRow({
   const canMenu = onRenameProject != null || onRemoveProject != null;
 
   return (
-    <div className="group relative [--row-bg:hsl(var(--smui-surface-sunken))]">
+    <div className="group relative [--row-bg:transparent]">
       {/* biome-ignore lint/a11y/useSemanticElements: project row needs nested action buttons */}
       <div
         ref={rowRef}
@@ -418,7 +418,7 @@ function ProjectRow({
         )}
         {onNewSession && !group.collapsed ? (
           <div className="pointer-events-none absolute right-0 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity group-hover/row:opacity-100">
-            <div className="pointer-events-auto flex items-center gap-0.5 bg-gradient-to-l from-[var(--row-bg)] from-50% to-transparent pl-3 pr-0.5">
+            <div className="pointer-events-auto flex items-center gap-0.5 pl-3 pr-0.5">
               <button
                 type="button"
                 aria-label="New session"
@@ -449,7 +449,7 @@ function ProjectRow({
           </div>
         ) : canMenu ? (
           <div className="pointer-events-none absolute right-0 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity group-hover/row:opacity-100">
-            <div className="pointer-events-auto flex items-center gap-0.5 bg-gradient-to-l from-[var(--row-bg)] from-50% to-transparent pl-3 pr-0.5">
+            <div className="pointer-events-auto flex items-center gap-0.5 pl-3 pr-0.5">
               <button
                 type="button"
                 aria-label="Project actions"
