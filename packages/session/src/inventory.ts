@@ -16,6 +16,12 @@ export interface SessionSummary {
   readonly workspace: string | null;
   /** Base-repo name (workspace basename), used to group + sort current-project-first. */
   readonly project: string | null;
+  /**
+   * The canonical absolute project path (plan 58 M3): the durable `session.project` marker wins over
+   * host.online workspace, then cwd. Null when none of the three are available. Drives sidebar/archive
+   * grouping so it no longer depends on a live host.
+   */
+  readonly projectPath: string | null;
   readonly branch: string | null;
   readonly git: GitStatus | null;
   readonly createdAt: string;
@@ -100,6 +106,8 @@ export interface InventoryRow {
   readonly forkedFrom: SessionEvent | null;
   /** The session.tangentOf lineage marker (plan 37), if this session is a tangent; else null. */
   readonly tangentOf: SessionEvent | null;
+  /** The session.project marker (plan 58 M3), if any - the durable, immutable project path. */
+  readonly projectMarker: SessionEvent | null;
   /** Whether a host socket is connected to this session right now. */
   readonly hostPresent: boolean;
 }
@@ -199,6 +207,25 @@ function projectOf(workspace: string | null, cwd: string | null): string | null 
   return base && base.length > 0 ? base : trimmed;
 }
 
+/**
+ * The canonical project path for a session (plan 58 M3): the durable `session.project` marker wins over
+ * host.online workspace/cwd. Returns null when none of the three are available. Pure and centralized so
+ * the sidebar, archive, and CLI all use one rule.
+ */
+export function sessionProjectPath(
+  projectMarker: SessionEvent | null,
+  workspace: string | null,
+  cwd: string | null,
+): string | null {
+  if (projectMarker) {
+    const decoded = decodeTrevorEvent(projectMarker);
+    if (decoded?.type === "session.project" && decoded.path) {
+      return decoded.path;
+    }
+  }
+  return workspace ?? cwd ?? null;
+}
+
 /** Projects one raw inventory row into the distilled SessionSummary read model. */
 export function summarizeSession(row: InventoryRow): SessionSummary {
   const host = row.hostOnline ? decodeTrevorEvent(row.hostOnline) : null;
@@ -236,6 +263,7 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
     cwd,
     workspace,
     project: projectOf(workspace, cwd),
+    projectPath: sessionProjectPath(row.projectMarker, workspace, cwd),
     branch: online?.branch ?? null,
     git: online?.git ?? null,
     createdAt: row.createdAt,

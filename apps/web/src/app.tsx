@@ -54,6 +54,8 @@ import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
 import { isEditableTarget, useShortcutRouter } from "@/shortcuts/router";
+import { useProjectSidebar } from "@/sidebar/use-project-sidebar";
+import { useSidebarSupervisor } from "@/sidebar/use-sidebar-supervisor";
 import {
   jobDismissEligible,
   jobToDetailModel,
@@ -66,6 +68,7 @@ import { type ActiveTangent, useTangent } from "@/tangent/use-tangent";
 import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
 import { vimToggleCommand } from "@/vim/vim-command";
+import { BUILT_IN_COMMANDS } from "./built-in-commands";
 import { activeMention } from "./composer/active-mention";
 import { type FileIndexAsked, shouldRequestFileIndex } from "./composer/file-index-request";
 import { caretOnFirstLine, caretOnLastLine } from "./composer-caret";
@@ -100,7 +103,6 @@ import {
 } from "./session/selectors";
 import {
   archiveSession,
-  deleteSession,
   ensureSession,
   permanentlyDeleteSession,
   recordTangentFoldBack,
@@ -122,14 +124,6 @@ const ARTIFACT_PANEL_KEY = "trevor.artifactPanel";
 // wiring; override with ?session=<id> in the URL. The id is owned in @trevor/session so
 // this and the host's SESSION_ID default cannot drift into two different sessions.
 const DEFAULT_SESSION = DEFAULT_SESSION_ID;
-const BUILT_IN_COMMANDS = [
-  { name: "/clear", summary: "Start a fresh session" },
-  { name: "/cd", summary: "Switch directories in a fresh session", usage: "/cd <directory>" },
-  NEW_SESSION_COMMAND,
-  { name: "/resume", summary: "Open a prior session (no implicit resume)" },
-  { name: "/worktree", summary: "Switch a Trevor-managed worktree" },
-] as const;
-
 /** Commands that still WORK when typed but are hidden from the slash autocomplete menu (a dev toggle
  *  the host always announces; we don't want it cluttering the picker). Stays in `commandNames` so
  *  `parseCommand` routes it as a command, just filtered out of the menu list. */
@@ -380,9 +374,13 @@ export function App() {
   const active = readModel.activeRunId;
   const busy = active !== null || awaitingResponse;
   // Modal, drawer, inventory, and project scoping state are one App-owned view boundary shared by
-  // /resume, /worktree, the left session sidebar, and the right details panel.
+  // /resume, /worktree, the left project sidebar, and the right details panel.
   const worktrees = readModel.worktrees;
   const modal = useModalState({ worktrees, host, target, sessionId, busy });
+  // The archive browser's optional project filter (plan 58 M7): set when the user clicks "View
+  // archive" on an archive-only project in the sidebar, so the archive lists only that project's
+  // archived sessions. Cleared via the banner's close button or whenever the archive closes.
+  const [archiveProjectFilter, setArchiveProjectFilter] = useState<string | null>(null);
   // The single open-picker entry (plan 44.2, D-001): both the sidebar `＋ New session` and the `/new`
   // command call this, so the two entry points can never drift.
   const openNewSession = useCallback(() => modal.setNewOpen(true), [modal.setNewOpen]);
@@ -410,6 +408,7 @@ export function App() {
   // analogue) - a no-host session viewed idly holds no supervisor stream. The control log replays from
   // seq 0, so a subscription opened the instant the user clicks Start still catches the durable result.
   const [startRequested, setStartRequested] = useState(false);
+  const [freshLaunchSessionId, setFreshLaunchSessionId] = useState<string | null>(null);
   const startControl = useSessionWithTransport(
     sessionTransport,
     startRequested ? SUPERVISOR_SESSION_ID : null,
@@ -440,16 +439,41 @@ export function App() {
     setStartRequested(true);
     sessionLaunch.launch(knownRoot);
   }, [knownRoot, sessionLaunch.launch]);
+  // `/new <path>` and `/cd <path>` (plan 58 M4): mint a FRESH session id (not the deterministic
+  // projectSessionId) and launch a project-scoped session with a session.project marker. The
+  // supervisor stamps the marker + touches the registry before spawning the host. Reuses the same
+  // useLaunch + control subscription as the session-view "start host" so the two surfaces never fork.
+  const startFreshProjectSession = useCallback(
+    (projectPath: string) => {
+      const sessionId = crypto.randomUUID();
+      setFreshLaunchSessionId(sessionId);
+      setStartRequested(true);
+      sessionLaunch.launch(projectPath, { sessionId, projectPath });
+    },
+    [sessionLaunch.launch],
+  );
   // Once a host is present (the badge flips to "host active", so the launch UI is gone) or the viewed
   // session changes, disarm the subscription and reset the launch - the reset bumps useLaunch's guard
   // token so a superseded launch's pending host.online never navigates the new session late.
+  //
+  // BUT only for the session-view "start host" path (no freshLaunchSessionId), NOT for a fresh-project
+  // session launch. A fresh launch navigates to a NEW session; resetting when host.present (which is
+  // the CURRENT session's host) would fire immediately and kill the launch before the result arrives.
   const resetSessionLaunch = sessionLaunch.reset;
   useEffect(() => {
-    if (startRequested && host.present) {
+    if (startRequested && host.present && !freshLaunchSessionId) {
       setStartRequested(false);
       resetSessionLaunch();
     }
-  }, [startRequested, host.present, resetSessionLaunch]);
+  }, [startRequested, host.present, freshLaunchSessionId, resetSessionLaunch]);
+  // A fresh-project launch disarms once it has navigated to its target session (target changes to
+  // the fresh session). The navigate-to effect below already resets on target change; this just
+  // clears the fresh marker so a subsequent session-view start works normally.
+  useEffect(() => {
+    if (freshLaunchSessionId && target === freshLaunchSessionId) {
+      setFreshLaunchSessionId(null);
+    }
+  }, [freshLaunchSessionId, target]);
   // Reset the launch (and disarm) whenever the viewed session changes, so a launch started on the
   // previous session cannot navigate the new one late (reset bumps useLaunch's guard token). The ref
   // compare makes `target` a real read, not a trigger-only dep.
@@ -461,6 +485,22 @@ export function App() {
       resetSessionLaunch();
     }
   }, [target, resetSessionLaunch]);
+  // The project sidebar (plan 58 M6): a persistent supervisor subscription that fetches the project
+  // registry list and dispatches project actions (add/rename/collapse/remove) whenever the sidebar is
+  // open. Separate from the picker's useSupervisor (which gates on picker-open + owns the launch
+  // machine) because the sidebar needs the project list on its own open gate.
+  const sidebarSupervisor = useSidebarSupervisor({ active: modal.sidebarOpen });
+  // The sidebar's read model: groups sessions under projects, owns local collapsed/show-more/search
+  // state, and exposes the project/session action callbacks. Session selection navigates; New Session
+  // per-project reuses the M4 fresh-session launch; Archive publishes session.archived.
+  const projectSidebar = useProjectSidebar({
+    sessions: modal.inventory.sessions,
+    projects: sidebarSupervisor.projects,
+    onProjectAction: sidebarSupervisor.onProjectAction,
+    onNewSession: (projectKey) => startFreshProjectSession(projectKey),
+    onArchiveSession: (sessionId) => void archiveSession(sessionId),
+  });
+
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
   const archived = readModel.archived;
@@ -829,13 +869,36 @@ export function App() {
       modal.setResumeOpen(true);
       return;
     }
-    // `/new` is a browser-side UI command (plan 44.2, D-001): it opens the New-session picker, sharing
-    // one open-picker entry with the sidebar `＋`. Like `/resume` it is intercepted before the host
-    // command lane, so it never becomes a model turn or a host round-trip.
+    // `/new` is a browser-side UI command (plan 58 M4): it creates a fresh project-scoped session.
+    // With a path arg (`/new ~/dev/foo`) it launches a fresh session for that project. With no arg
+    // it uses the current session's known root, or falls back to the New-session picker when no root
+    // is resolvable. Like `/resume` it is intercepted before the host command lane.
     if (isNewSessionCommand(text)) {
+      const arg = text.slice(NEW_SESSION_COMMAND.name.length).trim();
       history.resetNavigation();
       setDraft("");
-      openNewSession();
+      if (arg) {
+        startFreshProjectSession(arg);
+      } else if (knownRoot !== null) {
+        startFreshProjectSession(knownRoot);
+      } else {
+        openNewSession();
+      }
+      return;
+    }
+    // `/cd <path>` is a browser-side alias for `/new <path>` (plan 58 M4): same fresh project-scoped
+    // session launch. Intercepted before the host command lane, never a model turn.
+    if (text === "/cd" || text.startsWith("/cd ")) {
+      const arg = text.slice("/cd".length).trim();
+      history.resetNavigation();
+      setDraft("");
+      if (arg) {
+        startFreshProjectSession(arg);
+      } else if (knownRoot !== null) {
+        startFreshProjectSession(knownRoot);
+      } else {
+        openNewSession();
+      }
       return;
     }
     // `/worktree` is a browser-side UI command (D-091): it opens the worktree switcher; the actual
@@ -1242,7 +1305,12 @@ export function App() {
       actionState={archiveActions.actionState}
       onUnarchive={archiveActions.onUnarchive}
       onDelete={archiveActions.onDelete}
-      onBack={() => modal.setArchiveOpen(false)}
+      onBack={() => {
+        modal.setArchiveOpen(false);
+        setArchiveProjectFilter(null);
+      }}
+      projectFilter={archiveProjectFilter}
+      onClearProjectFilter={() => setArchiveProjectFilter(null)}
     />
   ) : undefined;
 
@@ -1414,6 +1482,7 @@ export function App() {
         type="button"
         onClick={() => {
           setChooserOpen(false); // only one takeover at a time
+          setArchiveProjectFilter(null); // the footer entry shows ALL archived sessions
           modal.setArchiveOpen(true);
         }}
         title="Manage archived sessions"
@@ -1613,18 +1682,29 @@ export function App() {
           open: modal.sidebarOpen,
           onOpen: () => modal.setSidebarOpen(true),
           onClose: () => modal.setSidebarOpen(false),
-          sessions: modal.inventory.sessions,
-          currentSessionId: target,
-          currentProject: modal.currentProject,
+          width: modal.sidebarWidth,
+          onResize: modal.setSidebarWidth,
+          groups: projectSidebar.groups,
+          searchQuery: projectSidebar.searchQuery,
+          onSearch: projectSidebar.onSearch,
+          onToggleProject: projectSidebar.onToggleProject,
           // Same safe switch path as `/resume` (D-093 M4): navigateToSession syncs `?session=` and
           // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
           // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
           // the durable log and replay on return); the row's activity bar shows it from the other view.
           onSelect: navigateToSession,
-          onRename: (id, title) => void renameSession(id, title),
-          onArchive: (id) => void archiveSession(id),
-          onDelete: (id) => void deleteSession(id),
-          onNewSession: openNewSession,
+          onShowMore: projectSidebar.onShowMore,
+          onAddProject: projectSidebar.onAddProject,
+          onNewSession: projectSidebar.onNewSession,
+          onArchiveSession: projectSidebar.onArchiveSession,
+          onRenameSession: (sessionId, title) => void renameSession(sessionId, title),
+          onRenameProject: projectSidebar.onRenameProject,
+          onRemoveProject: projectSidebar.onRemoveProject,
+          onViewArchive: (projectKey) => {
+            setArchiveProjectFilter(projectKey);
+            modal.setArchiveOpen(true);
+          },
+          currentSessionId: target,
           liveActivity: modal.sidebarLiveActivity,
           nowMs: now,
         }}

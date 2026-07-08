@@ -28,6 +28,7 @@ const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   cwd: "~/dev/trevor",
   workspace: "~/dev/trevor",
   project: "trevor",
+  projectPath: "~/dev/trevor",
   branch: "main",
   git: null,
   createdAt: "2026-06-25T12:00:00.000Z",

@@ -327,6 +327,7 @@ export function nodePlatform(reporter: Reporter = { step: () => {} }): LaunchPla
     // The launcher's `home` drives the host + project registries (hosts.json, locks/, projects.json),
     // which are runtime STATE, so it points at the state home. `.env.op` (config) stays on TREVOR_HOME.
     home: TREVOR_STATE_HOME,
+    configHome: TREVOR_HOME,
     cwd: process.cwd(),
     pid: process.pid,
     reporter,

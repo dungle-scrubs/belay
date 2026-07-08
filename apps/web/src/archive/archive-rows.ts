@@ -20,6 +20,11 @@ export interface ArchivedSessionRow {
   readonly title: string;
   /** Base-repo name, for grouping/context; null when unknown. */
   readonly project: string | null;
+  /**
+   * The canonical absolute project path (plan 58 M7): drives project-path filtering in the archive
+   * browser and the shared project label. Null when the session has no project binding.
+   */
+  readonly projectPath: string | null;
   readonly cwd: string | null;
   /** Last activity timestamp (updatedAt), for the recency label. */
   readonly updatedAt: string;
@@ -45,6 +50,7 @@ export function toArchiveRow(summary: SessionSummary): ArchivedSessionRow {
     sessionId: summary.sessionId,
     title: summary.title,
     project: summary.project,
+    projectPath: summary.projectPath,
     cwd: summary.cwd,
     updatedAt: summary.updatedAt,
     eventCount: summary.eventCount,

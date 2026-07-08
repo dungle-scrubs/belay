@@ -928,6 +928,16 @@ export const events = {
     },
   }),
   /**
+   * A durable, immutable PROJECT PATH marker for a session (plan 58 M3): the canonical absolute path of
+   * the project this session belongs to. Emitted ONCE on the session as its first event (or early), so
+   * the inventory can group sessions by project without relying on host.online workspace/cwd. Immutable
+   * once written - a fresh project-scoped session is created rather than moving an existing session.
+   */
+  sessionProject: (p: { path: string }): TrevorEventInput => ({
+    type: "session.project",
+    payload: { path: p.path },
+  }),
+  /**
    * An EXPLICIT tangent fold-back (plan 37, M8): the durable, auditable record that the user deliberately
    * carried a chosen piece of a tangent's outcome (a `quote`/`message`/`summary`) back toward the PARENT
    * session. It is NOT an automatic merge and NOT hidden context: the folded content is placed into the
@@ -1081,9 +1091,24 @@ export const events = {
    * `sessionId` the browser navigates to; the freshly spawned host announces `host.online` on its OWN
    * session, so the control session stays a side-channel and the presence path is unchanged.
    */
-  sessionLaunchRequested: (p: { requestId: string; root: string }): TrevorEventInput => ({
+  sessionLaunchRequested: (p: {
+    requestId: string;
+    root: string;
+    /** An explicit fresh session id (plan 58 M4). When absent the supervisor derives
+     *  the deterministic projectSessionId(root). When present the supervisor launches
+     *  a FRESH project-scoped session instead of reusing the deterministic one. */
+    sessionId?: string;
+    /** The project path to stamp as a session.project marker on the new session before
+     *  launch (plan 58 M4). Absent for the legacy bare-root launch (no marker). */
+    projectPath?: string;
+  }): TrevorEventInput => ({
     type: "session.launch.requested",
-    payload: { requestId: p.requestId, root: p.root },
+    payload: {
+      requestId: p.requestId,
+      root: p.root,
+      ...(p.sessionId ? { sessionId: p.sessionId } : {}),
+      ...(p.projectPath ? { projectPath: p.projectPath } : {}),
+    },
   }),
   sessionLaunchResult: (p: {
     requestId: string;
@@ -1142,6 +1167,95 @@ export const events = {
         sessionId: proj.sessionId,
         updatedAt: proj.updatedAt,
       })),
+    },
+  }),
+  // --- Project registry operations (plan 58 M2) ---
+  //
+  // The browser asks the supervisor to add/rename/collapse/remove a project in the canonical
+  // path-keyed registry; each `result` carries the updated fields or an error. `add` first pops
+  // the native folder picker (so `add.requested` reuses the same pickFolder path as folder.pick).
+  projectAddRequested: (p: { requestId: string }): TrevorEventInput => ({
+    type: "project.add.requested",
+    payload: { requestId: p.requestId },
+  }),
+  projectAddResult: (p: {
+    requestId: string;
+    path?: string;
+    displayName?: string;
+    cancelled: boolean;
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "project.add.result",
+    payload: {
+      requestId: p.requestId,
+      cancelled: p.cancelled,
+      ...(p.path ? { path: p.path } : {}),
+      ...(p.displayName ? { displayName: p.displayName } : {}),
+      ...(p.error ? { error: p.error } : {}),
+    },
+  }),
+  projectRenameRequested: (p: {
+    requestId: string;
+    path: string;
+    displayName: string;
+  }): TrevorEventInput => ({
+    type: "project.rename.requested",
+    payload: { requestId: p.requestId, path: p.path, displayName: p.displayName },
+  }),
+  projectRenameResult: (p: {
+    requestId: string;
+    path?: string;
+    displayName?: string;
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "project.rename.result",
+    payload: {
+      requestId: p.requestId,
+      ...(p.path ? { path: p.path } : {}),
+      ...(p.displayName ? { displayName: p.displayName } : {}),
+      ...(p.error ? { error: p.error } : {}),
+    },
+  }),
+  projectCollapseRequested: (p: {
+    requestId: string;
+    path: string;
+    collapsed: boolean;
+  }): TrevorEventInput => ({
+    type: "project.collapse.requested",
+    payload: { requestId: p.requestId, path: p.path, collapsed: p.collapsed },
+  }),
+  projectCollapseResult: (p: {
+    requestId: string;
+    path?: string;
+    collapsed: boolean;
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "project.collapse.result",
+    payload: {
+      requestId: p.requestId,
+      collapsed: p.collapsed,
+      ...(p.path ? { path: p.path } : {}),
+      ...(p.error ? { error: p.error } : {}),
+    },
+  }),
+  projectRemoveRequested: (p: { requestId: string; path: string }): TrevorEventInput => ({
+    type: "project.remove.requested",
+    payload: { requestId: p.requestId, path: p.path },
+  }),
+  projectRemoveResult: (p: {
+    requestId: string;
+    path?: string;
+    removed: boolean;
+    blockedBy?: readonly string[];
+    error?: string;
+  }): TrevorEventInput => ({
+    type: "project.remove.result",
+    payload: {
+      requestId: p.requestId,
+      removed: p.removed,
+      ...(p.path ? { path: p.path } : {}),
+      ...(p.blockedBy ? { blockedBy: [...p.blockedBy] } : {}),
+      ...(p.error ? { error: p.error } : {}),
     },
   }),
   /**
@@ -1499,4 +1613,5 @@ export const INVENTORY_EVENT_TYPES = {
   sessionDeleted: "session.deleted",
   sessionForkedFrom: "session.forkedFrom",
   sessionTangentOf: "session.tangentOf",
+  sessionProject: "session.project",
 } as const satisfies Readonly<Record<string, DecodedEvent["type"]>>;

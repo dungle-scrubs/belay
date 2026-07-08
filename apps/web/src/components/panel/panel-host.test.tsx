@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { LoopControl, LoopInventoryRow, TaskSnapshot } from "@trevor/session";
 import { useRef } from "react";
 import { expect, test, vi } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { useComposer } from "@/hooks/use-composer";
 import { createScrollFollowController } from "@/scroll-follow";
 import type { HostStatus } from "../../derive";
@@ -9,6 +10,11 @@ import type { InventoryState } from "../../resume";
 import type { SessionStream } from "../../session/use-session";
 import { readOnlyToolBatches } from "../../transcript";
 import { PanelHost } from "./panel-host";
+
+/** Wraps in TooltipProvider (needed by ProjectLabel's Radix tooltip inside the sidebar). */
+function renderWithTooltip(ui: Parameters<typeof render>[0]) {
+  return render(<TooltipProvider>{ui}</TooltipProvider>);
+}
 
 const loopRow: LoopInventoryRow = {
   agentBacked: true,
@@ -147,19 +153,26 @@ function PanelHostHarness(props: {
       }}
       sessionName="session"
       sidebar={{
-        currentProject: null,
+        open: false,
+        width: 352,
+        onResize: vi.fn(),
+        groups: [],
+        searchQuery: "",
+        onSearch: vi.fn(),
+        onToggleProject: vi.fn(),
+        onSelect: vi.fn(),
+        onShowMore: vi.fn(),
+        onAddProject: vi.fn(),
+        onNewSession: vi.fn(),
+        onArchiveSession: vi.fn(),
+        onRenameSession: vi.fn(),
+        onRenameProject: vi.fn(),
+        onRemoveProject: vi.fn(),
         currentSessionId: "s",
         liveActivity: new Map(),
         nowMs: 1_800_000_000_000,
-        onArchive: vi.fn(),
         onClose: vi.fn(),
-        onDelete: vi.fn(),
-        onNewSession: vi.fn(),
         onOpen: vi.fn(),
-        onRename: vi.fn(),
-        onSelect: vi.fn(),
-        open: false,
-        sessions: [],
       }}
       stream={stream}
       tasks={tasks ?? []}
@@ -182,7 +195,7 @@ function PanelHostHarness(props: {
 
 test("PanelHost mounts live loop inventory above the composer and routes controls", () => {
   const controls: Array<{ loopId: string; control: LoopControl }> = [];
-  render(
+  renderWithTooltip(
     <PanelHostHarness
       onLoopControl={(loopId, control) => {
         controls.push({ control, loopId });
@@ -198,7 +211,7 @@ test("PanelHost mounts live loop inventory above the composer and routes control
 });
 
 test("an open file-mention menu with zero matches never points the composer at a dangling id", () => {
-  render(
+  renderWithTooltip(
     <PanelHostHarness onLoopControl={vi.fn()} fileMenu={{ open: true, matches: [], index: 0 }} />,
   );
 
@@ -210,7 +223,7 @@ test("an open file-mention menu with zero matches never points the composer at a
 });
 
 test("an open file-mention menu WITH matches points the composer at the active option", () => {
-  render(
+  renderWithTooltip(
     <PanelHostHarness
       onLoopControl={vi.fn()}
       fileMenu={{ open: true, matches: [{ path: "apps/web/src/app.tsx" }], index: 0 }}
@@ -223,7 +236,7 @@ test("an open file-mention menu WITH matches points the composer at the active o
 });
 
 test("plan 50: the pinned turn-status header renders above the task list during an active turn", () => {
-  const { container } = render(
+  const { container } = renderWithTooltip(
     <PanelHostHarness
       onLoopControl={vi.fn()}
       turnStatusHeader={{
@@ -253,12 +266,12 @@ test("plan 50: the pinned turn-status header renders above the task list during 
 });
 
 test("plan 50: no pinned header (and no esc-to-interrupt) when no turn is active", () => {
-  const { container } = render(<PanelHostHarness onLoopControl={vi.fn()} />);
+  const { container } = renderWithTooltip(<PanelHostHarness onLoopControl={vi.fn()} />);
   expect(container.textContent ?? "").not.toMatch(/esc to interrupt/);
 });
 
 test("the transcript well keeps its scroll identity and shows the themed (not hidden) scrollbar", () => {
-  const { container } = render(<PanelHostHarness onLoopControl={vi.fn()} />);
+  const { container } = renderWithTooltip(<PanelHostHarness onLoopControl={vi.fn()} />);
 
   // The one scroll owner is still marked `data-transcript-scroll` (scroll-follow + the virtualizer bind
   // to it) and keeps its scroll model; the force-hidden scrollbar utilities are gone, so the themed

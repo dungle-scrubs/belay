@@ -24,4 +24,5 @@ export * from "./host-registry";
 export * from "./launch";
 export * from "./platform";
 export * from "./project";
+export * from "./project-registry";
 export * from "./services";

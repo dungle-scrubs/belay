@@ -49,8 +49,10 @@ export interface LaunchController {
   /** True while a launch is in flight or has failed (idle is the only non-armed phase); the session-view
    *  caller keeps its control subscription armed while this is set so a `Retry` still folds its result. */
   readonly inFlight: boolean;
-  /** Publish `session.launch.requested { root }` and enter `starting`. */
-  readonly launch: (root: string) => void;
+  /** Publish `session.launch.requested { root }` and enter `starting`. When `sessionId` +
+   *  `projectPath` are provided (plan 58 M4), the supervisor launches a FRESH project-scoped
+   *  session with a `session.project` marker instead of the deterministic projectSessionId(root). */
+  readonly launch: (root: string, options?: { sessionId?: string; projectPath?: string }) => void;
   /** Re-publish the last attempted root (the failed/timed-out launch's), returning to `starting`. */
   readonly retry: () => void;
   /** Reset to idle (the picker-close path / a session switch); invalidates a pending host.online
@@ -79,6 +81,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
   // a cursor tracking which control events have been folded so each result is handled exactly once.
   const launchReqRef = useRef<string | null>(null);
   const lastRootRef = useRef<string | null>(null);
+  const lastOptionsRef = useRef<{ sessionId?: string; projectPath?: string }>({});
   const launchTokenRef = useRef(0);
   const cursorRef = useRef(0);
   // The latest navigate callback, read from the async host.online continuation without making it an
@@ -93,17 +96,23 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
   }, []);
 
   const publish = useCallback(
-    (root: string) => {
+    (root: string, options?: { sessionId?: string; projectPath?: string }) => {
       const requestId = crypto.randomUUID();
       launchReqRef.current = requestId;
       lastRootRef.current = root;
+      lastOptionsRef.current = options ?? {};
       launchTokenRef.current += 1; // a fresh launch invalidates any prior pending host.online continuation
       setError(null);
       setLaunchState("starting");
       void publishWebEvent(
         transport,
         SUPERVISOR_SESSION_ID,
-        sessionEvents.sessionLaunchRequested({ requestId, root }),
+        sessionEvents.sessionLaunchRequested({
+          requestId,
+          root,
+          ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+          ...(options?.projectPath ? { projectPath: options.projectPath } : {}),
+        }),
       );
     },
     [transport],
@@ -112,7 +121,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
   const retry = useCallback(() => {
     const root = lastRootRef.current;
     if (root !== null) {
-      publish(root);
+      publish(root, lastOptionsRef.current);
     }
   }, [publish]);
 
@@ -121,6 +130,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
     setError(null);
     launchReqRef.current = null;
     lastRootRef.current = null;
+    lastOptionsRef.current = {};
     launchTokenRef.current += 1; // invalidate any pending host.online navigation
     cursorRef.current = 0;
   }, []);

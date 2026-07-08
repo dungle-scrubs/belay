@@ -6,6 +6,7 @@ import type { LauncherFs } from "../src/fs";
 import { recordHost } from "../src/host-registry";
 import { formatStatus, type LaunchPlatform, launch, sessionUrl } from "../src/launch";
 import { resolveSession } from "../src/project";
+import { loadProjectRegistry } from "../src/project-registry";
 import { RESERVED_PORTS, type ServiceName, type ServiceProbe } from "../src/services";
 
 /**
@@ -31,6 +32,7 @@ interface FakeOpts {
   fs?: LauncherFs;
   cwd?: string;
   gitRoot?: string; // a `.git` marker the fs should report present
+  configHome?: string;
   pid?: number;
   probes?: Partial<Record<ServiceName, ServiceProbe>>;
   processAlive?: (pid: number) => boolean;
@@ -59,6 +61,7 @@ function makePlatform(opts: FakeOpts = {}): Spy {
   const platform: LaunchPlatform = {
     fs,
     home: "/home/.trevor",
+    configHome: opts.configHome ?? "/home/.trevor",
     cwd: opts.cwd ?? opts.gitRoot ?? "/work/app",
     pid: opts.pid ?? 1234,
     reporter: { step: () => {} },
@@ -243,4 +246,38 @@ test("the status line reports the handoff and never leaks secret-bearing values"
   assert.match(status, /port conflict/); // the store conflict is surfaced
   assert.equal(status.includes("sk-should-never-appear-in-status"), false);
   assert.equal(status.toLowerCase().includes("api_key"), false);
+});
+
+test("a launch touches the project registry so the launched project appears in the sidebar (M8)", async () => {
+  const spy = makePlatform({ gitRoot: "/work/app", cwd: "/work/app/src" });
+  const outcome = await launch(spy.platform);
+
+  // The registry now has a record for the resolved project root, with a displayName (basename) and
+  // a non-empty updatedAt. This is the wiring that keeps the sidebar's project list current without
+  // relying on a live host.
+  const registry = loadProjectRegistry(spy.platform.fs, spy.platform.home);
+  const record = registry.get(outcome.root);
+  assert.ok(record, "the launched project root was added to the registry");
+  assert.equal(record?.path, "/work/app");
+  assert.equal(record?.displayName, "app");
+  assert.ok(record?.updatedAt.length === "2026-06-26T00:00:00Z".length);
+});
+
+test("a launch with an explicit session touches the registry for that session's root (M8)", async () => {
+  const spy = makePlatform({ gitRoot: "/work/app" });
+  const outcome = await launch(spy.platform, {
+    session: { sessionId: "explicit-id", root: "/work/app" },
+  });
+  const registry = loadProjectRegistry(spy.platform.fs, spy.platform.home);
+  assert.ok(registry.has(outcome.root), "the explicit-session root was registered");
+  assert.equal(registry.get("/work/app")?.displayName, "app");
+});
+
+test("repeated launches for the same root do not duplicate the registry record (M8)", async () => {
+  const spy = makePlatform({ gitRoot: "/work/app" });
+  await launch(spy.platform);
+  await launch(spy.platform);
+  const registry = loadProjectRegistry(spy.platform.fs, spy.platform.home);
+  assert.equal(registry.size, 1, "one record, not two");
+  assert.ok(registry.has("/work/app"));
 });

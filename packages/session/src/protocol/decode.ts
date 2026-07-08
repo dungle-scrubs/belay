@@ -695,6 +695,7 @@ export type DecodedEvent =
       readonly quote: string;
       readonly label?: string;
     }
+  | { readonly type: "session.project"; readonly path: string }
   | {
       readonly type: "tangent.foldedBack";
       readonly tangentSessionId: string;
@@ -746,7 +747,13 @@ export type DecodedEvent =
       readonly files: readonly FileMatch[];
       readonly truncated: boolean;
     }
-  | { readonly type: "session.launch.requested"; readonly requestId: string; readonly root: string }
+  | {
+      readonly type: "session.launch.requested";
+      readonly requestId: string;
+      readonly root: string;
+      readonly sessionId?: string;
+      readonly projectPath?: string;
+    }
   | {
       readonly type: "session.launch.result";
       readonly requestId: string;
@@ -766,6 +773,50 @@ export type DecodedEvent =
       readonly type: "projects.list.result";
       readonly requestId: string;
       readonly projects: readonly SupervisorProject[];
+    }
+  | { readonly type: "project.add.requested"; readonly requestId: string }
+  | {
+      readonly type: "project.add.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly displayName?: string;
+      readonly cancelled: boolean;
+      readonly error?: string;
+    }
+  | {
+      readonly type: "project.rename.requested";
+      readonly requestId: string;
+      readonly path: string;
+      readonly displayName: string;
+    }
+  | {
+      readonly type: "project.rename.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly displayName?: string;
+      readonly error?: string;
+    }
+  | {
+      readonly type: "project.collapse.requested";
+      readonly requestId: string;
+      readonly path: string;
+      readonly collapsed: boolean;
+    }
+  | {
+      readonly type: "project.collapse.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly collapsed: boolean;
+      readonly error?: string;
+    }
+  | { readonly type: "project.remove.requested"; readonly requestId: string; readonly path: string }
+  | {
+      readonly type: "project.remove.result";
+      readonly requestId: string;
+      readonly path?: string;
+      readonly removed: boolean;
+      readonly blockedBy?: readonly string[];
+      readonly error?: string;
     }
   | {
       readonly type: "tasks.current";
@@ -1172,6 +1223,8 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
         ...(label ? { label } : {}),
       };
     }
+    case "session.project":
+      return { type: "session.project", path: str(p.path, "") };
     case "tangent.foldedBack":
       return {
         type: "tangent.foldedBack",
@@ -1255,12 +1308,17 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
     }
     // Supervisor side-channel (plan 44.1). A missing requestId falls back to the event's own id so a
     // forward-compat request still correlates; `status` is decoded tolerantly to the failed-safe default.
-    case "session.launch.requested":
+    case "session.launch.requested": {
+      const sessionId = optStr(p.sessionId);
+      const projectPath = optStr(p.projectPath);
       return {
         type: "session.launch.requested",
         requestId: str(p.requestId, event.eventId),
         root: str(p.root),
+        ...(sessionId ? { sessionId } : {}),
+        ...(projectPath ? { projectPath } : {}),
       };
+    }
     case "session.launch.result": {
       const error = optStr(p.error);
       return {
@@ -1290,6 +1348,77 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
         requestId: str(p.requestId, event.eventId),
         projects: decodeSupervisorProjects(p.projects),
       };
+    case "project.add.requested":
+      return { type: "project.add.requested", requestId: str(p.requestId, event.eventId) };
+    case "project.add.result": {
+      const path = optStr(p.path);
+      const displayName = optStr(p.displayName);
+      const error = optStr(p.error);
+      return {
+        type: "project.add.result",
+        requestId: str(p.requestId, event.eventId),
+        cancelled: p.cancelled === true,
+        ...(path ? { path } : {}),
+        ...(displayName ? { displayName } : {}),
+        ...(error ? { error } : {}),
+      };
+    }
+    case "project.rename.requested":
+      return {
+        type: "project.rename.requested",
+        requestId: str(p.requestId, event.eventId),
+        path: str(p.path),
+        displayName: str(p.displayName),
+      };
+    case "project.rename.result": {
+      const path = optStr(p.path);
+      const displayName = optStr(p.displayName);
+      const error = optStr(p.error);
+      return {
+        type: "project.rename.result",
+        requestId: str(p.requestId, event.eventId),
+        ...(path ? { path } : {}),
+        ...(displayName ? { displayName } : {}),
+        ...(error ? { error } : {}),
+      };
+    }
+    case "project.collapse.requested":
+      return {
+        type: "project.collapse.requested",
+        requestId: str(p.requestId, event.eventId),
+        path: str(p.path),
+        collapsed: p.collapsed === true,
+      };
+    case "project.collapse.result": {
+      const path = optStr(p.path);
+      const error = optStr(p.error);
+      return {
+        type: "project.collapse.result",
+        requestId: str(p.requestId, event.eventId),
+        collapsed: p.collapsed === true,
+        ...(path ? { path } : {}),
+        ...(error ? { error } : {}),
+      };
+    }
+    case "project.remove.requested":
+      return {
+        type: "project.remove.requested",
+        requestId: str(p.requestId, event.eventId),
+        path: str(p.path),
+      };
+    case "project.remove.result": {
+      const path = optStr(p.path);
+      const error = optStr(p.error);
+      const blockedBy = strList(p.blockedBy);
+      return {
+        type: "project.remove.result",
+        requestId: str(p.requestId, event.eventId),
+        removed: p.removed === true,
+        ...(path ? { path } : {}),
+        ...(blockedBy.length > 0 ? { blockedBy } : {}),
+        ...(error ? { error } : {}),
+      };
+    }
     case "tasks.current":
       return { type: "tasks.current", tasks: coerceTasks(p.tasks), rev: num(p.rev) };
     case "tool.started":
@@ -1512,6 +1641,7 @@ const sessionFamily: EventFamily = {
     "session.deleted",
     "session.forkedFrom",
     "session.tangentOf",
+    "session.project",
     "tangent.foldedBack",
     "file.index.requested",
     "file.index.result",
@@ -1521,6 +1651,14 @@ const sessionFamily: EventFamily = {
     "folder.pick.result",
     "projects.list.requested",
     "projects.list.result",
+    "project.add.requested",
+    "project.add.result",
+    "project.rename.requested",
+    "project.rename.result",
+    "project.collapse.requested",
+    "project.collapse.result",
+    "project.remove.requested",
+    "project.remove.result",
   ],
 };
 

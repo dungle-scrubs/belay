@@ -312,22 +312,9 @@ export function buildCommandRegistry(
   add(buildInitCommand());
   add(buildDoctorCommand());
   add(buildShellCommand());
-  add(
-    buildHostOwnedCommand(
-      { name: "/clear", summary: "Start a fresh session" },
-      "Clear is handled by the live host.",
-    ),
-  );
-  add(
-    buildHostOwnedCommand(
-      {
-        name: "/cd",
-        summary: "Switch directories in a fresh session",
-        usage: "/cd <directory>",
-      },
-      "Directory switching is handled by the live host.",
-    ),
-  );
+  // /clear and /cd are retired from the announced specs (plan 58 M4): /clear is superseded by
+  // /new (fresh project-scoped session), and /cd is now a browser-side alias for /new <path>.
+  // Both programmatic handlers stay in main.ts for replay compatibility with legacy sessions.
   add(buildCompactCommand());
   add(
     buildHostOwnedCommand(

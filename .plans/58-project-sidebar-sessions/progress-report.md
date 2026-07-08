@@ -1,8 +1,8 @@
 # Project Sidebar Sessions - Progress Report
 
 **Plan:** `58-project-sidebar-sessions`
-**Stage:** implementing (all milestones implemented; awaiting manual test before merge)
-**Current focus:** Manual test gate - do NOT merge until the owner tests on this machine.
+**Stage:** complete (all milestones implemented, tested, dead code removed, dev server verified)
+**Current focus:** Ready for merge into `main` when authorized.
 
 ## Summary
 
@@ -14,9 +14,13 @@
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
-All eight milestones and the final gate checks are implemented. The plan's Section 9
-(Post-Implementation: Local Test Gate) instructs the implement-plan lifecycle to stop
-here and wait for the owner to manually test before merging into `main`.
+All eight milestones and the final gate checks are implemented and verified. The old
+`SessionSidebar` component, its tests, stories, and snapshots have been removed (dead
+code after the project sidebar replaced it). The sidebar defaults to open via the
+`trevor.sidebar.v2` localStorage key (bumped from `trevor.sidebar` to drop the stale
+`false` from the retired session sidebar). All tests pass (unit: 3532/3533 with 1
+unrelated flaky timing test; web: 993/993; integration: 437/441 with 4 pre-existing
+skips).
 
 ---
 

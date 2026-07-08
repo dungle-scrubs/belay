@@ -46,6 +46,7 @@ const session = (over: Partial<SessionSummary> = {}): SessionSummary => ({
   cwd: null,
   workspace: null,
   project: "trevor",
+  projectPath: null,
   branch: null,
   git: null,
   createdAt: "2026-06-28T00:00:00.000Z",
@@ -129,7 +130,8 @@ test("owns modal toggles, inventory gating, project stickiness, and activity ove
     { initialProps: { sessions: mockInventory.state.sessions } },
   );
 
-  assert.deepEqual(mockInventory.enabledCalls, [false]);
+  // The project sidebar (plan 58) defaults open, so the inventory fetch is enabled on first render.
+  assert.deepEqual(mockInventory.enabledCalls, [true]);
   assert.equal(result.current.currentProject, "trevor");
   assert.deepEqual(result.current.worktrees, [worktree]);
   assert.deepEqual(result.current.worktreeActivity.get("s-worktree"), {
@@ -150,7 +152,8 @@ test("opening the archive browser enables the inventory fetch", () => {
     useModalState({ worktrees: [], host, target: "s", sessionId: "s", busy: false }),
   );
   assert.equal(result.current.archiveOpen, false);
-  assert.equal(mockInventory.enabledCalls.at(-1), false);
+  // The sidebar defaults open (plan 58), so the inventory is already enabled.
+  assert.equal(mockInventory.enabledCalls.at(-1), true);
 
   act(() => result.current.setArchiveOpen(true));
   assert.equal(result.current.archiveOpen, true);

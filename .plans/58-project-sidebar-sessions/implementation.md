@@ -89,204 +89,51 @@ Project ordering is most recent activity first. The effective timestamp is the m
 
 ## 3. Session Binding and Launch Semantics
 
-New sessions publish an immutable session project marker before host startup:
+A session's project path is resolved from the new durable `session.project` marker first, then legacy `workspace`/`cwd` fields, then migration compatibility. The marker is immutable once written. <!-- D-006 -->
 
-```ts
-events.sessionProject({ path, displayPath? })
-```
+Fresh session creation (project-scoped New Session, `/new`, `/cd`):
+1. Mint a fresh session id (never reuse `projectSessionId(path)`).
+2. Touch the project in the registry (add if missing, bump `updatedAt`).
+3. Publish the `session.project` marker for the new session.
+4. Launch the host for the new session.
+5. Navigate the browser to the new session. <!-- D-007 -->
 
-The inventory fold prefers this marker over host-reported workspace/cwd. Existing sessions without the marker are grouped by `workspace ?? cwd`, with compatibility support for legacy imported project records. <!-- D-006 -->
+`/new` with no args uses the current project path or opens the folder picker. `/new <path>` creates/touches the project at that path. `/cd <path>` is a compatibility alias for `/new <path>`. `/clear` is retired from visible command surfaces; existing `/clear` markers in the durable log remain replay-compatible. <!-- D-008 -->
 
-Fresh project-scoped session creation uses a minted id, not `projectSessionId(path)`. The old deterministic root id may remain only as a migration/open-default compatibility detail until the launcher no longer needs it for existing installs. <!-- D-007 -->
+## 4. Sidebar Read Model
 
-`/new` and the project row's New Session action share one supervisor/launcher operation:
+The sidebar read model groups sessions under projects:
 
-1. Resolve and canonicalize the project path.
-2. Add/touch the project registry.
-3. Mint a fresh valid session id.
-4. Ensure the session exists.
-5. Publish `session.project`.
-6. Launch or reuse the host for that session/path.
-7. Navigate once the launch result is safe to show.
+- **Project rows**: expand/collapse only. Never navigate. Show display name, session count, aggregate active state.
+- **Session rows**: navigate on click. Show title, activity, running indicator, archived state.
+- **Search**: filters projects and sessions by name/path/text. Auto-expands matching projects without mutating persisted collapse state.
+- **Show more**: each project shows up to N sessions by default; a "Show more" reveals the rest.
+- **Current session**: always included in its project's list even if it would otherwise be hidden.
+- **Archive-only projects**: a project with only archived sessions shows an empty state with a link to the archive view.
+- **Transient projects**: a project with active sessions but no saved registry record is shown as a transient project; it is visible while work is active and disappears when idle.
+- **Duplicate basenames**: when two projects share a basename, the display path (not just the basename) is shown to disambiguate.
 
-`/cd <path>` calls the same operation as `/new <path>`. It does not mutate the current session's project binding. <!-- D-008 -->
+## 5. Sidebar Actions
 
-## 4. Sidebar UX
+- **Add Project**: opens OS folder picker, records the project, expands it. No session created.
+- **New Session** (per-project): mints a fresh session for that project, navigates, starts host.
+- **Rename Project**: inline rename of `displayName`.
+- **Archive Session**: archives a session from the normal list. No Delete in the normal sidebar.
+- **Remove Project**: deletes the registry record. Blocked when the project has running/queued sessions (returns blocking ids). <!-- D-004 -->
+- **Collapse/Expand**: persisted in the registry record's `collapsed` field.
 
-The sidebar renders projects, not "sessions for the current cwd":
+## 6. Archive Access
 
-- Header: Search, Add Project, collapse.
-- Project row: folder icon, display name, path, active session count, aggregate running/queued indicator, context menu.
-- Project click and chevron: expand/collapse only.
-- Project context menu: Rename, New Session, Remove Project.
-- Expanded body: active non-deleted, non-archived sessions; empty state with New Session; archive affordance when only archived sessions remain.
-- Session row: title, relative last-active time, active/running/queued indicator.
-- Session row hover: replace time with Archive button.
-- Session row context menu: Rename and Archive.
-- No Delete in the normal sidebar. Delete remains in archive management. <!-- D-010 -->
-- First seven active sessions are shown by default; Show more reveals all. The current session is always included even if it is older than the first seven. <!-- D-009 -->
-- Search filters project display name, project path, and session title while preserving project grouping. Matching projects auto-expand only while search is active; clearing search restores persisted collapsed state. <!-- D-009 -->
+- Archived sessions are hidden from the normal project list.
+- The archive view remains the surface for Delete (with confirmation/protection).
+- A project with only archived sessions shows an empty state with a link to the archive filtered by that project's path.
+- Project label/path rendering is shared between sidebar and archive rows. <!-- D-010 -->
 
-## 5. Phases
+## 7. Edge Cases and Risk Mitigation
 
-### Phase 1: Project Registry and Supervisor Contract
-
-**Goal:** A canonical project registry replaces `projects.json`, and the browser can list/manage projects through supervisor requests.
-
-**Gate from previous:** Existing launcher/supervisor tests pass.
-
-#### M1: Project Registry Storage and Migration
-
-- **Dependencies:** none
-- **Effort:** M
-- **Tasks:**
-  1. RED: Add launcher tests for a canonical-path project registry that stores metadata only, rejects duplicate path aliases, and preserves no session membership.
-  2. GREEN: Implement the registry module under `@trevor/launcher`, using `TREVOR_STATE_HOME` and the existing storage-root policy.
-  3. RED: Add migration tests for importing legacy `projects.json`, stopping future writes to it, and resetting metadata after Remove Project plus re-add.
-  4. GREEN: Implement first-read import and legacy write retirement.
-  5. REFACTOR: Remove old `projects.json` as a product source and document the new registry owner.
-
-#### M2: Supervisor Project Operations
-
-- **Dependencies:** M1
-- **Effort:** M
-- **Tasks:**
-  1. RED: Add protocol round-trip tests for project list/add/rename/collapse/remove results with request ids and canonical paths.
-  2. GREEN: Add typed supervisor project events and dispatcher handlers over the registry module.
-  3. RED: Add folder-pick flow tests proving Add Project records a project only and existing paths reveal/touch the existing project without duplication.
-  4. GREEN: Wire Add Project to native folder pick and registry add/touch; remove the app-level recent-project picker from the primary path.
-  5. REFACTOR: Consolidate supervisor project result errors so unavailable picker, cancel, and registry failure are distinct user-visible states.
-
-### Gate 1->2
-
-- [ ] The new project registry is the only current project source.
-- [ ] Existing `projects.json` entries import without stranding known paths.
-- [ ] Browser can list/add/rename/collapse/remove projects through the supervisor contract.
-
-### Phase 2: Immutable Session Project Binding and Fresh Session Launch
-
-**Goal:** New sessions are always project-bound, fresh session creation is explicit, and old reset semantics no longer create sidebar confusion.
-
-**Gate from previous:** Project registry and supervisor project events are available.
-
-#### M3: Session Project Marker and Inventory Join
-
-- **Dependencies:** M1
-- **Effort:** M
-- **Tasks:**
-  1. RED: Add protocol and inventory tests for `session.project` winning over host workspace/cwd and remaining immutable for grouping.
-  2. GREEN: Add `session.project` event constructors/decoders and fold it into `SessionSummary` or a project-path companion read model.
-  3. RED: Add compatibility tests grouping old sessions by existing workspace/cwd and imported registry records without bulk migration.
-  4. GREEN: Implement legacy grouping fallback and mismatch diagnostics when host workspace/cwd diverges from the session project path.
-  5. REFACTOR: Centralize project path selection so sidebar, archive filter, CLI, and supervisor do not each rebuild grouping rules.
-
-#### M4: Fresh Project-Scoped Session Launch
-
-- **Dependencies:** M2, M3
-- **Effort:** L
-- **Tasks:**
-  1. RED: Add launcher/supervisor tests proving New Session mints a fresh valid session id for an existing project and never uses `projectSessionId(path)`.
-  2. GREEN: Implement the fresh-session operation: touch project, ensure session, publish marker, launch host, return/navigate.
-  3. RED: Add command tests for `/new`, `/new <path>`, and `/cd <path>` alias behavior, including projectless `/new` folder-pick fallback.
-  4. GREEN: Wire browser-side `/new` and `/cd` to the project-scoped operation.
-  5. RED: Add replay/UI tests proving `/clear` is absent from the visible command surface while legacy `/clear` markers still decode and replay safely.
-  6. GREEN: Retire `/clear` from autocomplete/command affordances and keep compatibility in projection/inventory.
-  7. REFACTOR: Update command copy and remove stale "fresh session" wording that implies in-session reset.
-
-### Gate 2->3
-
-- [ ] Every new normal session has a project path before host startup.
-- [ ] `/new` and project New Session create real fresh sessions.
-- [ ] `/clear` no longer appears as the normal fresh-context action.
-
-### Phase 3: Project Sidebar UI
-
-**Goal:** The left sidebar matches the project-first model, with all projects visible and sessions grouped under them.
-
-**Gate from previous:** Project registry, project grouping, and fresh session launch are wired.
-
-#### M5: Project Sidebar Read Model and Storybook
-
-- **Dependencies:** M3
-- **Effort:** M
-- **Tasks:**
-  1. RED: Add pure read-model tests grouping active sessions under projects from registry records, active-session-forced transient projects, and legacy workspace/cwd fallback.
-  2. GREEN: Build the project-sidebar read model: recency ordering, active counts, aggregate active state, archive-only empty state, and duplicate-name path display.
-  3. RED: Add Storybook stories covering empty project, active project, duplicate basenames, running collapsed project, archive-only project, more than seven sessions, and search.
-  4. GREEN: Build project/sidebar presentational components with persisted collapsed state input and project/session actions as injected callbacks.
-  5. REFACTOR: Replace current-project-only sidebar helpers with project-grouped helpers while preserving tangent exclusion.
-
-#### M6: Live Sidebar Wiring, Search, and Actions
-
-- **Dependencies:** M2, M4, M5
-- **Effort:** L
-- **Tasks:**
-  1. RED: Add web integration tests proving the sidebar lists all projects, project rows only expand/collapse, session rows navigate, and search auto-expands without mutating persisted collapse state.
-  2. GREEN: Wire `PanelHost`/`App` to supervisor project inventory, project actions, project-scoped New Session, and grouped session selection.
-  3. RED: Add tests for Show more, always-including current session, hover Archive, right-click Rename/Archive, and Remove Project blocked by running/queued sessions.
-  4. GREEN: Implement Show more, hover/context actions, project remove confirmation/blocking, and inline rename.
-  5. REFACTOR: Remove the current New-session popup from the local primary flow and keep any fallback path-entry code isolated behind unavailable-picker conditions.
-
-### Gate 3->4
-
-- [ ] Sidebar is project-first and not scoped to current cwd.
-- [ ] Add Project does not create a session.
-- [ ] Project-scoped New Session creates/navigates/starts.
-- [ ] Search, Show more, Archive, Rename, and blocked Remove Project behavior are tested.
-
-### Phase 4: Archive Integration and Cleanup
-
-**Goal:** Archive/delete behavior remains coherent with project grouping, and old UI copy/state paths are removed.
-
-**Gate from previous:** Project sidebar is live.
-
-#### M7: Project-Filtered Archive Access
-
-- **Dependencies:** M5
-- **Effort:** S
-- **Tasks:**
-  1. RED: Add archive row/model tests filtering archived sessions by project path and excluding deleted sessions from normal project counts.
-  2. GREEN: Add project-filtered archive entry points from archive-only project empty state and project context where appropriate.
-  3. RED: Add delete-from-archive tests proving sidebar Delete is absent and archive Delete retains confirmation/protection.
-  4. GREEN: Keep Delete in archive management and remove/delete any normal-sidebar delete affordance.
-  5. REFACTOR: Share project label/path rendering between sidebar and archive rows.
-
-#### M8: Regression Polish and Documentation
-
-- **Dependencies:** M6, M7
-- **Effort:** M
-- **Tasks:**
-  1. RED: Add regression tests for the original complaints: inert folder button, misleading recent-project popup, `/clear` sidebar confusion, and current-project-only session list.
-  2. GREEN: Fix any remaining wiring/copy paths and ensure disabled/unavailable states are visible.
-  3. RED: Add CLI/launcher tests proving `trevor` opens/touches the new registry and no current code writes `projects.json`.
-  4. GREEN: Wire CLI opens and future desktop-facing launcher paths to touch the new registry.
-  5. REFACTOR: Update `CONTEXT.md`, Storybook names, command summaries, and developer comments to the project-first vocabulary.
-
-### Gate 4->done
-
-- [ ] `projects.json` is migrated/retired as a product source.
-- [ ] Normal sessions are project-bound and immutable.
-- [ ] `/new` and `/cd` create project-scoped fresh sessions.
-- [ ] `/clear` is not a visible fresh-context command.
-- [ ] Sidebar shows all projects, grouped sessions, search, Show more, active states, Archive, Rename, and Remove Project blocking.
-- [ ] Archive view remains the place for Delete.
-- [ ] Lint, typecheck, web tests, launcher/supervisor/session tests, and relevant Storybook checks pass.
-
-## 6. Risk Register
-
-| Risk | Severity | Likelihood | Mitigation | Owner |
-|------|----------|------------|------------|-------|
-| Registry and session inventory drift | high | medium | Store no session ids in project registry; derive membership from session log/inventory each render. | launcher/session |
-| Legacy project sessions become hard to find | high | low | Import old `projects.json`; derive old sessions by workspace/cwd; test compatibility. | launcher/web |
-| Fresh session launch races host.online | medium | medium | Publish `session.project` before launch and return structured supervisor statuses. | supervisor |
-| Sidebar becomes too dense | medium | medium | Storybook-first layouts for duplicate paths, long names, search, running state, and >7 sessions. | web |
-| Desktop builds a second model later | medium | low | Thread this plan into plan 48 and make launcher registry the shared source. | planner |
-
-## 7. Escape Hatches
-
-1. **If immediate `projects.json` deletion proves risky:** keep a read-only import fallback for one release but continue to write only the new registry.
-2. **If non-local/headless folder picking is unavailable:** keep a fallback paste-path dialog that records a project after supervisor validation; do not restore the normal recent-project picker.
-3. **If `session.project` inventory changes are too large for one pass:** add a companion grouping read model first, then fold the field into `SessionSummary` after the sidebar is stable.
+1. **If the folder picker is unavailable (headless/non-local):** fall back to a path-entry surface framed as "Enter a project path", not "recent sessions". The fallback is isolated behind the unavailable-picker condition.
+2. **If legacy `projects.json` has stale entries:** import only well-formed entries with a valid root path; log a diagnostic for skipped entries. The old file is left as an ignored backup or removed after successful import.
+3. **If a session's project path diverges from its host workspace/cwd:** the `session.project` marker wins. A mismatch diagnostic is logged for observability but does not block grouping.
 4. **If project Remove blocking is too strict:** allow removal only for settled/idle sessions and surface running/queued sessions with direct links; never mutate live sessions during remove.
 
 ## 8. Validation Commands
@@ -301,7 +148,14 @@ pnpm --filter @trevor/web test -- --project web
 pnpm --filter @trevor/web build-storybook
 ```
 
-## 9. Decisions
+## 9. Post-Implementation: Local Test Gate (no merge)
+
+After the full verification gate passes, **do NOT merge the branch into `main`**. The owner wants to
+test the implementation on this machine first. Leave the worktree and branch in place, report that the
+plan is ready for manual testing, and wait for the owner to confirm before merging. The plan directory
+is not deleted until the merge happens.
+
+## 10. Decisions
 
 Canonical decisions are in `.plans/58-project-sidebar-sessions/plan.db`.
 

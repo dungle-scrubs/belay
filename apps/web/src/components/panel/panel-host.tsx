@@ -8,7 +8,6 @@ import type {
   LoopInventoryRow,
   ProviderQuestionAnswer,
   SessionActivity,
-  SessionSummary,
   TaskSnapshot,
   WorktreeSummary,
 } from "@trevor/session";
@@ -40,7 +39,6 @@ import { TurnStatusHeader } from "@/components/chat/turn-status-header";
 import { type TranscriptRowConfig, VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { RowChooserModal } from "@/components/command-modal";
 import { HandoffApprovalSurface } from "@/components/handoff/handoff-approval-surface";
-import { SessionSidebar } from "@/components/panel/session-sidebar";
 import { DrawerToggle } from "@/components/panel/side-drawer";
 import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/panel/side-panel";
 import { QuestionSurface } from "@/components/question";
@@ -49,6 +47,8 @@ import type { Composer } from "@/hooks/use-composer";
 import { cn } from "@/lib/utils";
 import type { ScrollFollowController } from "@/scroll-follow";
 import type { SessionStream } from "@/session/use-session";
+import { ProjectSidebar } from "@/sidebar/project-sidebar";
+import type { ProjectGroup } from "@/sidebar/project-sidebar-model";
 import type {
   HostStatus,
   PendingHandoff,
@@ -198,33 +198,55 @@ export interface ChooserBinding {
 }
 
 /**
- * The session navigation sidebar binding (D-093): the left-hand session list. App owns the open
- * state, the current-project inventory, the live-activity overlay, and the guarded switch action;
- * PanelHost renders the rail (when open) and the upper-left dashboard toggle (when closed).
+ * The project sidebar binding (plan 58 M6): the left-hand project-first navigation rail. App owns
+ * the open state, the project/session inventory, the live-activity overlay, and the project/session
+ * actions; PanelHost renders the rail (when open) and the upper-left dashboard toggle (when closed).
+ * The grouped read model + search/collapse/show-more state come from useProjectSidebar; this binding
+ * adds the open toggle, the current session id (for row highlight), and the live-activity map.
  */
 export interface SidebarBinding {
   readonly open: boolean;
   readonly onOpen: () => void;
   readonly onClose: () => void;
-  readonly sessions: readonly SessionSummary[];
-  readonly currentSessionId: string;
-  readonly currentProject: string | null;
+  /** The sidebar width in pixels (draggable, persisted). */
+  readonly width: number;
+  /** Set the sidebar width (drag resize handle). */
+  readonly onResize: (width: number) => void;
+  /** The grouped, filtered read model from useProjectSidebar. */
+  readonly groups: readonly ProjectGroup[];
+  /** The active search query (echoed into the search field). */
+  readonly searchQuery: string;
+  /** Set the search query. */
+  readonly onSearch: (query: string) => void;
+  /** Toggle a project's collapsed state (persists via the supervisor). */
+  readonly onToggleProject: (key: string) => void;
+  /** Select (navigate to) a session. */
   readonly onSelect: (sessionId: string) => void;
-  /** Durably rename a session row (editable session titles). */
-  readonly onRename: (sessionId: string, title: string) => void;
-  /** Archive a session row (right-click → Archive): hides it from the sidebar/resume. */
-  readonly onArchive: (sessionId: string) => void;
-  /** Soft-delete a session row (right-click → Delete, confirmed): hides it from every view. */
-  readonly onDelete: (sessionId: string) => void;
-  /** Open the New-session picker (plan 44.2, D-001): renders the pinned `＋ New session` header
-   *  affordance, sharing one open-picker entry with the `/new` command. */
-  readonly onNewSession: () => void;
+  /** Reveal more sessions under a project (past SESSION_CAP). */
+  readonly onShowMore: (key: string) => void;
+  /** Add a project (opens the OS folder picker via the supervisor). */
+  readonly onAddProject: () => void;
+  /** Launch a fresh project-scoped session (M4). */
+  readonly onNewSession: (projectKey: string) => void;
+  /** Archive a session from the sidebar. */
+  readonly onArchiveSession: (sessionId: string) => void;
+  /** Rename a session (editable session titles). */
+  readonly onRenameSession: (sessionId: string, title: string) => void;
+  /** Rename a project (persisted via the supervisor). */
+  readonly onRenameProject: (key: string, name: string) => void;
+  /** Remove a project (persisted via the supervisor; blocked by active sessions). */
+  readonly onRemoveProject: (key: string) => void;
+  /** View an archive-only project's archived sessions, filtered to that project (plan 58 M7). */
+  readonly onViewArchive?: (projectKey: string) => void;
+  /** The currently selected session id (for row highlight). */
+  readonly currentSessionId: string;
+  /** Live run state per session, layered over each row's durable activity. */
   readonly liveActivity: ReadonlyMap<string, SessionActivity>;
   readonly nowMs: number;
 }
 
 /**
- * PanelHost owns the rendered chat layout: the session sidebar, the main column (transcript well +
+ * PanelHost owns the rendered chat layout: the project sidebar, the main column (transcript well +
  * task checklist + composer), the toggleable side panel, and the resume/worktree choosers. It owns
  * NO state - it is
  * pure presentation over the injected view-models and wiring. App stays the composition root: it
@@ -321,23 +343,60 @@ export function PanelHost(props: {
 
   return (
     <div className="flex h-svh">
-      {/* The session navigation sidebar (D-093): a collapsible left rail listing the current
-        project's sessions. Switching routes through the same safe path as `/resume`. */}
+      {/* The project sidebar (plan 58 M6): a collapsible left rail listing all projects and
+        their sessions. Switching routes through the same safe path as `/resume`. */}
       {sidebar.open ? (
-        <SessionSidebar
-          sessions={sidebar.sessions}
-          currentSessionId={sidebar.currentSessionId}
-          currentProject={sidebar.currentProject}
-          onSelect={sidebar.onSelect}
-          onRename={sidebar.onRename}
-          onArchive={sidebar.onArchive}
-          onDelete={sidebar.onDelete}
-          onNewSession={sidebar.onNewSession}
-          liveActivity={sidebar.liveActivity}
-          onToggle={sidebar.onClose}
-          nowMs={sidebar.nowMs}
-          className="w-64 shrink-0"
-        />
+        <div className="relative flex shrink-0 overflow-hidden" style={{ width: sidebar.width }}>
+          <ProjectSidebar
+            groups={sidebar.groups}
+            searchQuery={sidebar.searchQuery}
+            onSearchChange={sidebar.onSearch}
+            onToggleProject={sidebar.onToggleProject}
+            onSelectSession={sidebar.onSelect}
+            onShowMore={sidebar.onShowMore}
+            onAddProject={sidebar.onAddProject}
+            onNewSession={sidebar.onNewSession}
+            onArchiveSession={sidebar.onArchiveSession}
+            onRenameSession={sidebar.onRenameSession}
+            onRenameProject={sidebar.onRenameProject}
+            onRemoveProject={sidebar.onRemoveProject}
+            onViewArchive={sidebar.onViewArchive}
+            liveActivity={sidebar.liveActivity}
+            currentSessionId={sidebar.currentSessionId}
+            nowMs={sidebar.nowMs}
+            className="h-full min-w-0 flex-1"
+          />
+          {/* Drag-to-resize handle: a thin strip on the sidebar's right edge. Pointer events
+              drive the width directly (no HTML5 drag ghost); clamped to [180, 480]. */}
+          <button
+            type="button"
+            aria-label="Resize sidebar"
+            onMouseDown={(e) => {
+              e.preventDefault();
+              const handle = e.currentTarget;
+              handle.style.backgroundColor = "rgb(255 255 255 / 0.2)";
+              const startX = e.clientX;
+              const startWidth = sidebar.width;
+              const onMove = (ev: MouseEvent) => {
+                const delta = ev.clientX - startX;
+                const next = Math.max(180, Math.min(480, startWidth + delta));
+                sidebar.onResize(next);
+              };
+              const onUp = () => {
+                document.removeEventListener("mousemove", onMove);
+                document.removeEventListener("mouseup", onUp);
+                document.body.style.cursor = "";
+                document.body.style.userSelect = "";
+                handle.style.backgroundColor = "";
+              };
+              document.body.style.cursor = "col-resize";
+              document.body.style.userSelect = "none";
+              document.addEventListener("mousemove", onMove);
+              document.addEventListener("mouseup", onUp);
+            }}
+            className="absolute -right-0.5 top-0 z-10 h-full w-1 cursor-col-resize border-0 bg-transparent transition-colors hover:bg-foreground/20"
+          />
+        </div>
       ) : null}
       <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4">
         {/* Highlight text in any message (data-message-id) to get a floating Quote action
@@ -350,7 +409,7 @@ export function PanelHost(props: {
         <header className="flex h-8 shrink-0 items-center gap-2">
           <span className="flex w-6 shrink-0 justify-start">
             {!sidebar.open ? (
-              <DrawerToggle side="left" onClick={sidebar.onOpen} label="Open sessions sidebar" />
+              <DrawerToggle side="left" onClick={sidebar.onOpen} label="Open project sidebar" />
             ) : null}
           </span>
           <span className="min-w-0 flex-1 truncate text-center text-label tracking-wider text-muted-foreground/70">
