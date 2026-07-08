@@ -142,7 +142,7 @@ function ReasoningFade({
         data-slot="reasoning-fade"
         className={cn(
           "aui-reasoning-fade pointer-events-none absolute inset-x-0 top-0 z-10 h-8",
-          "bg-[linear-gradient(to_bottom,var(--color-background),transparent)]",
+          "bg-[linear-gradient(to_bottom,var(--trevor-reasoning-fade-bg,var(--color-background)),transparent)]",
           "group-data-[variant=muted]/reasoning-root:bg-[linear-gradient(to_bottom,hsl(var(--muted)/0.5),transparent)]",
           "fade-in-0 animate-in",
           "duration-(--animation-duration)",
@@ -158,7 +158,7 @@ function ReasoningFade({
       data-slot="reasoning-fade"
       className={cn(
         "aui-reasoning-fade pointer-events-none absolute inset-x-0 bottom-0 z-10 h-8",
-        "bg-[linear-gradient(to_top,var(--color-background),transparent)]",
+        "bg-[linear-gradient(to_top,var(--trevor-reasoning-fade-bg,var(--color-background)),transparent)]",
         "group-data-[variant=muted]/reasoning-root:bg-[linear-gradient(to_top,hsl(var(--muted)/0.5),transparent)]",
         "fade-in-0 animate-in",
         "group-data-[state=open]/collapsible-content:animate-out",

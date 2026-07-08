@@ -398,7 +398,7 @@ export function PanelHost(props: {
           />
         </div>
       ) : null}
-      <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4">
+      <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4 [--trevor-reasoning-fade-bg:var(--color-smui-surface-sunken)]">
         {/* Highlight text in any message (data-message-id) to get a floating Quote action
           that drops the selection into the composer as a markdown blockquote. */}
         <QuoteSelectionToolbar onQuote={composer.quoteSelection} onTangent={onTangent} />

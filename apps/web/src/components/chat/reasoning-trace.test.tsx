@@ -76,6 +76,15 @@ test("M1: long reasoning is capped with an internal scroll box (never floods the
   assert.match(scroller?.className ?? "", /max-h-/);
 });
 
+test("M1: fade overlays use the surrounding transcript background token", () => {
+  const { container } = render(<ReasoningTrace content={THINKING} streaming />);
+  const fades = container.querySelectorAll('[data-slot="reasoning-fade"]');
+  assert.equal(fades.length, 2, "streaming preview has top and bottom fade overlays");
+  for (const fade of fades) {
+    assert.match(fade.className, /--trevor-reasoning-fade-bg/);
+  }
+});
+
 test("M1: expanded reasoning text is selectable/copyable (not aria-hidden scaffolding)", () => {
   render(<ReasoningTrace content={THINKING} defaultOpen />);
   const text = screen.getByText(THINKING);
