@@ -122,6 +122,52 @@ const COMPACT_FLUSH_PB = "pb-1";
 const COMPACT_GAP_PX = 24;
 const COMPACT_FLUSH_PX = 4;
 const COMPACT_GAP_DELTA = COMPACT_GAP_PX - COMPACT_FLUSH_PX;
+const ANCHOR_EPSILON_PX = 1.5;
+
+interface VisualAnchorSnapshot {
+  readonly id: string;
+  readonly top: number;
+}
+
+function visibleAnchorIn(scrollElement: HTMLElement | null): VisualAnchorSnapshot | null {
+  if (!scrollElement) {
+    return null;
+  }
+  const scrollRect = scrollElement.getBoundingClientRect();
+  const rows = Array.from(
+    scrollElement.querySelectorAll<HTMLElement>("[data-transcript-virtual-row]"),
+  );
+  for (const row of rows) {
+    const rect = row.getBoundingClientRect();
+    const top = rect.top - scrollRect.top;
+    if (rect.bottom <= scrollRect.top || rect.top >= scrollRect.bottom) {
+      continue;
+    }
+    if (top < 40 || top > scrollElement.clientHeight - 120) {
+      continue;
+    }
+    const message = row.querySelector<HTMLElement>("[data-message-id]");
+    const id = message?.dataset.messageId;
+    if (id) {
+      return { id, top };
+    }
+  }
+  return null;
+}
+
+function anchorTop(scrollElement: HTMLElement, id: string): number | null {
+  const row = Array.from(
+    scrollElement.querySelectorAll<HTMLElement>("[data-transcript-virtual-row]"),
+  ).find(
+    (candidate) =>
+      candidate.querySelector<HTMLElement>("[data-message-id]")?.dataset.messageId === id,
+  );
+  if (!row) {
+    return null;
+  }
+  const scrollRect = scrollElement.getBoundingClientRect();
+  return row.getBoundingClientRect().top - scrollRect.top;
+}
 
 export function VirtualTranscript({
   rows,
@@ -142,6 +188,9 @@ export function VirtualTranscript({
     compact = false,
   } = rowConfig;
   const lastRowIdRef = useRef<string | null>(null);
+  const previousRowsRef = useRef<readonly TranscriptRow[] | null>(null);
+  const previousTotalSizeRef = useRef<number | null>(null);
+  const visualAnchorRef = useRef<VisualAnchorSnapshot | null>(null);
   const [readyToReveal, setReadyToReveal] = useState(false);
   const [settleTick, setSettleTick] = useState(0);
   // The controller's pin state, mirrored into render: the same value the adapter's jump button reads,
@@ -269,6 +318,37 @@ export function VirtualTranscript({
     [controller, scrollToLiveEdge],
   );
   const totalSize = virtualizer.getTotalSize();
+
+  useLayoutEffect(() => {
+    const scrollElement = scrollRef.current;
+    const previousAnchor = visualAnchorRef.current;
+    const contentChanged =
+      previousRowsRef.current !== null &&
+      (previousRowsRef.current !== rows || previousTotalSizeRef.current !== totalSize);
+
+    if (contentChanged && !pinned && previousAnchor && scrollElement) {
+      const currentTop = anchorTop(scrollElement, previousAnchor.id);
+      if (currentTop !== null) {
+        const delta = currentTop - previousAnchor.top;
+        if (Math.abs(delta) > ANCHOR_EPSILON_PX) {
+          const nextTop = scrollElement.scrollTop + delta;
+          const decision = controller.requestWrite("anchor-compensation", {
+            writer: "virtualizer",
+            resultingOffset: nextTop,
+            scrollHeight: scrollElement.scrollHeight,
+            clientHeight: scrollElement.clientHeight,
+          });
+          if (decision.allowed) {
+            scrollElement.scrollTo({ top: nextTop, behavior: "auto" });
+          }
+        }
+      }
+    }
+
+    visualAnchorRef.current = pinned ? null : visibleAnchorIn(scrollElement);
+    previousRowsRef.current = rows;
+    previousTotalSizeRef.current = totalSize;
+  });
 
   useLayoutEffect(() => {
     const last = rows.at(-1)?.id ?? null;

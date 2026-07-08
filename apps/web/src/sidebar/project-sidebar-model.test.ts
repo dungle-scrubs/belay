@@ -131,25 +131,38 @@ describe("buildProjectSidebar", () => {
     expect(group.sessions.map((s) => s.sessionId)).toEqual(["normal"]);
   });
 
-  test("projects ordered by creation order (oldest first), independent of activity", () => {
+  test("projects ordered by creation order (oldest first), NOT activity", () => {
     const groups = buildProjectSidebar(
       [
         project({
-          path: "/dev/newest",
-          createdAt: "2026-06-03T00:00:00.000Z",
-          updatedAt: "2026-06-01T00:00:00.000Z",
+          path: "/dev/older-created",
+          createdAt: "2026-06-01T00:00:00.000Z",
+          updatedAt: "2026-06-02T00:00:00.000Z",
         }),
         project({
-          path: "/dev/oldest",
-          createdAt: "2026-06-01T00:00:00.000Z",
-          updatedAt: "2026-06-05T00:00:00.000Z",
+          path: "/dev/newer-created",
+          createdAt: "2026-06-05T00:00:00.000Z",
+          updatedAt: "2026-06-10T00:00:00.000Z",
         }),
-        project({ path: "/dev/mid", createdAt: "2026-06-02T00:00:00.000Z" }),
       ],
       [],
     );
-    // Creation order wins (oldest first) even when a newer-created project has older activity.
-    expect(groups.map((g) => g.key)).toEqual(["/dev/oldest", "/dev/mid", "/dev/newest"]);
+    // Creation order wins even though /dev/newer-created has the more recent activity
+    // (activity-order would put /dev/newer-created first).
+    expect(groups.map((g) => g.key)).toEqual(["/dev/older-created", "/dev/newer-created"]);
+  });
+
+  test("projects with equal createdAt keep a stable order (tiebreaker by key, no swapping)", () => {
+    const groups = buildProjectSidebar(
+      [
+        project({ path: "/dev/zebra", createdAt: "2026-06-01T00:00:00.000Z" }),
+        project({ path: "/dev/alpha", createdAt: "2026-06-01T00:00:00.000Z" }),
+        project({ path: "/dev/mango", createdAt: "2026-06-01T00:00:00.000Z" }),
+      ],
+      [],
+    );
+    // Same createdAt -> deterministic order by key, so equal-created projects never swap renders.
+    expect(groups.map((g) => g.key)).toEqual(["/dev/alpha", "/dev/mango", "/dev/zebra"]);
   });
 
   test("sessions within a project sorted by updatedAt descending", () => {

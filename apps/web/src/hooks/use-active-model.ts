@@ -61,8 +61,15 @@ export function useActiveModel({
   const firstAnnouncedProvider = Object.keys(hostModels)[0];
   const activeProvider =
     provider ?? lastUserModel?.provider ?? hostDefault ?? firstAnnouncedProvider ?? "default";
+  // Seed the effort from the carried-over model: prefer the ModelRef's reasoning (the chooser's
+  // actual effort, stamped on handoff) over the event's top-level reasoning. The top-level field is
+  // the legacy provider reasoning and can drift from the chosen effort (e.g. "off" while the ModelRef
+  // carries "xhigh"); using it let the carried-over effort revert to the model default once the
+  // catalog arrived.
   const seededReasoning =
-    lastUserModel?.provider === activeProvider ? lastUserModel.reasoning : undefined;
+    lastUserModel?.provider === activeProvider
+      ? (lastUserModel.model?.reasoning ?? lastUserModel.reasoning)
+      : undefined;
   const rosterMeta = hostModels[activeProvider];
   // When the roster lacks the active provider (a fresh handoff session before host.online arrives, or
   // an HMR-blanked fold), recover a real model: the model the handoff stamped onto the first prompt
