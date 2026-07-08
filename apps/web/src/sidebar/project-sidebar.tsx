@@ -90,7 +90,10 @@ function SessionRow({
   nowMs,
   onSelect,
   onArchiveSession,
-  onRenameSession,
+  renaming,
+  onStartRename,
+  onRenameSave,
+  onRenameCancel,
 }: {
   summary: SessionSummary;
   activity: SessionActivity;
@@ -98,9 +101,12 @@ function SessionRow({
   nowMs: number;
   onSelect: (sessionId: string) => void;
   onArchiveSession?: (sessionId: string) => void;
-  onRenameSession?: (sessionId: string, title: string) => void;
+  renaming: boolean;
+  onStartRename?: () => void;
+  onRenameSave?: (name: string) => void;
+  onRenameCancel?: () => void;
 }) {
-  const hasActions = Boolean(onArchiveSession || onRenameSession);
+  const hasActions = Boolean(onArchiveSession || onStartRename);
 
   return (
     <div
@@ -114,25 +120,39 @@ function SessionRow({
         ["--row-bg" as string]: selected ? "hsl(var(--card))" : "transparent",
       }}
     >
-      <button
-        type="button"
-        onClick={() => onSelect(summary.sessionId)}
-        className="min-w-0 flex-1 truncate pr-16 text-left"
-      >
-        {summary.title}
-      </button>
+      {renaming ? (
+        <RenameInput
+          initial={summary.title}
+          onSave={onRenameSave ?? (() => undefined)}
+          onCancel={onRenameCancel ?? (() => undefined)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => onSelect(summary.sessionId)}
+          className="min-w-0 flex-1 truncate pr-16 text-left"
+        >
+          {summary.title}
+        </button>
+      )}
       {/* Right slot: absolutely positioned so long titles never push it off-screen. The title
-          gets right padding (pr-16) so its truncated ellipsis lands before this overlay. */}
-      <span className="pointer-events-none absolute right-1.5 top-1/2 flex h-4 -translate-y-1/2 items-center justify-end gap-0.5">
+          gets right padding (pr-16) so its truncated ellipsis lands before this overlay. Hidden
+          while renaming so the input owns the full row width. */}
+      <span
+        className={cn(
+          "pointer-events-none absolute right-1.5 top-1/2 flex h-4 -translate-y-1/2 items-center justify-end gap-0.5",
+          renaming && "hidden",
+        )}
+      >
         {hasActions ? (
-          <span className="pointer-events-auto absolute right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100 focus-within:opacity-100">
-            {onRenameSession ? (
+          <span className="pointer-events-none absolute right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+            {onStartRename ? (
               <button
                 type="button"
                 aria-label="Rename session"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onRenameSession(summary.sessionId, summary.title);
+                  onStartRename();
                 }}
                 className="rounded p-0.5 text-muted-foreground hover:text-foreground"
               >
@@ -156,8 +176,8 @@ function SessionRow({
         ) : null}
         <span
           className={cn(
-            "pointer-events-auto whitespace-nowrap pl-1 text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
-            hasActions && "group-hover:opacity-0",
+            "pointer-events-none whitespace-nowrap pl-1 text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
+            hasActions && "group-hover:opacity-0 focus-within:opacity-0",
           )}
         >
           {activity === "running" ? (
@@ -394,7 +414,7 @@ function ProjectRow({
           }
         }}
         onContextMenu={canMenu ? handleContextMenu : undefined}
-        className="group/row flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-card/40"
+        className="group/row relative flex w-full items-center gap-1.5 px-2 py-1.5 text-left hover:bg-card/40"
         aria-expanded={!group.collapsed}
       >
         {group.collapsed ? (
@@ -530,6 +550,7 @@ export function ProjectSidebar({
   className,
 }: ProjectSidebarProps) {
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
+  const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
 
   function handleRenameSave(key: string) {
     return (name: string) => {
@@ -540,6 +561,19 @@ export function ProjectSidebar({
 
   function handleRenameCancel() {
     setRenamingKey(null);
+  }
+
+  /** Inline session rename: the pencil enters edit mode (no write); the write fires only on save with
+   *  the new name, so opening the editor no longer bumps `updatedAt` and re-sorting the row. */
+  function handleSessionRenameSave(sessionId: string) {
+    return (name: string) => {
+      onRenameSession?.(sessionId, name);
+      setRenamingSessionId(null);
+    };
+  }
+
+  function handleSessionRenameCancel() {
+    setRenamingSessionId(null);
   }
 
   return (
@@ -613,7 +647,18 @@ export function ProjectSidebar({
                             nowMs={nowMs}
                             onSelect={onSelectSession}
                             onArchiveSession={onArchiveSession}
-                            onRenameSession={onRenameSession}
+                            renaming={renamingSessionId === summary.sessionId}
+                            onStartRename={
+                              onRenameSession
+                                ? () => setRenamingSessionId(summary.sessionId)
+                                : undefined
+                            }
+                            onRenameSave={
+                              onRenameSession
+                                ? handleSessionRenameSave(summary.sessionId)
+                                : undefined
+                            }
+                            onRenameCancel={handleSessionRenameCancel}
                           />
                         ))
                       )}

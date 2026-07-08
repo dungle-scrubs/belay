@@ -153,6 +153,30 @@ describe("ProjectSidebar action UI", () => {
     expect(onArchiveSession).toHaveBeenCalledWith("s1");
   });
 
+  test("Rename session opens an inline editor and writes only on save, not on click", () => {
+    const onRenameSession = vi.fn<(sessionId: string, title: string) => void>();
+    const { container, getByLabelText } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groupsWithSession()}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onRenameSession={onRenameSession}
+      />,
+    );
+    // The pencil enters edit mode; it must NOT write on click. The old behavior re-wrote the same
+    // title immediately, bumping updatedAt and re-sorting the row to the top without ever showing
+    // an editor.
+    fireEvent.click(getByLabelText("Rename session"));
+    expect(onRenameSession).not.toHaveBeenCalled();
+    const input = container.querySelector('input[type="text"]') as HTMLInputElement;
+    expect(input).toBeTruthy();
+    fireEvent.change(input, { target: { value: "Renamed session" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onRenameSession).toHaveBeenCalledWith("s1", "Renamed session");
+  });
+
   test("right-clicking a project row opens a context menu with Rename and Remove", () => {
     const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
