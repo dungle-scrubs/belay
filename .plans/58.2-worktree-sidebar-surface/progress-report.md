@@ -7,57 +7,63 @@
 
 | Bucket | Count |
 |--------|-------|
-| Current-cutoff tasks (total) | 26 |
+| Current-cutoff tasks (total) | 32 |
 | Checked (done) | 0 |
-| Current-cutoff blockers (unchecked) | 26 |
+| Current-cutoff blockers (unchecked) | 32 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
 ---
 
-## M1 - Base-Repo Grouping for Worktree Sessions (5/5)
+## M1 - Host stamps `session.project` with the base repo (4/4)
 
-- [ ] RED: Add a model test proving a session whose `projectPath` is a managed worktree path is grouped under its base repo.
-- [ ] GREEN: Extend `buildProjectSidebar` to remap worktree sessions to their base repo via worktree summaries.
-- [ ] RED: Add a test proving grouping works via the durable `session.project` marker when the host is offline.
-- [ ] GREEN: Verify the host publishes `session.project` with the base repo path for worktree sessions.
-- [ ] REFACTOR: Centralize worktree-path-to-base-repo resolution.
+- [ ] RED: Test `switchToWorkspace` (reason "worktree") emits `session.project` with the base repo on the TARGET session.
+- [ ] GREEN: Widen `SessionSwitchDeps` (transport: ensureSession|publishEvent + `baseRepoFor` seam); publish marker to `opts.sessionId` (not `emit`, which writes to SESSION_ID).
+- [ ] RED: Test `/worktree-new` also stamps the base repo (same path).
+- [ ] REFACTOR: Centralize base-repo resolution; commands.ts + session-switch.ts ask the manager once.
 
-## M2 - Worktree Badge on Session Rows (5/5)
+## M2 - Sidebar base-repo grouping, online + offline (4/4)
 
-- [ ] RED: Add a test proving a SessionRow in a known worktree renders a FolderGit2 badge.
-- [ ] GREEN: Add the `worktree` field to the session row view model and render the badge.
-- [ ] RED: Add a test proving hovering the badge opens a Radix tooltip with branch + path + git state.
-- [ ] GREEN: Build `WorktreeBadge` component with the rich tooltip.
+- [ ] RED: Worktree session groups under base repo via the durable marker (offline).
+- [ ] RED: Worktree join keys on `sessionId` (exact, offline-safe), NOT on path (abbreviation mismatch); baseline row (`baseline === true`) is excluded so the main checkout is not badged.
+- [ ] GREEN: `buildProjectSidebar` accepts `worktrees`, joins on `sessionId` (excluding `baseline: true` rows); grouping via M1 marker.
+- [ ] REFACTOR: Pull the session-to-worktree join (`Map<sessionId, WorktreeSummary>`, baseline excluded) into a pure helper.
+
+## M3 - Worktree badge on session rows (5/5)
+
+- [ ] RED: SessionRow in a known worktree renders a FolderGit2 badge (excluding the baseline row).
+- [ ] GREEN: Add `worktree` field to the row view model; render FolderGit2 (baseline excluded by the `!baseline` filter in the M2 join map).
+- [ ] RED: Hovering the badge opens a Radix tooltip with branch + abbreviated path + git state.
+- [ ] GREEN: Build `WorktreeBadge` (FolderGit2 + existing Radix Tooltip).
 - [ ] REFACTOR: Extract the tooltip into its own reusable module.
 
-## M3 - Host-Side Merged Detection (5/5)
+## M4 - Host-side merged detection (5/5) (protocol change)
 
-- [ ] RED: Add a test proving `WorktreeManager.summaries` marks a worktree `merged` when its branch is in `git branch --merged`.
-- [ ] GREEN: Add `branchMerged` to `git.ts` and call it from the manager.
-- [ ] RED: Add a test proving the default branch is resolved dynamically.
-- [ ] GREEN: Resolve the default branch via `origin/HEAD` with fallbacks.
-- [ ] REFACTOR: Gate the merged check behind a periodic cadence.
+- [ ] RED: `WorktreeManager.summaries` marks a worktree `merged: true` when in `git branch --merged <default>`.
+- [ ] GREEN: Add `merged` to `WorktreeSummary` (`events.ts`) + `coerceWorktrees` (`decode.ts`) + `summaryRow` (`manager.ts`); add `branchMerged` to `git.ts`.
+- [ ] RED: Default branch resolved dynamically (`origin/HEAD` → `main` → `master`).
+- [ ] GREEN: Resolve the default branch via `git symbolic-ref refs/remotes/origin/HEAD` with fallbacks.
+- [ ] REFACTOR: Gate the merged check behind a periodic cadence (host.online + 5 min).
 
-## M4 - Disabled Session Row for Merged Worktrees (4/4)
+## M5 - Disabled session row for merged worktrees (4/4)
 
-- [ ] RED: Add a test proving a merged-worktree session renders dimmed with a "merged" label.
+- [ ] RED: Merged-worktree session renders dimmed with a "merged" label.
 - [ ] GREEN: Render merged rows with `opacity-50` + "merged" replacing the timestamp.
-- [ ] RED: Add a test proving archive still works on merged rows.
+- [ ] RED: Archive still works on merged rows.
 - [ ] GREEN: Keep the archive hover action functional on merged rows.
 
-## M5 - Orphan Detection and Registry Cleanup (5/5)
+## M6 - Orphan detection and registry cleanup (5/5)
 
 - [ ] RED: Verify the existing `missing` flag flows to the browser.
 - [ ] GREEN: Render missing worktrees as disabled with "orphaned".
-- [ ] RED: Add a test proving reconcile drops orphaned entries and the sidebar updates.
+- [ ] RED: `/worktree-reconcile` drops orphaned entries and the sidebar updates.
 - [ ] GREEN: Wire the sidebar to consume updated worktree state from `host.online`.
 - [ ] REFACTOR: Consolidate merged/orphaned/active into a `worktreeStatus` field.
 
-## M6 - Tooltip Richness and Final Polish (5/5)
+## M7 - Tooltip richness and final polish (5/5) (protocol change)
 
-- [ ] RED: Add a test proving the tooltip shows last-commit info.
-- [ ] GREEN: Extend `WorktreeSummary` with `lastCommit` and include it in the announcement.
-- [ ] RED: Add Storybook stories for normal, worktree-active, and worktree-merged states.
+- [ ] RED: Tooltip shows last-commit info (short hash + subject).
+- [ ] GREEN: Add `lastCommit?` to `WorktreeSummary` (`events.ts`) + `coerceWorktrees` (`decode.ts`) + `summaryRow` (`manager.ts`); add `headCommitInfo` to `git.ts` (existing `headCommit` returns sha only, not subject).
+- [ ] RED: Storybook stories for normal, worktree-active, worktree-merged states.
 - [ ] GREEN: Build the stories and verify rendering.
-- [ ] REFACTOR: Clean up dead code from the old per-worktree-project grouping.
+- [ ] REFACTOR: Clean up any dead code from the old per-worktree-project grouping.

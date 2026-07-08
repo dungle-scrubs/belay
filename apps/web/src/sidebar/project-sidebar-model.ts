@@ -95,9 +95,9 @@ function canonicalizePath(rawPath: string, allPaths: readonly string[]): string 
  * sessions under their project by resolved project path, merging known registry records with
  * transient projects (sessions whose path has no registry record).
  *
- * Ordering: newest project activity first, where activity is the max of the registry record's
- * `updatedAt` and its sessions' `updatedAt` values. Sessions within a project are also sorted by
- * `updatedAt` descending.
+ * Ordering: creation order (oldest first), by the registry record's `createdAt`, so projects stay
+ * put and do not re-order on activity. Transient projects (sessions with no registry record) sort
+ * after known ones. Sessions within a project are sorted by `updatedAt` descending.
  */
 export function buildProjectSidebar(
   projects: readonly ProjectSidebarRecord[],
@@ -172,11 +172,16 @@ export function buildProjectSidebar(
     });
   }
 
-  // Most-recent activity first: the aggregate `updatedAt` above already folds in both registry
-  // edits and active session activity, so a quiet old project can move up when a session resumes.
+  // Creation order (oldest first) by the registry record's createdAt, so projects stay put and do
+  // NOT re-order on their own when a session resumes or activity changes. Transient projects (no
+  // registry record) sort after known ones; a stable tiebreaker on the key keeps projects that share
+  // a createdAt from swapping between renders. (A concurrent compact-mode commit had reverted this to
+  // activity-order, which made projects jump whenever their updatedAt changed.)
   return groups.sort((a, b) => {
-    const byActivity = b.updatedAt.localeCompare(a.updatedAt);
-    return byActivity === 0 ? a.createdAt.localeCompare(b.createdAt) : byActivity;
+    const aTime = a.isTransient ? "9999" : a.createdAt;
+    const bTime = b.isTransient ? "9999" : b.createdAt;
+    const byCreation = aTime.localeCompare(bTime);
+    return byCreation === 0 ? a.key.localeCompare(b.key) : byCreation;
   });
 }
 
