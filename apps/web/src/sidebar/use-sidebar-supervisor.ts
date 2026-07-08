@@ -65,15 +65,22 @@ export function useSidebarSupervisor(
   const control = useSessionWithTransport(transport, active ? SUPERVISOR_SESSION_ID : null);
   const controlEvents = control.events;
 
-  const [projects, setProjects] = useState<readonly ProjectSidebarRecord[]>([]);
-  const projectsReqRef = useRef<string | null>(null);
-  const cursorRef = useRef(0);
-
   const publish = useCallback(
     (built: TrevorEventInput): Promise<void> =>
       publishWebEvent(transport, SUPERVISOR_SESSION_ID, built),
     [transport],
   );
+
+  const [projects, setProjects] = useState<readonly ProjectSidebarRecord[]>([]);
+  const projectsReqRef = useRef<string | null>(null);
+  const cursorRef = useRef(0);
+  const refetchRef = useRef(false);
+
+  const requestProjects = useCallback(() => {
+    const requestId = crypto.randomUUID();
+    projectsReqRef.current = requestId;
+    void publish(sessionEvents.projectsListRequested({ requestId }));
+  }, [publish]);
 
   // On open, ask the supervisor for the project list; on close, reset.
   useEffect(() => {
@@ -83,10 +90,8 @@ export function useSidebarSupervisor(
       cursorRef.current = 0;
       return;
     }
-    const requestId = crypto.randomUUID();
-    projectsReqRef.current = requestId;
-    void publish(sessionEvents.projectsListRequested({ requestId }));
-  }, [active, publish]);
+    requestProjects();
+  }, [active, requestProjects]);
 
   // Fold each new control-session event once for the sidebar's concern (the project list).
   useEffect(() => {
@@ -99,9 +104,25 @@ export function useSidebarSupervisor(
       if (decoded.type === "projects.list.result" && decoded.requestId === projectsReqRef.current) {
         setProjects(decoded.projects.map(toSidebarRecord));
       }
+      // Any project mutation result (add/rename/collapse/remove) triggers a re-fetch so the
+      // sidebar reflects the new registry state immediately, not on next open.
+      if (
+        decoded.type === "project.add.result" ||
+        decoded.type === "project.rename.result" ||
+        decoded.type === "project.collapse.result" ||
+        decoded.type === "project.remove.result"
+      ) {
+        refetchRef.current = true;
+      }
     }
     cursorRef.current = controlEvents.length;
-  }, [controlEvents]);
+
+    // Re-fetch the project list after a mutation result (deferred so the supervisor has committed).
+    if (refetchRef.current) {
+      refetchRef.current = false;
+      requestProjects();
+    }
+  }, [controlEvents, requestProjects]);
 
   const onProjectAction = useCallback(
     (action: ProjectAction) => {
