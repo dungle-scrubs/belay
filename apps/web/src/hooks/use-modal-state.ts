@@ -25,9 +25,16 @@ export function useModalState(opts: {
   // The archive browser (plan 04): a transcript-takeover for managing archived sessions, opened from
   // the sidebar footer. It reads the same inventory (its rows are the archived sessions).
   const [archiveOpen, setArchiveOpen] = useState(false);
-  // The left-side session sidebar (D-093) is toggleable; starts collapsed and persists.
-  const [sidebarOpen, setSidebarOpen] = useLocalStorageState<boolean>("trevor.sidebar", {
-    defaultValue: false,
+  // The left-side project sidebar (plan 58) is toggleable; defaults open and persists. Keyed v2
+  // to drop the retired session-sidebar's stored `false`, so the new default takes effect on
+  // first load rather than being suppressed by a stale preference.
+  const [sidebarOpen, setSidebarOpen] = useLocalStorageState<boolean>("trevor.sidebar.v2", {
+    defaultValue: true,
+  });
+  // The sidebar width is draggable (plan 58 polish): persisted across reloads, clamped to a
+  // usable range so it can't collapse to nothing or eat the whole viewport.
+  const [sidebarWidth, setSidebarWidth] = useLocalStorageState<number>("trevor.sidebar.width", {
+    defaultValue: 352,
   });
   // The right-side panel is toggleable; remember the choice across reloads.
   const [panelOpen, setPanelOpen] = useLocalStorageState<boolean>("trevor.panel", {
@@ -75,6 +82,8 @@ export function useModalState(opts: {
     setArchiveOpen,
     sidebarOpen: Boolean(sidebarOpen),
     setSidebarOpen,
+    sidebarWidth: sidebarWidth ?? 352,
+    setSidebarWidth,
     panelOpen: Boolean(panelOpen),
     setPanelOpen,
     inventory,
