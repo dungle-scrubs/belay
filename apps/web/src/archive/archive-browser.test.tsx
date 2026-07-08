@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
-import { fireEvent, render, within } from "@testing-library/react";
+import { fireEvent, render as rtlRender, within } from "@testing-library/react";
 import { describe, test } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ArchiveBrowser, DELETE_CONFIRM_PHRASE } from "./archive-browser";
 import type { ArchivedSessionRow } from "./archive-rows";
 
 const NOW = Date.parse("2026-06-29T12:00:00.000Z");
+
+function render(ui: Parameters<typeof rtlRender>[0]): ReturnType<typeof rtlRender> {
+  return rtlRender(<TooltipProvider>{ui}</TooltipProvider>);
+}
 
 function row(over: Partial<ArchivedSessionRow> & { sessionId: string }): ArchivedSessionRow {
   return {

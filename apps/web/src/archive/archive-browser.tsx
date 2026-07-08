@@ -105,11 +105,7 @@ export function ArchiveBrowser({
 
       {projectFilter != null ? (
         <ProjectFilterBanner
-          displayName={
-            filteredRows[0]?.project ??
-            projectFilter.split("/").filter(Boolean).pop() ??
-            projectFilter
-          }
+          displayName={projectFilter}
           displayPath={projectFilter}
           onClear={onClearProjectFilter}
         />

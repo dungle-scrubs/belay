@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { lucidArtifactRef } from "@trevor/session";
 import {
   BookOpenText,
   Brain,
-  Compass,
   FilePlus,
   FolderSearch,
   LoaderIcon,
@@ -60,6 +61,28 @@ test("user prompts and final assistant responses stay full (no compact descripto
   assert.equal(staysFullInCompact(response), true);
   assert.equal(compactDisplayFor(response), null);
   assert.equal(isCompactEligible(response), false);
+});
+
+test("58.1 M1: inline-agent delegations stay full in compact mode", () => {
+  const message: Message = {
+    kind: "inlineAgent",
+    id: "ia1",
+    parentRunId: "r1",
+    agents: [
+      {
+        childSessionId: "child",
+        agent: "explorer",
+        model: "qwen3-coder-30b",
+        reasoningLevel: "thinking",
+        status: "done",
+        tokens: 1240,
+      },
+    ],
+  };
+
+  assert.equal(staysFullInCompact(message), true);
+  assert.equal(isCompactEligible(message), false);
+  assert.equal(compactDisplayFor(message), null);
 });
 
 test("a streaming thinking-only segment compacts to a running 'Thinking' row", () => {
@@ -250,25 +273,6 @@ test("a delegation row reflects its child status, and a question row is detail-e
   assert.equal(q?.hasDetail, true);
 });
 
-test("an inline-agent row uses an exploration icon", () => {
-  const inlineAgent = compactDisplayFor({
-    kind: "inlineAgent",
-    id: "ia1",
-    parentRunId: "r1",
-    agents: [
-      {
-        childSessionId: "child",
-        agent: "explorer",
-        model: "qwen3-coder-30b",
-        reasoningLevel: "thinking",
-        status: "done",
-        tokens: 1240,
-      },
-    ],
-  });
-  assert.equal(inlineAgent?.icon, Compass);
-});
-
 test("lucid artifacts and hooks use artifact/hook-specific icons", () => {
   const lucid = compactDisplayFor({
     kind: "lucid",
@@ -325,4 +329,13 @@ test("every non-primary kind is compact-eligible; user/response are not", () => 
     false,
   );
   assert.equal(isCompactEligible(assistant({ text: "answer" })), false);
+});
+
+test("58.1 M2: compact-display has no inline-agent compact arm", () => {
+  const source = readFileSync(
+    join(process.cwd(), "apps/web/src/components/chat/compact-display.ts"),
+    "utf8",
+  );
+  assert.equal(source.includes("inlineAgentCompact"), false);
+  assert.equal(source.includes('case "inlineAgent"'), false);
 });

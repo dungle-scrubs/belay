@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
-import { fireEvent, render } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { test } from "vitest";
 import type { Message } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
@@ -23,6 +25,7 @@ function renderRow(
   over?: {
     compact?: boolean;
     expandedRows?: ReadonlySet<string>;
+    onOpenAgent?: (childSessionId: string) => void;
     onOpenDetail?: (message: Message) => void;
     onToggleRow?: (id: string) => void;
   },
@@ -35,6 +38,7 @@ function renderRow(
       onDoctorRefresh={noop}
       compact={over?.compact ?? false}
       expandedRows={over?.expandedRows}
+      onOpenAgent={over?.onOpenAgent}
       onOpenDetail={over?.onOpenDetail}
       onToggleRow={over?.onToggleRow}
     />,
@@ -107,6 +111,48 @@ test("user prompts and final assistant responses stay full in compact mode (no c
   );
   response.getByText("Here is the answer.");
   assert.equal(response.queryByRole("button"), null);
+});
+
+test("58.1 M1: inline-agent delegations render full clickable child rows in compact mode", () => {
+  const opened: string[] = [];
+  const { container } = renderRow(
+    messageRow({
+      kind: "inlineAgent",
+      id: "ia1",
+      parentRunId: "r1",
+      agents: [
+        { childSessionId: "s::sub::a", agent: "explorer", status: "running", model: "qwen3" },
+        { childSessionId: "s::sub::b", agent: "planner", status: "done", tokens: 300 },
+      ],
+    }),
+    {
+      compact: true,
+      expandedRows: new Set(),
+      onOpenAgent: (id) => opened.push(id),
+      onToggleRow: noop,
+    },
+  );
+
+  assert.equal(container.querySelector(".h-6"), null, "no CompactRow wrapper is rendered");
+  assert.ok(screen.getAllByText("explorer").length >= 1);
+  assert.ok(screen.getByText("planner"));
+  fireEvent.click(screen.getByRole("button", { name: /explorer/ }));
+  fireEvent.click(screen.getByRole("button", { name: /planner/ }));
+  assert.deepEqual(opened, ["s::sub::a", "s::sub::b"]);
+});
+
+test("58.1 M2: transcript compact row actions have no inline-agent branch", () => {
+  const source = readFileSync(
+    join(process.cwd(), "apps/web/src/components/chat/transcript-row-view.tsx"),
+    "utf8",
+  );
+  assert.equal(source.includes("compactInlineAgentAction"), false);
+
+  const compactRowActionBody = source.match(
+    /function compactRowAction\([\s\S]*?\n\}\n\nfunction TranscriptBlock/,
+  )?.[0];
+  assert.ok(compactRowActionBody, "compactRowAction source should be found");
+  assert.equal(compactRowActionBody.includes("inlineAgent"), false);
 });
 
 test("expanding a compact row reveals the same full renderer as the detail", () => {

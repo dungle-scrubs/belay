@@ -49,32 +49,17 @@ function toConcurrentTool(
 }
 
 function canExpandCompact(message: Message): boolean {
-  if (message.kind === "tool" || message.kind === "shell" || message.kind === "inlineAgent") {
+  if (message.kind === "tool" || message.kind === "shell") {
     return false;
   }
   const display = compactDisplayFor(message);
   return display?.hasDetail === true;
 }
 
-function compactInlineAgentAction(
-  message: Extract<Message, { kind: "inlineAgent" }>,
-  onOpenAgent: ((childSessionId: string) => void) | undefined,
-): (() => void) | undefined {
-  if (!onOpenAgent || message.agents.length !== 1) {
-    return undefined;
-  }
-  const [agent] = message.agents;
-  return agent ? () => onOpenAgent(agent.childSessionId) : undefined;
-}
-
 function compactRowAction(
   message: Message,
-  onOpenAgent: ((childSessionId: string) => void) | undefined,
   onOpenArtifact: ((artifact: ArtifactRef) => void) | undefined,
 ): (() => void) | undefined {
-  if (message.kind === "inlineAgent") {
-    return compactInlineAgentAction(message, onOpenAgent);
-  }
   if (message.kind === "lucid" && onOpenArtifact) {
     return () => onOpenArtifact(message.artifact);
   }
@@ -190,7 +175,7 @@ export function TranscriptRowView({
         canExpandCompact(row.message) && onToggleRow
           ? () => onToggleRow(row.message.id)
           : undefined;
-      const onAction = compactRowAction(row.message, onOpenAgent, onOpenArtifact);
+      const onAction = compactRowAction(row.message, onOpenArtifact);
       // Carry the selection segment id on the compact wrapper unless a recursive full render below owns
       // it, so exactly one element holds each message id (a duplicate would split the transcript-selection
       // capture vs. resolve and misplace the persistent highlight). The inspect affordance wraps the

@@ -3,7 +3,6 @@ import {
   Brain,
   ChevronRight,
   CircleX,
-  Compass,
   CornerDownRight,
   FilePlus,
   FolderSearch,
@@ -83,6 +82,9 @@ export function staysFullInCompact(message: Message): boolean {
   if (message.kind === "user") {
     return true;
   }
+  if (message.kind === "inlineAgent") {
+    return true;
+  }
   if (message.kind === "assistant") {
     return message.text.trim().length > 0;
   }
@@ -96,6 +98,9 @@ export function isCompactEligible(message: Message): boolean {
 
 /** The compact one-line descriptor for a message, or null when it stays fully rendered. */
 export function compactDisplayFor(message: Message): CompactDisplay | null {
+  if (staysFullInCompact(message)) {
+    return null;
+  }
   switch (message.kind) {
     case "user":
       return null;
@@ -176,8 +181,6 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
         secondary: `${message.tokens}/${message.budget} tokens`,
         hasDetail: false,
       };
-    case "inlineAgent":
-      return inlineAgentCompact(message);
     case "delegation": {
       const status =
         message.status === "running" ? "running" : message.status === "failed" ? "error" : "done";
@@ -204,35 +207,7 @@ export function compactDisplayFor(message: Message): CompactDisplay | null {
     case "limit":
       return compactFromDescriptor(messageKindDescriptor(message));
   }
-}
-
-function inlineAgentCompact(message: Extract<Message, { kind: "inlineAgent" }>): CompactDisplay {
-  const running = message.agents.some((agent) => agent.status === "running");
-  const failed = message.agents.some((agent) => agent.status === "failed");
-  const interrupted = message.agents.some((agent) => agent.status === "interrupted");
-  const [first] = message.agents;
-  const primary =
-    message.agents.length === 1 && first ? first.agent : `${message.agents.length} agents`;
-  const secondary =
-    message.agents.length === 1 && first
-      ? [first.model, first.reasoningLevel, first.tokens ? `down ${first.tokens} tokens` : null]
-          .filter((part): part is string => Boolean(part))
-          .join(" · ")
-      : truncate(
-          message.agents
-            .map((agent) => agent.agent)
-            .filter(Boolean)
-            .join(" · "),
-          80,
-        );
-  return {
-    kind: "inlineAgent",
-    status: running ? "running" : failed ? "error" : interrupted ? "info" : "done",
-    icon: Compass,
-    primary,
-    secondary: secondary || null,
-    hasDetail: message.agents.length > 0,
-  };
+  return null;
 }
 
 /** The compact row for a text-less assistant segment: an error, a terminal non-answer, or thinking. */

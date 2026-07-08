@@ -61,8 +61,9 @@ test("every collapsible item projects to a one-line compact display; the rest st
     }
     assert.ok(display.primary.length > 0, `${message.kind} needs a primary label`);
   }
-  // The kinds that keep their full render in compact mode: user prompts and assistant responses.
-  assert.deepEqual(full, new Set(["user", "assistant"]));
+  // The kinds that keep their full render in compact mode: user prompts, assistant responses, and
+  // inline-agent delegations whose child rows stay independently clickable (plan 58.1).
+  assert.deepEqual(full, new Set(["user", "assistant", "inlineAgent"]));
 });
 
 test("each collapsible catalog row renders through the real compact path as one line", () => {

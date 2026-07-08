@@ -95,9 +95,9 @@ function canonicalizePath(rawPath: string, allPaths: readonly string[]): string 
  * sessions under their project by resolved project path, merging known registry records with
  * transient projects (sessions whose path has no registry record).
  *
- * Ordering: creation order (oldest first), by the registry record's `createdAt`. Transient
- * projects (sessions with no registry record) sort after known projects. Sessions within a
- * project are sorted by `updatedAt` descending.
+ * Ordering: newest project activity first, where activity is the max of the registry record's
+ * `updatedAt` and its sessions' `updatedAt` values. Sessions within a project are also sorted by
+ * `updatedAt` descending.
  */
 export function buildProjectSidebar(
   projects: readonly ProjectSidebarRecord[],
@@ -172,13 +172,11 @@ export function buildProjectSidebar(
     });
   }
 
-  // Creation order: oldest first (by the registry record's createdAt). Transient projects
-  // (sessions without a registry record) sort after known projects so the pinned registry order
-  // is stable; they order among themselves by their earliest session's createdAt.
+  // Most-recent activity first: the aggregate `updatedAt` above already folds in both registry
+  // edits and active session activity, so a quiet old project can move up when a session resumes.
   return groups.sort((a, b) => {
-    const aTime = a.isTransient ? "9999" : a.createdAt;
-    const bTime = b.isTransient ? "9999" : b.createdAt;
-    return aTime.localeCompare(bTime);
+    const byActivity = b.updatedAt.localeCompare(a.updatedAt);
+    return byActivity === 0 ? a.createdAt.localeCompare(b.createdAt) : byActivity;
   });
 }
 

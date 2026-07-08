@@ -51,6 +51,12 @@ const question: Message = {
   items: [],
   summary: "picked A",
 };
+const inlineAgent: Message = {
+  kind: "inlineAgent",
+  id: "ia1",
+  parentRunId: "r1",
+  agents: [{ childSessionId: "s::sub::a", agent: "explorer", status: "running", model: "qwen3" }],
+};
 
 test("non-tool rows key by Message.kind", () => {
   assert.equal(compactTypeKey(messageRow(user)), "user");
@@ -101,6 +107,11 @@ test("compactLeadingGaps: flush within a type, one gap between types, first row 
 test("a tool_batch and an adjacent lone read-only tool sit flush; a mutating tool opens a gap", () => {
   const rows = [batchRow("read", "glob"), toolRow("read"), toolRow("edit")];
   assert.deepEqual(compactLeadingGaps(rows), [false, false, true]);
+});
+
+test("58.1 M3: a full inline-agent block opens exactly one compact gap at type boundaries", () => {
+  const rows = [toolRow("read"), messageRow(inlineAgent), toolRow("read")];
+  assert.deepEqual(compactLeadingGaps(rows), [false, true, true]);
 });
 
 test("an empty transcript yields no gaps", () => {
