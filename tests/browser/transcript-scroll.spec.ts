@@ -212,6 +212,114 @@ test("a mid-stream growing row is auto-followed while pinned (bottomDelta stays 
   await expectPinned(scroller, true);
 });
 
+test("streaming tokens do not move the visible anchor while the user is reading above the live edge", async ({
+  page,
+}, testInfo) => {
+  const { sessionId, scroller } = await openTallTranscript(page, "stream-anchor");
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+
+  const turn = await startStreamingTurn(storeTransport(), sessionId, `stream-anchor-${sessionId}`);
+  for (let i = 0; i < 6; i += 1) {
+    await turn.delta(`priming streamed line ${i}\n`);
+  }
+  await settleFrames(page, 4);
+
+  await scroller.hover();
+  await page.mouse.wheel(0, -420);
+  await settleFrames(page, 4);
+  await expectPinned(scroller, false);
+
+  const before = await scrollProbe(scroller);
+  const anchor = before.visibleRows.find(
+    (row) => row.top >= 40 && row.top <= before.clientHeight - 120,
+  );
+  expect(anchor, `expected an interior visible anchor row: ${JSON.stringify(before)}`).toBeTruthy();
+
+  const samples: ScrollProbe[] = [before];
+  for (let i = 0; i < 8; i += 1) {
+    await turn.delta(`reading-mode streamed line ${i}\n`);
+    await settleFrames(page, 4);
+    samples.push(await scrollProbe(scroller));
+  }
+  await turn.complete("done");
+
+  await testInfo.attach("stream-anchor-scroll-metrics.json", {
+    body: JSON.stringify({ anchor, samples }, null, 2),
+    contentType: "application/json",
+  });
+
+  for (const [index, sample] of samples.entries()) {
+    expect(sample.pinned).toBe("false");
+    const sampleAnchor = sample.visibleRows.find((row) => row.id === anchor?.id);
+    expect(
+      sampleAnchor,
+      `anchor row disappeared at sample ${index}: ${JSON.stringify(sample)}`,
+    ).toBeTruthy();
+    expect(
+      Math.abs((sampleAnchor?.top ?? 0) - (anchor?.top ?? 0)),
+      `streaming sample ${index} moved anchor: before=${JSON.stringify(before)} sample=${JSON.stringify(sample)}`,
+    ).toBeLessThanOrEqual(2);
+  }
+});
+
+test("streaming tokens do not move an earlier visible line in the same assistant message", async ({
+  page,
+}, testInfo) => {
+  const { sessionId, scroller } = await openTallTranscript(page, "stream-line-anchor");
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+
+  const turn = await startStreamingTurn(
+    storeTransport(),
+    sessionId,
+    `stream-line-anchor-${sessionId}`,
+  );
+  for (let i = 0; i < 40; i += 1) {
+    await turn.delta(`visible streamed anchor block line ${i}\n\n`);
+  }
+  await settleFrames(page, 6);
+
+  await scroller.hover();
+  await page.mouse.wheel(0, -760);
+  await settleFrames(page, 6);
+  await expectPinned(scroller, false);
+
+  const anchorLine = page.getByText("visible streamed anchor block line 16", { exact: true });
+  await expect(anchorLine).toBeVisible();
+  const before = {
+    probe: await scrollProbe(scroller),
+    anchorBox: await anchorLine.boundingBox(),
+  };
+  expect(before.anchorBox, "expected streamed line anchor to have a bounding box").toBeTruthy();
+
+  const samples: {
+    readonly probe: ScrollProbe;
+    readonly anchorBox: Awaited<ReturnType<typeof anchorLine.boundingBox>>;
+  }[] = [before];
+  for (let i = 0; i < 8; i += 1) {
+    await turn.delta(`later streamed line while reading ${i}\n\n`);
+    await settleFrames(page, 4);
+    samples.push({
+      probe: await scrollProbe(scroller),
+      anchorBox: await anchorLine.boundingBox(),
+    });
+  }
+  await turn.complete("done");
+
+  await testInfo.attach("stream-line-anchor-scroll-metrics.json", {
+    body: JSON.stringify(samples, null, 2),
+    contentType: "application/json",
+  });
+
+  for (const [index, sample] of samples.entries()) {
+    expect(sample.probe.pinned).toBe("false");
+    expect(sample.anchorBox, `anchor line disappeared at sample ${index}`).toBeTruthy();
+    expect(
+      Math.abs((sample.anchorBox?.y ?? 0) - (before.anchorBox?.y ?? 0)),
+      `streaming sample ${index} moved the visible line: before=${JSON.stringify(before)} sample=${JSON.stringify(sample)}`,
+    ).toBeLessThanOrEqual(2);
+  }
+});
+
 test("clicking jump-to-bottom re-pins and returns to the live edge", async ({ page }) => {
   const { sessionId, scroller } = await openTallTranscript(page, "jump");
 

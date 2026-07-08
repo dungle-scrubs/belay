@@ -16,27 +16,137 @@ interface MermaidSvgStyle extends CSSProperties {
   readonly "--trevor-mermaid-zoom": number;
 }
 
-const MERMAID_THEME_VARIABLES = {
-  actorBkg: "hsl(var(--smui-surface-1))",
-  actorBorder: "hsl(var(--border))",
-  actorTextColor: "hsl(var(--foreground))",
-  classText: "hsl(var(--foreground))",
-  edgeLabelBackground: "hsl(var(--background))",
-  lineColor: "hsl(var(--muted-foreground))",
-  mainBkg: "hsl(var(--smui-surface-1))",
-  nodeBorder: "hsl(var(--border))",
-  noteBkgColor: "hsl(var(--smui-surface-2))",
-  noteTextColor: "hsl(var(--foreground))",
-  primaryBorderColor: "hsl(var(--border))",
-  primaryColor: "hsl(var(--smui-surface-1))",
-  primaryTextColor: "hsl(var(--foreground))",
-  secondaryBorderColor: "hsl(var(--border))",
-  secondaryColor: "hsl(var(--smui-surface-2))",
-  secondaryTextColor: "hsl(var(--foreground))",
-  tertiaryBorderColor: "hsl(var(--border))",
-  tertiaryColor: "hsl(var(--background))",
-  tertiaryTextColor: "hsl(var(--foreground))",
+type MermaidThemeVariables = Record<string, string>;
+
+const MERMAID_THEME_TOKEN_NAMES = {
+  background: "--background",
+  border: "--border",
+  foreground: "--foreground",
+  mutedForeground: "--muted-foreground",
+  smuiSurface1: "--smui-surface-1",
+  smuiSurface2: "--smui-surface-2",
 } as const;
+
+const MERMAID_THEME_FALLBACKS = {
+  background: "#1a1e23",
+  border: "#3b414b",
+  foreground: "#bdc9d8",
+  mutedForeground: "#8993a0",
+  smuiSurface1: "#21252e",
+  smuiSurface2: "#292e38",
+} as const;
+
+function currentDocumentStyles(): Pick<CSSStyleDeclaration, "getPropertyValue"> | null {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return null;
+  }
+
+  return window.getComputedStyle(document.documentElement);
+}
+
+function hslComponentsToHex(value: string): string | null {
+  const match = value.trim().match(/^(-?\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)%\s+(\d+(?:\.\d+)?)%$/);
+  if (match === null) {
+    return null;
+  }
+
+  const hue = (((Number(match[1]) % 360) + 360) % 360) / 60;
+  const saturation = Number(match[2]) / 100;
+  const lightness = Number(match[3]) / 100;
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const x = chroma * (1 - Math.abs((hue % 2) - 1));
+  const m = lightness - chroma / 2;
+  const [red, green, blue] =
+    hue < 1
+      ? [chroma, x, 0]
+      : hue < 2
+        ? [x, chroma, 0]
+        : hue < 3
+          ? [0, chroma, x]
+          : hue < 4
+            ? [0, x, chroma]
+            : hue < 5
+              ? [x, 0, chroma]
+              : [chroma, 0, x];
+
+  return `#${[red, green, blue]
+    .map((channel) =>
+      Math.round((channel + m) * 255)
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
+}
+
+function resolveHslToken(
+  styles: Pick<CSSStyleDeclaration, "getPropertyValue"> | null,
+  tokenName: string,
+  fallback: string,
+): string {
+  if (styles === null) {
+    return fallback;
+  }
+
+  const resolved = hslComponentsToHex(styles.getPropertyValue(tokenName));
+  return resolved ?? fallback;
+}
+
+export function createMermaidThemeVariables(
+  styles: Pick<CSSStyleDeclaration, "getPropertyValue"> | null = currentDocumentStyles(),
+): MermaidThemeVariables {
+  const background = resolveHslToken(
+    styles,
+    MERMAID_THEME_TOKEN_NAMES.background,
+    MERMAID_THEME_FALLBACKS.background,
+  );
+  const border = resolveHslToken(
+    styles,
+    MERMAID_THEME_TOKEN_NAMES.border,
+    MERMAID_THEME_FALLBACKS.border,
+  );
+  const foreground = resolveHslToken(
+    styles,
+    MERMAID_THEME_TOKEN_NAMES.foreground,
+    MERMAID_THEME_FALLBACKS.foreground,
+  );
+  const mutedForeground = resolveHslToken(
+    styles,
+    MERMAID_THEME_TOKEN_NAMES.mutedForeground,
+    MERMAID_THEME_FALLBACKS.mutedForeground,
+  );
+  const smuiSurface1 = resolveHslToken(
+    styles,
+    MERMAID_THEME_TOKEN_NAMES.smuiSurface1,
+    MERMAID_THEME_FALLBACKS.smuiSurface1,
+  );
+  const smuiSurface2 = resolveHslToken(
+    styles,
+    MERMAID_THEME_TOKEN_NAMES.smuiSurface2,
+    MERMAID_THEME_FALLBACKS.smuiSurface2,
+  );
+
+  return {
+    actorBkg: smuiSurface1,
+    actorBorder: border,
+    actorTextColor: foreground,
+    classText: foreground,
+    edgeLabelBackground: background,
+    lineColor: mutedForeground,
+    mainBkg: smuiSurface1,
+    nodeBorder: border,
+    noteBkgColor: smuiSurface2,
+    noteTextColor: foreground,
+    primaryBorderColor: border,
+    primaryColor: smuiSurface1,
+    primaryTextColor: foreground,
+    secondaryBorderColor: border,
+    secondaryColor: smuiSurface2,
+    secondaryTextColor: foreground,
+    tertiaryBorderColor: border,
+    tertiaryColor: background,
+    tertiaryTextColor: foreground,
+  };
+}
 
 export const renderMermaidDiagram: MermaidRender = async (id, source) => {
   const mermaidModule = await import("mermaid");
@@ -47,7 +157,7 @@ export const renderMermaidDiagram: MermaidRender = async (id, source) => {
     securityLevel: "strict",
     startOnLoad: false,
     theme: "base",
-    themeVariables: MERMAID_THEME_VARIABLES,
+    themeVariables: createMermaidThemeVariables(),
   });
   const result = await mermaid.render(id, source);
   return result.svg;
