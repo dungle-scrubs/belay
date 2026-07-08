@@ -209,20 +209,23 @@ describe("scroll-follow: write arbitration + self-write bookkeeping", () => {
     assert.equal(allowed.reason, "anchor-allowed");
   });
 
-  test("while unpinned, an anchor-compensation that moves toward the live edge is denied", () => {
+  test("while unpinned, a mid-column anchor-compensation is allowed even if it moves toward the live edge", () => {
     const c = createScrollFollowController();
     c.gesture("up");
     c.scrolled(geo(600)); // establishes the unpinned baseline the compensation must preserve
 
-    const tug = geo(520);
-    const denied = c.requestWrite("anchor-compensation", {
+    // When content above the viewport re-measures smaller or larger, preserving the user's visual
+    // anchor can require a scrollTop correction that numerically moves toward the live edge. That is
+    // still an anchor compensation, not a follow, as long as it does not land at the edge.
+    const compensated = geo(520);
+    const allowed = c.requestWrite("anchor-compensation", {
       writer: "virtualizer",
-      resultingOffset: tug.scrollTop,
-      scrollHeight: tug.scrollHeight,
-      clientHeight: tug.clientHeight,
+      resultingOffset: compensated.scrollTop,
+      scrollHeight: compensated.scrollHeight,
+      clientHeight: compensated.clientHeight,
     });
-    assert.equal(denied.allowed, false);
-    assert.equal(denied.reason, "anchor-denied-moves-toward-edge");
+    assert.equal(allowed.allowed, true);
+    assert.equal(allowed.reason, "anchor-allowed");
 
     const stationary = geo(600);
     assert.equal(
