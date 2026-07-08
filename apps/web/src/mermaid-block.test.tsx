@@ -1,11 +1,40 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, test, vi } from "vitest";
-import { MermaidBlock, type MermaidRender } from "./mermaid-block";
+import { createMermaidThemeVariables, MermaidBlock, type MermaidRender } from "./mermaid-block";
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  for (const tokenName of [
+    "--background",
+    "--border",
+    "--foreground",
+    "--muted-foreground",
+    "--smui-surface-1",
+    "--smui-surface-2",
+  ]) {
+    document.documentElement.style.removeProperty(tokenName);
+  }
+});
 
 const validSvg = '<svg role="img" aria-label="Flow"><g><text>Rendered flow</text></g></svg>';
+
+test("resolves Mermaid theme tokens to concrete colors", () => {
+  const root = document.documentElement;
+  root.style.setProperty("--background", "213 16% 12%");
+  root.style.setProperty("--border", "217 17% 28%");
+  root.style.setProperty("--foreground", "213 27% 80%");
+  root.style.setProperty("--muted-foreground", "213 14% 60%");
+  root.style.setProperty("--smui-surface-1", "217 16% 15.5%");
+  root.style.setProperty("--smui-surface-2", "216 15% 19%");
+
+  const themeVariables = createMermaidThemeVariables();
+
+  assert.equal(themeVariables.noteBkgColor, "#292f38");
+  assert.equal(themeVariables.primaryColor, "#21262e");
+  assert.equal(themeVariables.primaryTextColor, "#becbda");
+  assert.ok(Object.values(themeVariables).every((color) => /^#[\da-f]{6}$/.test(color)));
+});
 
 test("renders a loading state before the diagram renderer resolves", async () => {
   let resolveRender: ((svg: string) => void) | undefined;
