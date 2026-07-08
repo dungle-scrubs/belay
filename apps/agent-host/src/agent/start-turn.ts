@@ -204,7 +204,7 @@ export function makeStartTurn(deps: StartTurnDeps) {
     const fiber = Effect.runFork(
       publishTurn(provider, turnHistory, {
         runId,
-        reasoning: decoded.reasoning,
+        reasoning: decoded.model?.reasoning ?? decoded.reasoning,
         delegate,
         telemetry: hostTelemetry,
         providerTrace,
