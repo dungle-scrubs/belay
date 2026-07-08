@@ -111,6 +111,23 @@ function contextWindowPressure(inputTokens: number, contextWindow: number): numb
   return contextWindow > 0 ? inputTokens / contextWindow : 0;
 }
 
+/** Builds the `loop_stalled` summary: a short description of the repeated-call stall followed by a
+ *  tool-aware HINT the model sees on resume, so it does not repeat the same identical-argument cycle.
+ *  The detector fires on a byte-identical `name:arguments` signature, so the hint names that and calls
+ *  out the most common trap - a long-lived `process` job (dev server, watcher, build) that never exits
+ *  on its own, which a model can spin on polling forever. Pure and exported so the wording is unit-tested. */
+export function loopStalledSummary(
+  repeatedToolName: string | undefined,
+  repeatedToolRounds: number,
+): string {
+  const subject = repeatedToolName ? `${repeatedToolName} tool` : "tool";
+  const hint =
+    repeatedToolName === "process"
+      ? ` A \`process\` job (dev server, watcher, build) does not exit on its own, so polling it cannot make progress - read its output once and continue, or \`kill\` it.`
+      : ` Each round reused identical arguments. Vary the arguments, switch tools, or give your final answer instead of repeating the same call.`;
+  return `Paused after ${repeatedToolRounds} repeated ${subject} rounds without enough progress.${hint}`;
+}
+
 function withDebug(
   selected: string,
   analysis: TurnTerminationAnalysis,
@@ -165,7 +182,7 @@ function decideTermination(obs: TurnPolicyObservation): TurnTerminationDecision 
       {
         cause: "loop_stalled",
         action: "paused",
-        summary: `Paused after ${obs.repeatedToolRounds} repeated ${obs.repeatedToolName} tool rounds without enough progress.`,
+        summary: loopStalledSummary(obs.repeatedToolName, obs.repeatedToolRounds),
         steps: obs.steps,
         ...(analysis.context ? { context: analysis.context } : {}),
       },

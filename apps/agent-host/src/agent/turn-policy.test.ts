@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { evaluateTurnTermination, type TurnPolicyObservation } from "./turn-policy";
+import {
+  evaluateTurnTermination,
+  loopStalledSummary,
+  type TurnPolicyObservation,
+} from "./turn-policy";
 
 const base: TurnPolicyObservation = {
   steps: 1,
@@ -107,6 +111,39 @@ test("repeated no-progress tool cycles return loop_stalled", () => {
   });
   assert.equal(result.type, "pause");
   assert.equal(result.type === "pause" && result.stop.cause, "loop_stalled");
+});
+
+test("loop_stalled summary hints at a non-exiting process for repeated process polls", () => {
+  const result = evaluateTurnTermination({
+    ...base,
+    steps: 6,
+    repeatedToolName: "process",
+    repeatedToolRounds: 6,
+  });
+  const summary = result.type === "pause" ? result.stop.summary : "";
+  assert.match(summary, /repeated process tool rounds/);
+  // The model-facing hint: name the trap (long-lived job) and a way out (kill).
+  assert.match(summary, /does not exit on its own/);
+  assert.match(summary, /`kill` it/);
+});
+
+test("loop_stalled summary gives the generic identical-arguments hint for other tools", () => {
+  const result = evaluateTurnTermination({
+    ...base,
+    steps: 6,
+    repeatedToolName: "grep",
+    repeatedToolRounds: 6,
+  });
+  const summary = result.type === "pause" ? result.stop.summary : "";
+  assert.match(summary, /identical arguments/);
+  assert.doesNotMatch(summary, /does not exit on its own/);
+});
+
+test("loopStalledSummary is tool-aware and defensive about a missing name", () => {
+  assert.match(loopStalledSummary("process", 6), /`process` job/);
+  assert.match(loopStalledSummary("grep", 6), /identical arguments/);
+  // A missing tool name (impossible on the real stalled path, which requires a name) still reads well.
+  assert.match(loopStalledSummary(undefined, 6), /^Paused after 6 repeated tool rounds/);
 });
 
 test("provider diagnostics can return provider_protocol_anomaly", () => {
