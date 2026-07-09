@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, test, vi } from "vitest";
-import { createMermaidThemeVariables, MermaidBlock, type MermaidRender } from "./mermaid-block";
+import {
+  createMermaidRenderConfig,
+  createMermaidThemeVariables,
+  MermaidBlock,
+  type MermaidRender,
+} from "./mermaid-block";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -31,9 +36,24 @@ test("resolves Mermaid theme tokens to concrete colors", () => {
   const themeVariables = createMermaidThemeVariables();
 
   assert.equal(themeVariables.noteBkgColor, "#292f38");
+  assert.equal(themeVariables.fontSize, "13px");
   assert.equal(themeVariables.primaryColor, "#21262e");
   assert.equal(themeVariables.primaryTextColor, "#becbda");
-  assert.ok(Object.values(themeVariables).every((color) => /^#[\da-f]{6}$/.test(color)));
+  assert.ok(
+    Object.entries(themeVariables)
+      .filter(([name]) => name !== "fontSize")
+      .every(([, color]) => /^#[\da-f]{6}$/.test(color)),
+  );
+});
+
+test("configures Mermaid flowcharts with SVG labels", () => {
+  const config = createMermaidRenderConfig();
+
+  assert.equal(config.flowchart.inheritDir, true);
+  assert.equal(config.flowchart.wrappingWidth, 190);
+  assert.equal(config.fontSize, 13);
+  assert.equal(config.htmlLabels, false);
+  assert.equal(config.securityLevel, "strict");
 });
 
 test("renders a loading state before the diagram renderer resolves", async () => {

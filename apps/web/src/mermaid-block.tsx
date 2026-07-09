@@ -18,6 +18,29 @@ interface MermaidSvgStyle extends CSSProperties {
 
 type MermaidThemeVariables = Record<string, string>;
 
+interface MermaidRenderConfig {
+  readonly deterministicIds: true;
+  readonly flowchart: {
+    readonly curve: "basis";
+    readonly diagramPadding: number;
+    readonly inheritDir: true;
+    readonly nodeSpacing: number;
+    readonly rankSpacing: number;
+    readonly subGraphTitleMargin: {
+      readonly bottom: number;
+      readonly top: number;
+    };
+    readonly wrappingWidth: number;
+  };
+  readonly fontFamily: string;
+  readonly fontSize: number;
+  readonly htmlLabels: false;
+  readonly securityLevel: "strict";
+  readonly startOnLoad: false;
+  readonly theme: "base";
+  readonly themeVariables: MermaidThemeVariables;
+}
+
 const MERMAID_THEME_TOKEN_NAMES = {
   background: "--background",
   border: "--border",
@@ -131,6 +154,7 @@ export function createMermaidThemeVariables(
     actorTextColor: foreground,
     classText: foreground,
     edgeLabelBackground: background,
+    fontSize: "13px",
     lineColor: mutedForeground,
     mainBkg: smuiSurface1,
     nodeBorder: border,
@@ -148,17 +172,35 @@ export function createMermaidThemeVariables(
   };
 }
 
-export const renderMermaidDiagram: MermaidRender = async (id, source) => {
-  const mermaidModule = await import("mermaid");
-  const mermaid = mermaidModule.default;
-  mermaid.initialize({
+export function createMermaidRenderConfig(): MermaidRenderConfig {
+  return {
     deterministicIds: true,
+    flowchart: {
+      curve: "basis",
+      diagramPadding: 18,
+      inheritDir: true,
+      nodeSpacing: 28,
+      rankSpacing: 54,
+      subGraphTitleMargin: {
+        bottom: 12,
+        top: 10,
+      },
+      wrappingWidth: 190,
+    },
     fontFamily: "JetBrains Mono Variable, JetBrains Mono, ui-monospace, monospace",
+    fontSize: 13,
+    htmlLabels: false,
     securityLevel: "strict",
     startOnLoad: false,
     theme: "base",
     themeVariables: createMermaidThemeVariables(),
-  });
+  };
+}
+
+export const renderMermaidDiagram: MermaidRender = async (id, source) => {
+  const mermaidModule = await import("mermaid");
+  const mermaid = mermaidModule.default;
+  mermaid.initialize(createMermaidRenderConfig());
   const result = await mermaid.render(id, source);
   return result.svg;
 };

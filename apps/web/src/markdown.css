@@ -309,6 +309,7 @@
   border: 1px solid transparent;
   background: transparent;
   color: hsl(var(--muted-foreground));
+  cursor: pointer;
 }
 
 .trevor-mermaid__actions button:hover,
@@ -340,7 +341,7 @@
 .trevor-mermaid__svg {
   width: max-content;
   min-width: 100%;
-  padding: 0.85rem;
+  padding: 1rem 1rem 1.15rem;
   transform: scale(var(--trevor-mermaid-zoom));
   transform-origin: top left;
 }
