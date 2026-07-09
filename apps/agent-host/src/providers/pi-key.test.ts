@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { getBuiltinModel } from "@earendil-works/pi-ai/providers/all";
+import { cheapestReasoning } from "@host/agent/reasoning-levels";
 import { test } from "vitest";
-import { resolvePiModel } from "./pi-key";
+import { piKeyProviderFromConfig, resolvePiModel } from "./pi-key";
 
 /**
  * Characterization test for the static-key model lookup (M2 / D-005), including the synthesis
@@ -30,4 +31,20 @@ test("resolvePiModel throws when the provider has no registered models to clone"
     () => resolvePiModel("no-such-provider", "whatever-1.0"),
     /no models registered for pi-ai provider "no-such-provider"/,
   );
+});
+
+test("OpenRouter Grok 4.5 runtime provider never offers off to mechanical closers", () => {
+  // End-to-end electric for the session failure: catalog override alone is not enough if the live
+  // provider still falls back to ["off","high"]. cheapestReasoning must land on minimal for synth
+  // and compaction.
+  const provider = piKeyProviderFromConfig({
+    id: "openrouter",
+    piProvider: "openrouter",
+    authName: "openrouter",
+    model: "x-ai/grok-4.5",
+    label: "xAI: Grok 4.5",
+  });
+  assert.deepEqual(provider.reasoningLevels, ["minimal", "low", "medium", "high"]);
+  assert.equal(cheapestReasoning(provider.reasoningLevels), "minimal");
+  assert.equal(provider.defaultReasoning, "medium");
 });

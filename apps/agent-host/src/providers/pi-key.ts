@@ -68,7 +68,8 @@ export interface PiKeyConfig {
  * sibling-synthesis model lookup - the streaming/readiness/capabilities template is shared with
  * Codex in the base; only the credential (a static key, not an OAuth token to refresh)
  * and the model resolution (synthesis for a not-yet-registered id) differ. Reasoning options and
- * image support come from the pi-ai model, defaulting to medium, then high, then off.
+ * image support come from the pi-ai model via PiAiProviderBase (catalog overrides win over the
+ * bundled/fallback surface; default prefers medium, then high, then the lowest allowed level).
  */
 export function piKeyProviderFromConfig(config: PiKeyConfig): PiAiProviderBase {
   return piAiProvider({

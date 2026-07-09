@@ -84,6 +84,28 @@ test("a model not in the registry falls back to the declared shape (host still s
   assert.equal(Effect.runSync(base.capabilities()).images, false);
 });
 
+test("runtime levels go through the same model override as the catalog (Grok 4.5 has no off)", () => {
+  // Regression: mechanical closers call cheapestReasoning(provider.reasoningLevels). When the
+  // provider base raw-used pi-ai/fallback levels (often ["off","high"]), synthesis asked for off
+  // and OpenRouter rejected "Reasoning is mandatory… cannot be disabled." The catalog already
+  // corrected via MODEL_METADATA_OVERRIDES; the runtime provider must use that same path.
+  const base = makeBase({
+    model: "x-ai/grok-4.5",
+    resolveModel: () => {
+      throw new Error("model not in registry yet");
+    },
+    fallback: { levels: ["off", "high"], images: false },
+    // Force default-from-resolved so we assert the override levels, not a custom picker.
+    pickDefaultReasoning: undefined,
+  });
+  assert.deepEqual(base.reasoningLevels, ["minimal", "low", "medium", "high"]);
+  assert.ok(
+    !base.reasoningLevels.includes("off"),
+    "mandatory-reasoning models must not advertise off",
+  );
+  assert.equal(base.defaultReasoning, "medium");
+});
+
 test("readiness is ready+warm when a credential resolves, not-ready+warm when it does not", async () => {
   const ok = makeBase({ credentials: stubCredentials({ key: "sk-test" }) });
   assert.deepEqual(await Effect.runPromise(ok.readiness()), { ready: true, warm: true });

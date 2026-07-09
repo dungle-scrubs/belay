@@ -1,8 +1,9 @@
 import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai/compat";
 import { msg } from "@host/transport/messages";
+import { constrainReasoning } from "@trevor/session";
 import { Effect, Stream } from "effect";
 import { ProviderAuthError } from "./errors";
-import { resolveContextWindow } from "./model-metadata-overrides";
+import { resolveContextWindow, resolveReasoningLevels } from "./model-metadata-overrides";
 import { streamPiAiModel } from "./pi-ai";
 import { deriveModelShape } from "./pi-model";
 import type { CredentialResolver } from "./provider-auth";
@@ -19,15 +20,21 @@ import {
 
 /**
  * The shared body of the two pi-ai-backed CLOUD providers (Codex over OAuth; DeepSeek/GLM/
- * MiniMax over a static key). It owns the `stream` / `readiness` / `capabilities` / `warm`
- * template and the constructor's thinking-option + image-support derivation - the control
- * flow both providers used to duplicate. Only two things vary, and both are injected:
+ * MiniMax / OpenRouter gateway over a static key). It owns the `stream` / `readiness` /
+ * `capabilities` / `warm` template and the constructor's thinking-option + image-support
+ * derivation - the control flow both providers used to duplicate. Only two things vary, and
+ * both are injected:
  *   - `credentials` - the CredentialResolver (OAuth refresh vs static key), and
  *   - `resolveModel` - how the pi-ai Model is looked up (registry lookup vs sibling synthesis).
  * Everything is passed as params (no abstract methods read by the constructor), so a subclass's
  * own config closures resolve before this base runs. Cloud providers are always warm; readiness
  * is just "can we resolve a credential". This base owns the pi-ai integration; the concrete
  * classes (codex.ts / pi-key.ts) are reduced to strategy + config.
+ *
+ * Reasoning surfaces are resolved through {@link resolveReasoningLevels} the same way the
+ * catalog is: a per-model override (e.g. Grok 4.5 cannot disable reasoning) wins over the
+ * bundled/fallback levels. Mechanical closers (`cheapestReasoning` for synthesis/compaction)
+ * then never advertise or request an illegal `off`.
  *
  * Responsible for: the shared cloud-provider template (stream/readiness/capabilities/warm) over
  * pi-ai, parameterized by credential strategy and model resolution.
@@ -70,11 +77,14 @@ export class PiAiProviderBase extends DescribableProvider {
     this.resolveModel = params.resolveModel;
     // Derive thinking options + image support from the pi-ai model once via the shared derivation
     // (pi-model.ts); a registry miss falls back to the declared shape, so the host still starts.
+    // Then run levels through the same override path the catalog uses, so mechanical closers and
+    // the chooser advertise one surface (e.g. Grok 4.5 has no illegal "off").
     const shape = deriveModelShape(params.resolveModel, params.fallback);
+    const reasoningLevels = resolveReasoningLevels(params.model, shape.levels);
 
-    this.reasoningLevels = shape.levels;
+    this.reasoningLevels = reasoningLevels;
     this.images = shape.images;
-    this.defaultReasoning = (params.pickDefaultReasoning ?? defaultReasoningLevel)(shape.levels);
+    this.defaultReasoning = (params.pickDefaultReasoning ?? defaultReasoningLevel)(reasoningLevels);
   }
 
   /** Image support from the registry (or the fallback); tools always supported; context
@@ -123,6 +133,14 @@ export class PiAiProviderBase extends DescribableProvider {
       }).pipe(
         Effect.map((apiKey) => {
           const model = this.resolveModel();
+          // Defense in depth: even if a caller still threads an illegal level (e.g. a stale
+          // "off" for a mandatory-reasoning model), clamp to the advertised surface before the
+          // wire. The chooser and synthesize already prefer this surface; this closes leaks.
+          const clamped =
+            constrainReasoning(
+              { levels: this.reasoningLevels, default: this.defaultReasoning },
+              reasoning ?? this.defaultReasoning,
+            ) ?? this.defaultReasoning;
           return streamPiAiModel(Effect.succeed(model), {
             messages,
             tools,
@@ -133,8 +151,7 @@ export class PiAiProviderBase extends DescribableProvider {
             // not just the catalog display.
             contextWindow:
               resolveContextWindow(model.id, model.contextWindow) ?? model.contextWindow,
-            // pi-ai clamps an out-of-range level to the nearest supported one.
-            reasoning: (reasoning ?? this.defaultReasoning) as ThinkingLevel,
+            reasoning: clamped as ThinkingLevel,
             provider: this.id,
           });
         }),
