@@ -167,7 +167,7 @@ export function createScrollFollowController(
   // Writers already named in the dev log for the current unpinned span, so each is warned about at most
   // once (a denied follow write is EXPECTED while reading; we just want the writer named, not a flood).
   const warnedWriters = new Set<ScrollWriter>();
-  let suppressNextUpwardScroll = false;
+  let suppressUpwardScrollUntilMs = 0;
 
   const listeners = new Set<() => void>();
   const notify = (): void => {
@@ -182,7 +182,7 @@ export function createScrollFollowController(
     }
     pinned = next;
     lastReason = reason;
-    suppressNextUpwardScroll = false;
+    suppressUpwardScrollUntilMs = 0;
     if (pinned) {
       // Fresh pinned state: the per-span dev-log dedup, the stale last denial, and any leftover ledger
       // entries all belonged to the unpinned span that just ended.
@@ -253,8 +253,7 @@ export function createScrollFollowController(
     const movedDown = geo.scrollTop > previous + EPSILON_PX;
 
     if (pinned) {
-      if (movedUp && suppressNextUpwardScroll) {
-        suppressNextUpwardScroll = false;
+      if (movedUp && performance.now() <= suppressUpwardScrollUntilMs) {
         return;
       }
       // The catch-all unpin: an unattributed UPWARD scroll that leaves the bottom band (keyboard
@@ -285,11 +284,11 @@ export function createScrollFollowController(
       return;
     }
     lastReason = "layout-shift";
-    suppressNextUpwardScroll = true;
+    suppressUpwardScrollUntilMs = performance.now() + 250;
   };
 
   const clearLayoutShift = (): void => {
-    suppressNextUpwardScroll = false;
+    suppressUpwardScrollUntilMs = 0;
   };
 
   const requestWrite = (

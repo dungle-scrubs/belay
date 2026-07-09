@@ -221,6 +221,22 @@ test("PanelHost mounts live loop inventory above the composer and routes control
   expect(controls).toEqual([{ control: "pause", loopId: "loop_1" }]);
 });
 
+test("PanelHost contains page overflow so only the transcript scrolls", () => {
+  const { container } = renderWithTooltip(<PanelHostHarness onLoopControl={vi.fn()} />);
+
+  const shell = container.firstElementChild;
+  expect(shell?.className).toContain("h-svh");
+  expect(shell?.className).toContain("overflow-hidden");
+
+  const main = container.querySelector("main");
+  expect(main?.className).toContain("min-h-0");
+  expect(main?.className).toContain("overflow-hidden");
+
+  const transcriptScroller = container.querySelector("[data-transcript-scroll]");
+  expect(transcriptScroller?.className).toContain("min-h-0");
+  expect(transcriptScroller?.className).toContain("overflow-y-auto");
+});
+
 test("an open file-mention menu with zero matches never points the composer at a dangling id", () => {
   renderWithTooltip(
     <PanelHostHarness onLoopControl={vi.fn()} fileMenu={{ open: true, matches: [], index: 0 }} />,

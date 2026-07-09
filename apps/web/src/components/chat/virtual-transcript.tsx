@@ -348,16 +348,14 @@ export function VirtualTranscript({
       hadPreviousLayout && previousTotalSizeRef.current !== totalSize;
 
     let clearLayoutShiftFrame: number | null = null;
+    let secondClearLayoutShiftFrame: number | null = null;
     let anchorFrame: number | null = null;
     let secondAnchorFrame: number | null = null;
-    if (
-      (rowsChanged || virtualMeasurementsChanged) &&
-      pinned &&
-      previousTotalSizeRef.current !== null &&
-      totalSize < previousTotalSizeRef.current - ANCHOR_EPSILON_PX
-    ) {
+    if ((rowsChanged || virtualMeasurementsChanged) && pinned) {
       controller.layoutShift();
-      clearLayoutShiftFrame = requestAnimationFrame(() => controller.clearLayoutShift());
+      clearLayoutShiftFrame = requestAnimationFrame(() => {
+        secondClearLayoutShiftFrame = requestAnimationFrame(() => controller.clearLayoutShift());
+      });
     }
 
     if (rowsChanged) {
@@ -412,6 +410,10 @@ export function VirtualTranscript({
     return () => {
       if (clearLayoutShiftFrame !== null) {
         cancelAnimationFrame(clearLayoutShiftFrame);
+        controller.clearLayoutShift();
+      }
+      if (secondClearLayoutShiftFrame !== null) {
+        cancelAnimationFrame(secondClearLayoutShiftFrame);
         controller.clearLayoutShift();
       }
       if (anchorFrame !== null) {

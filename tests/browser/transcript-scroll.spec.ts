@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page, test } from "@playwright/test";
+import { events, HOST_ROLE, PRODUCER_IDS, type SessionTransport } from "@trevor/session";
 import {
   appendExchange,
   completeMixedTool,
@@ -29,6 +30,7 @@ const OLD_TOLERANCE_PX = 40;
 const MONOTONIC_SLACK_PX = 2;
 const EXPANSION_SLACK_PX = 32;
 const VIRTUALIZED_DIAGNOSTIC_EXCHANGES = 140;
+const HOST = PRODUCER_IDS.host;
 
 /** Total rows the virtualized list reports (data-transcript-row-count). */
 function rowCount(page: Page): Promise<number> {
@@ -143,6 +145,35 @@ const jumpButton = (page: Page): Locator =>
  *  the direct read of the follow authority, crisper than inferring it from the jump affordance. */
 function expectPinned(scroller: Locator, pinned: boolean): Promise<void> {
   return expect(scroller).toHaveAttribute("data-transcript-pinned", pinned ? "true" : "false");
+}
+
+async function announceReadyHost(transport: SessionTransport, sessionId: string): Promise<void> {
+  await transport.publishEvent(sessionId, {
+    ...events.hostRole({ instanceId: "browser-scroll-host", role: HOST_ROLE.leader }),
+    producerId: HOST,
+  });
+  await transport.publishEvent(sessionId, {
+    ...events.hostOnline({
+      instanceId: "browser-scroll-host",
+      providers: ["fake"],
+      default: "fake",
+      models: {
+        fake: {
+          label: "Fake",
+          model: "fake-1",
+          reasoningLevels: [],
+          defaultReasoning: "off",
+          kind: "local",
+        },
+      },
+      commands: [],
+      agents: [],
+      cwd: "/Users/kevin/dev/trevor",
+      workspace: "/Users/kevin/dev/trevor",
+      jobs: [],
+    }),
+    producerId: HOST,
+  });
 }
 
 /** Yield `count` animation frames inside the page, so any deferred (double-rAF) follow write has applied
@@ -362,6 +393,103 @@ test("appending while pinned keeps the last row at the live edge (stick-to-botto
 
   // The new row lands at the live edge and is visible; still pinned (attribute + no jump button).
   await expect(scroller).toContainText("reply while-pinned");
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+  await expectPinned(scroller, true);
+  await expect(jumpButton(page)).toHaveCount(0);
+});
+
+test("the app shell never becomes the document scroll container", async ({ page }) => {
+  const { scroller } = await openTallTranscript(page, "document-scroll");
+
+  const initialDocument = await page.evaluate(() => ({
+    bodyHeight: document.body.scrollHeight,
+    documentHeight: document.documentElement.scrollHeight,
+    innerHeight: window.innerHeight,
+    scrollY: window.scrollY,
+  }));
+  expect(initialDocument.scrollY).toBe(0);
+  expect(initialDocument.documentHeight).toBeLessThanOrEqual(initialDocument.innerHeight);
+  expect(initialDocument.bodyHeight).toBeLessThanOrEqual(initialDocument.innerHeight);
+
+  await scroller.hover();
+  await page.mouse.wheel(0, -900);
+  await settleFrames(page, 3);
+
+  const afterWheel = await page.evaluate(() => ({
+    bodyHeight: document.body.scrollHeight,
+    documentHeight: document.documentElement.scrollHeight,
+    innerHeight: window.innerHeight,
+    scrollY: window.scrollY,
+  }));
+  expect(afterWheel.scrollY).toBe(0);
+  expect(afterWheel.documentHeight).toBeLessThanOrEqual(afterWheel.innerHeight);
+  expect(afterWheel.bodyHeight).toBeLessThanOrEqual(afterWheel.innerHeight);
+});
+
+test("submit from scrolled-up re-pins and live streaming/tool rows keep following", async ({
+  page,
+}) => {
+  const { sessionId, scroller } = await openTallTranscript(page, "submit-repin");
+  const transport = storeTransport();
+  await announceReadyHost(transport, sessionId);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+
+  await scroller.evaluate((el) => {
+    el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - 500);
+  });
+  await settleFrames(page, 3);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeGreaterThan(300);
+
+  await page.locator("textarea").fill("submit should force live edge");
+  await page.locator("textarea").press("Enter");
+  await settleFrames(page, 10);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+  await expectPinned(scroller, true);
+  await expect(jumpButton(page)).toHaveCount(0);
+
+  const stream = await startStreamingTurn(transport, sessionId, `submit-repin-${Date.now()}`);
+  await settleFrames(page, 10);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+  await expectPinned(scroller, true);
+
+  for (let index = 0; index < 5; index += 1) {
+    await stream.delta(
+      `\nstream delta ${index}: enough text to wrap and resize the live assistant row while pinned.`,
+    );
+    await settleFrames(page, 8);
+    await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+    await expectPinned(scroller, true);
+    await expect(jumpButton(page)).toHaveCount(0);
+  }
+
+  const runId = `tool-follow-${Date.now()}`;
+  const callId = `tool-call-${Date.now()}`;
+  await transport.publishEvent(sessionId, {
+    ...events.assistantStarted({ runId, warm: true, model: "fake-1", provider: "fake" }),
+    producerId: HOST,
+  });
+  await transport.publishEvent(sessionId, {
+    ...events.toolStarted({
+      runId,
+      callId,
+      name: "grep",
+      arguments: JSON.stringify({ pattern: "scroll" }),
+    }),
+    producerId: HOST,
+  });
+  await settleFrames(page, 8);
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+
+  await transport.publishEvent(sessionId, {
+    ...events.toolCompleted({
+      runId,
+      callId,
+      name: "grep",
+      result: Array.from({ length: 30 }, (_, index) => `tool output ${index}`).join("\n"),
+    }),
+    producerId: HOST,
+  });
+  await settleFrames(page, 10);
   await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
   await expectPinned(scroller, true);
   await expect(jumpButton(page)).toHaveCount(0);
