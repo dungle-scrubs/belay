@@ -1,69 +1,72 @@
 # Worktree Sidebar Surface - Progress Report
 
 **Plan:** `58.2-worktree-sidebar-surface`
-**Stage:** ready (plan authored, awaiting go to implement)
+**Stage:** ready (revised current cutoff, awaiting go to implement)
+**Current focus:** M1 - Host stamps `session.project` before worktree spawn (5/5)
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
-| Current-cutoff tasks (total) | 32 |
+| Current-cutoff tasks (total) | 15 |
 | Checked (done) | 0 |
-| Current-cutoff blockers (unchecked) | 32 |
-| Accepted/deferred follow-up | 0 |
+| Current-cutoff blockers (unchecked) | 15 |
+| Accepted/deferred follow-up | 8 |
 | Superseded/obsolete | 0 |
 
 ---
 
-## M1 - Host stamps `session.project` with the base repo (4/4)
+## Current Cutoff
 
-- [ ] RED: Test `switchToWorkspace` (reason "worktree") emits `session.project` with the base repo on the TARGET session.
-- [ ] GREEN: Widen `SessionSwitchDeps` (transport: ensureSession|publishEvent + `baseRepoFor` seam); publish marker to `opts.sessionId` (not `emit`, which writes to SESSION_ID).
-- [ ] RED: Test `/worktree-new` also stamps the base repo (same path).
-- [ ] REFACTOR: Centralize base-repo resolution; commands.ts + session-switch.ts ask the manager once.
+### M1 - Host stamps `session.project` before worktree spawn (5/5)
 
-## M2 - Sidebar base-repo grouping, online + offline (4/4)
+- [ ] RED: Unit-test `switchToWorkspace({ reason: "worktree" })` call order:
+      `ensureSession` -> target `session.project` publish -> spawn -> source `session.switch`.
+- [ ] RED: No `baseRepoFor(cwd)` fails before spawn and does not emit `session.switch`.
+- [ ] GREEN: Add `baseRepoFor`, `publishToSession`, and injectable spawn seams; publish the marker
+      to `opts.sessionId`, not through current-session `emit`.
+- [ ] GREEN: Wire `main.ts` with `worktrees.contextFor(cwd)?.baseRepo` and `transport.publishEvent`
+      using the host producer id.
+- [ ] REFACTOR: Keep base-repo resolution centralized on `WorktreeManager.contextFor`.
 
-- [ ] RED: Worktree session groups under base repo via the durable marker (offline).
-- [ ] RED: Worktree join keys on `sessionId` (exact, offline-safe), NOT on path (abbreviation mismatch); baseline row (`baseline === true`) is excluded so the main checkout is not badged.
-- [ ] GREEN: `buildProjectSidebar` accepts `worktrees`, joins on `sessionId` (excluding `baseline: true` rows); grouping via M1 marker.
-- [ ] REFACTOR: Pull the session-to-worktree join (`Map<sessionId, WorktreeSummary>`, baseline excluded) into a pure helper.
+### M2 - Sidebar grouping and scoped `sessionId` worktree join (5/5)
 
-## M3 - Worktree badge on session rows (5/5)
+- [ ] RED: Worktree session groups under base repo via durable `projectPath` with no host online.
+- [ ] RED: Worktree join keys on `sessionId` and excludes `baseline === true`.
+- [ ] RED: No path inference: worktree-looking paths receive no badge when `sessionId` is absent from
+      the supplied worktree snapshot.
+- [ ] GREEN: Add `ProjectSessionRow { summary, worktree }`; group by `sessionProjectPath(summary)`.
+- [ ] GREEN: Pass current `readModel.worktrees` through `useProjectSidebar`; document/test that this
+      is current-host-scoped, not an all-project index.
 
-- [ ] RED: SessionRow in a known worktree renders a FolderGit2 badge (excluding the baseline row).
-- [ ] GREEN: Add `worktree` field to the row view model; render FolderGit2 (baseline excluded by the `!baseline` filter in the M2 join map).
-- [ ] RED: Hovering the badge opens a Radix tooltip with branch + abbreviated path + git state.
-- [ ] GREEN: Build `WorktreeBadge` (FolderGit2 + existing Radix Tooltip).
-- [ ] REFACTOR: Extract the tooltip into its own reusable module.
+### M3 - Worktree badge and tooltip (5/5)
 
-## M4 - Host-side merged detection (5/5) (protocol change)
+- [ ] RED: Session row with `row.worktree` renders a `FolderGit2` badge labeled `worktree`; rows
+      without `row.worktree` do not.
+- [ ] GREEN: Add `worktree-badge.tsx` with lucide `FolderGit2` and Radix tooltip primitives.
+- [ ] GREEN: Preserve stable row layout: title, badge, truncation, and the existing right slot do not
+      overlap.
+- [ ] RED: Tooltip hover/focus shows branch, abbreviated path, and git state.
+- [ ] GREEN: Add Storybook stories for normal, worktree, long-title worktree, and baseline no-badge.
 
-- [ ] RED: `WorktreeManager.summaries` marks a worktree `merged: true` when in `git branch --merged <default>`.
-- [ ] GREEN: Add `merged` to `WorktreeSummary` (`events.ts`) + `coerceWorktrees` (`decode.ts`) + `summaryRow` (`manager.ts`); add `branchMerged` to `git.ts`.
-- [ ] RED: Default branch resolved dynamically (`origin/HEAD` → `main` → `master`).
-- [ ] GREEN: Resolve the default branch via `git symbolic-ref refs/remotes/origin/HEAD` with fallbacks.
-- [ ] REFACTOR: Gate the merged check behind a periodic cadence (host.online + 5 min).
+---
 
-## M5 - Disabled session row for merged worktrees (4/4)
+## Accepted/Deferred Follow-Up
 
-- [ ] RED: Merged-worktree session renders dimmed with a "merged" label.
-- [ ] GREEN: Render merged rows with `opacity-50` + "merged" replacing the timestamp.
-- [ ] RED: Archive still works on merged rows.
-- [ ] GREEN: Keep the archive hover action functional on merged rows.
+### FP1 - All-project worktree metadata source (3)
 
-## M6 - Orphan detection and registry cleanup (5/5)
+- [ ] Decide and build a host/supervisor-owned all-project worktree metadata source; the browser must
+      not scan local state.
+- [ ] Define stale-vs-live semantics for metadata from non-current projects.
+- [ ] Test badge/status attachment for sessions outside the currently viewed host's base repo.
 
-- [ ] RED: Verify the existing `missing` flag flows to the browser.
-- [ ] GREEN: Render missing worktrees as disabled with "orphaned".
-- [ ] RED: `/worktree-reconcile` drops orphaned entries and the sidebar updates.
-- [ ] GREEN: Wire the sidebar to consume updated worktree state from `host.online`.
-- [ ] REFACTOR: Consolidate merged/orphaned/active into a `worktreeStatus` field.
+### FP2 - Merged and orphaned disabled states (4)
 
-## M7 - Tooltip richness and final polish (5/5) (protocol change)
+- [ ] Add `merged` only after an all-project data source exists, or explicitly scope it to current repo.
+- [ ] Specify merged-check owner, cache, cadence, and invalidation before implementation.
+- [ ] Define branch identity for merged detection, including retargeted/detached worktrees.
+- [ ] Add protocol round-trip/defaulting tests for each new `WorktreeSummary` field.
 
-- [ ] RED: Tooltip shows last-commit info (short hash + subject).
-- [ ] GREEN: Add `lastCommit?` to `WorktreeSummary` (`events.ts`) + `coerceWorktrees` (`decode.ts`) + `summaryRow` (`manager.ts`); add `headCommitInfo` to `git.ts` (existing `headCommit` returns sha only, not subject).
-- [ ] RED: Storybook stories for normal, worktree-active, worktree-merged states.
-- [ ] GREEN: Build the stories and verify rendering.
-- [ ] REFACTOR: Clean up any dead code from the old per-worktree-project grouping.
+### FP3 - Last-commit tooltip enrichment (1)
+
+- [ ] Add `lastCommit` and bounded tooltip rendering after the metadata source is settled.
