@@ -669,6 +669,11 @@ const {
   manualCompactFiber,
   backgroundChildren,
   debugMode: () => debugMode,
+  // Plan 58.2: resolve the base repo via WorktreeManager.contextFor (single owner of that lookup)
+  // and stamp session.project on the TARGET session before the replacement host starts.
+  baseRepoFor: (cwd) => worktrees.contextFor(cwd)?.baseRepo ?? null,
+  publishToSession: (sessionId, event) =>
+    transport.publishEvent(sessionId, toPublishInput(event, PRODUCER_ID)),
 });
 
 // The /handoff orchestration (02/02.10, handoff/orchestrator): wired over the live switch

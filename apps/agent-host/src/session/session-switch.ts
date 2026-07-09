@@ -13,7 +13,12 @@ import { contextRegistry } from "@host/project-context/registry";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import { events, freshSessionId, type SessionTransport } from "@trevor/session";
+import {
+  events,
+  freshSessionId,
+  type SessionTransport,
+  type TrevorEventInput,
+} from "@trevor/session";
 import { resolveCdTarget } from "./workspace-switch";
 
 /**
@@ -24,10 +29,12 @@ import { resolveCdTarget } from "./workspace-switch";
  * functions through main.ts's wiring rather than importing them here.
  *
  * Responsible for: spawning the replacement host, retiring this one after a session.switch, the
- * /clear and /cd fresh-session flows, and the shared workspace-switch blocker + mechanic.
+ * /clear and /cd fresh-session flows, the shared workspace-switch blocker + mechanic, and (plan 58.2)
+ * stamping `session.project` on a worktree target before the replacement host starts.
  * Not for: resolving the /cd target (workspace-switch.ts), the /worktree-* handlers
  * (worktrees/commands.ts), or the /handoff orchestration (handoff/orchestrator.ts) - main.ts
- * wires these mechanics into those as deps.
+ * wires these mechanics into those as deps. Base-repo resolution stays on
+ * `WorktreeManager.contextFor`; this module only consumes the injected `baseRepoFor` seam.
  */
 
 /** The replacement host's destination: the directory, session, and workspace root it starts on. */
@@ -55,6 +62,23 @@ export interface SessionSwitchDeps {
   readonly backgroundChildren: ReadonlyMap<string, BackgroundChildInfo>;
   /** The runtime debug flag (main.ts's mutable `debugMode`), carried across a re-exec. */
   debugMode(): boolean;
+  /**
+   * Resolves the base-repo path for a worktree cwd (plan 58.2). Null when the cwd is not inside a
+   * known worktree context. Wired from `WorktreeManager.contextFor` so base-repo resolution stays
+   * centralized on the manager.
+   */
+  readonly baseRepoFor?: (cwd: string) => string | null;
+  /**
+   * Publishes an event on an ARBITRARY session (plan 58.2): used to stamp `session.project` on the
+   * worktree TARGET before spawn. Do not use `emit` for this marker - `emit` writes the current
+   * retiring session. Main.ts stamps the host producer id via `toPublishInput`.
+   */
+  readonly publishToSession?: (sessionId: string, event: TrevorEventInput) => Promise<void>;
+  /**
+   * Optional injectable spawn seam for tests (plan 58.2). When omitted, the real OS re-exec path
+   * under {@link makeSessionSwitch} is used.
+   */
+  readonly spawnReplacementHost?: (opts: WorkspaceTarget) => { readonly pid: number };
 }
 
 /** Builds the session-switch mechanics over the host's live state; main.ts wires it once. */
@@ -68,10 +92,12 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     manualCompactFiber,
     backgroundChildren,
     debugMode,
+    baseRepoFor,
+    publishToSession,
   } = deps;
   const replyFor = commandReplier(emit);
 
-  function spawnReplacementHost(opts: WorkspaceTarget): { readonly pid: number } {
+  function defaultSpawnReplacementHost(opts: WorkspaceTarget): { readonly pid: number } {
     // Fail loud, not silent: if this host's own launch paths were removed out from under it (a managed
     // worktree pruned after its plan merged, a moved/deleted checkout), the re-exec below cannot boot -
     // it dies instantly with MODULE_NOT_FOUND. Detect that and throw a clear, surfaced error instead of
@@ -132,6 +158,10 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
       throw new Error("replacement host did not report a pid");
     }
     return { pid: child.pid };
+  }
+
+  function spawnReplacementHost(opts: WorkspaceTarget): { readonly pid: number } {
+    return (deps.spawnReplacementHost ?? defaultSpawnReplacementHost)(opts);
   }
 
   function retireAfterSessionSwitch(): void {
@@ -257,6 +287,23 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     opts: WorkspaceTarget & { readonly reason: "cd" | "worktree" },
   ): Promise<void> {
     await transport.ensureSession(opts.sessionId);
+    // Plan 58.2: a worktree switch stamps the durable base-repo marker on the TARGET session
+    // before the replacement host starts, so inventory groups under the base project from the
+    // first events. Emit writes the retiring session, so this uses publishToSession instead.
+    if (opts.reason === "worktree") {
+      const baseRepo = baseRepoFor?.(opts.cwd) ?? null;
+      if (!baseRepo) {
+        throw new Error(
+          `cannot resolve base repo for worktree switch at ${opts.cwd} - refusing to spawn a host without a durable project stamp`,
+        );
+      }
+      if (!publishToSession) {
+        throw new Error(
+          "publishToSession is required for worktree switches so session.project can land on the target session",
+        );
+      }
+      await publishToSession(opts.sessionId, events.sessionProject({ path: baseRepo }));
+    }
     const spawned = spawnReplacementHost({
       cwd: opts.cwd,
       sessionId: opts.sessionId,

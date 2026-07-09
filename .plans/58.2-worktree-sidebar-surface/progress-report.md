@@ -1,16 +1,16 @@
 # Worktree Sidebar Surface - Progress Report
 
 **Plan:** `58.2-worktree-sidebar-surface`
-**Stage:** ready (revised current cutoff, awaiting go to implement)
-**Current focus:** M1 - Host stamps `session.project` before worktree spawn (5/5)
+**Stage:** implementing
+**Current focus:** M2 - Sidebar grouping and scoped sessionId worktree join (5/5)
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks (total) | 15 |
-| Checked (done) | 0 |
-| Current-cutoff blockers (unchecked) | 15 |
+| Checked (done) | 5 |
+| Current-cutoff blockers (unchecked) | 10 |
 | Accepted/deferred follow-up | 8 |
 | Superseded/obsolete | 0 |
 
@@ -20,14 +20,14 @@
 
 ### M1 - Host stamps `session.project` before worktree spawn (5/5)
 
-- [ ] RED: Unit-test `switchToWorkspace({ reason: "worktree" })` call order:
+- [x] RED: Unit-test `switchToWorkspace({ reason: "worktree" })` call order:
       `ensureSession` -> target `session.project` publish -> spawn -> source `session.switch`.
-- [ ] RED: No `baseRepoFor(cwd)` fails before spawn and does not emit `session.switch`.
-- [ ] GREEN: Add `baseRepoFor`, `publishToSession`, and injectable spawn seams; publish the marker
+- [x] RED: No `baseRepoFor(cwd)` fails before spawn and does not emit `session.switch`.
+- [x] GREEN: Add `baseRepoFor`, `publishToSession`, and injectable spawn seams; publish the marker
       to `opts.sessionId`, not through current-session `emit`.
-- [ ] GREEN: Wire `main.ts` with `worktrees.contextFor(cwd)?.baseRepo` and `transport.publishEvent`
+- [x] GREEN: Wire `main.ts` with `worktrees.contextFor(cwd)?.baseRepo` and `transport.publishEvent`
       using the host producer id.
-- [ ] REFACTOR: Keep base-repo resolution centralized on `WorktreeManager.contextFor`.
+- [x] REFACTOR: Keep base-repo resolution centralized on `WorktreeManager.contextFor`.
 
 ### M2 - Sidebar grouping and scoped `sessionId` worktree join (5/5)
 
