@@ -1,8 +1,10 @@
 import { useEffect, useRef } from "react";
+import { LiveScrollSurface } from "@/components/chat/live-scroll-surface";
 import { type ToolStatus, toolStatusColor } from "@/components/chat/tool-status";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useScrollFollow } from "@/hooks/use-scroll-follow";
 import { cn } from "@/lib/utils";
 import { DetailBody } from "./detail-body";
 import type { ToolDetailModel } from "./detail-model";
@@ -35,6 +37,8 @@ export function ToolDetailView({
   readonly className?: string;
 }) {
   const ref = useRef<HTMLElement>(null);
+  const scroll = useScrollFollow(1);
+  const revision = `${model.id}:${model.status}:${model.output?.length ?? 0}:${model.error?.length ?? 0}`;
   useEffect(() => {
     ref.current?.focus();
   }, []);
@@ -73,9 +77,17 @@ export function ToolDetailView({
         ) : null}
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-3">
-        <DetailBody model={model} onOpenPath={onOpenPath} />
-      </div>
+      <LiveScrollSurface
+        className="gap-4 px-4 py-3"
+        revision={revision}
+        scroll={scroll}
+        surfaceLabel="tool detail"
+        viewportDataAttribute="data-tool-detail-scroll"
+      >
+        <div data-live-scroll-item data-live-scroll-item-id={model.id}>
+          <DetailBody model={model} onOpenPath={onOpenPath} />
+        </div>
+      </LiveScrollSurface>
     </section>
   );
 }

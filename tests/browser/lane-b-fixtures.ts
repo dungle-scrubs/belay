@@ -1,4 +1,11 @@
-import { events, PRODUCER_IDS, type SessionTransport, streamTransport } from "@trevor/session";
+import {
+  events,
+  HOST_ROLE,
+  type JobSnapshot,
+  PRODUCER_IDS,
+  type SessionTransport,
+  streamTransport,
+} from "@trevor/session";
 
 /**
  * Lane B transcript fixtures (plan 09.2 M3): publish deterministic transcript events straight into the
@@ -20,6 +27,7 @@ export function storeTransport(): SessionTransport {
 
 const HOST = PRODUCER_IDS.host;
 const WEB = PRODUCER_IDS.web;
+const E2E_HOST_ID = "browser-e2e-host";
 
 async function publish(
   transport: SessionTransport,
@@ -48,6 +56,218 @@ export async function seedFileIndex(
     }),
     HOST,
   );
+}
+
+function hostOnlineWithJobs(jobs: readonly JobSnapshot[]) {
+  return events.hostOnline({
+    instanceId: E2E_HOST_ID,
+    providers: ["fake"],
+    default: "fake",
+    models: {
+      fake: {
+        label: "Fake",
+        model: "fake-1",
+        reasoningLevels: [],
+        defaultReasoning: "off",
+        kind: "local",
+      },
+    },
+    commands: [],
+    agents: [],
+    cwd: "/Users/kevin/dev/trevor",
+    workspace: "/Users/kevin/dev/trevor",
+    jobs,
+  });
+}
+
+function outputLines(label: string, lines: number): string {
+  return Array.from(
+    { length: lines },
+    (_, index) =>
+      `${label} output line ${index}: deterministic live output with enough text to wrap in the detail view.`,
+  ).join("\n");
+}
+
+export function browserJobSnapshot(
+  over: Partial<JobSnapshot> & Pick<JobSnapshot, "id">,
+): JobSnapshot {
+  const tail = over.tail ?? outputLines(over.id, 20);
+  return {
+    command: "pnpm test:web --watch",
+    source: "bash",
+    cwd: "/Users/kevin/dev/trevor",
+    startedAt: 1,
+    status: "running",
+    exitCode: null,
+    stdoutTotal: tail.length,
+    stderrTotal: 0,
+    ...over,
+    tail,
+  };
+}
+
+export async function announceBrowserJob(
+  transport: SessionTransport,
+  sessionId: string,
+  job: JobSnapshot,
+): Promise<void> {
+  await transport.ensureSession(sessionId);
+  await publish(
+    transport,
+    sessionId,
+    events.hostRole({ instanceId: E2E_HOST_ID, role: HOST_ROLE.leader }),
+    HOST,
+  );
+  await publish(transport, sessionId, hostOnlineWithJobs([job]), HOST);
+}
+
+export function browserJobTail(label: string, lines: number): string {
+  return outputLines(label, lines);
+}
+
+export async function seedTangentSession(
+  transport: SessionTransport,
+  input: {
+    readonly parentSessionId: string;
+    readonly tangentSessionId: string;
+    readonly runId: string;
+    readonly quote: string;
+    readonly lineLabel: string;
+    readonly lines: number;
+  },
+): Promise<void> {
+  await transport.ensureSession(input.tangentSessionId);
+  await publish(
+    transport,
+    input.tangentSessionId,
+    events.sessionTangentOf({
+      parentSessionId: input.parentSessionId,
+      sourceMessageId: "message:seed",
+      quote: input.quote,
+      label: "Scroll tangent",
+    }),
+    WEB,
+  );
+  await publish(
+    transport,
+    input.tangentSessionId,
+    events.userMessage({ text: "Explore this tangent", provider: "fake" }),
+    WEB,
+  );
+  await publish(
+    transport,
+    input.tangentSessionId,
+    events.assistantStarted({ runId: input.runId, warm: true, model: "fake-1", provider: "fake" }),
+    HOST,
+  );
+  await publish(
+    transport,
+    input.tangentSessionId,
+    events.assistantDelta({ runId: input.runId, text: outputLines(input.lineLabel, input.lines) }),
+    HOST,
+  );
+}
+
+export async function growTangentSession(
+  transport: SessionTransport,
+  tangentSessionId: string,
+  runId: string,
+  label: string,
+  from: number,
+  to: number,
+): Promise<void> {
+  await publish(
+    transport,
+    tangentSessionId,
+    events.assistantDelta({
+      runId,
+      text: `\n${Array.from(
+        { length: to - from },
+        (_, index) =>
+          `${label} output line ${from + index}: deterministic live output with enough text to wrap in the detail view.`,
+      ).join("\n")}`,
+    }),
+    HOST,
+  );
+}
+
+export async function seedInlineAgentParent(
+  transport: SessionTransport,
+  input: {
+    readonly parentSessionId: string;
+    readonly childSessionId: string;
+    readonly agent: string;
+  },
+): Promise<void> {
+  await transport.ensureSession(input.parentSessionId);
+  const runId = `agent-link-${input.childSessionId}`;
+  await publish(
+    transport,
+    input.parentSessionId,
+    events.userMessage({ text: "Delegate this", provider: "fake" }),
+    WEB,
+  );
+  await publish(
+    transport,
+    input.parentSessionId,
+    events.assistantStarted({ runId, warm: true, model: "fake-1", provider: "fake" }),
+    HOST,
+  );
+  await publish(
+    transport,
+    input.parentSessionId,
+    events.delegatedTo({
+      runId,
+      childSessionId: input.childSessionId,
+      agent: input.agent,
+      task: "Inspect the scrolling behavior",
+      mode: "inline",
+      status: "running",
+      model: "fake-1",
+    }),
+    HOST,
+  );
+}
+
+export async function seedRunningAgentChild(
+  transport: SessionTransport,
+  input: {
+    readonly childSessionId: string;
+    readonly runId: string;
+    readonly lineLabel: string;
+    readonly lines: number;
+  },
+): Promise<void> {
+  await transport.ensureSession(input.childSessionId);
+  await publish(
+    transport,
+    input.childSessionId,
+    events.userMessage({ text: "Child task", provider: "fake" }),
+    WEB,
+  );
+  await publish(
+    transport,
+    input.childSessionId,
+    events.assistantStarted({ runId: input.runId, warm: true, model: "fake-1", provider: "fake" }),
+    HOST,
+  );
+  await publish(
+    transport,
+    input.childSessionId,
+    events.assistantDelta({ runId: input.runId, text: outputLines(input.lineLabel, input.lines) }),
+    HOST,
+  );
+}
+
+export async function growRunningAgentChild(
+  transport: SessionTransport,
+  childSessionId: string,
+  runId: string,
+  label: string,
+  from: number,
+  to: number,
+): Promise<void> {
+  await growTangentSession(transport, childSessionId, runId, label, from, to);
 }
 
 /** One complete user->assistant exchange = a user row + an assistant row. `n` of them make a transcript

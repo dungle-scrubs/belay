@@ -1,10 +1,12 @@
 import type { TangentFoldMode } from "@trevor/session";
-import { ChevronDown, CornerUpLeft, GitBranch } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, type RefObject, useRef } from "react";
+import { CornerUpLeft, GitBranch } from "lucide-react";
+import { type KeyboardEvent as ReactKeyboardEvent, useRef } from "react";
 import { ActionShimmer } from "@/components/chat/action-shimmer";
+import { LiveScrollSurface } from "@/components/chat/live-scroll-surface";
 import { MarkdownBody } from "@/components/chat/markdown-body";
 import { VimModeIndicator } from "@/components/chat/vim-mode-indicator";
 import { BackToChat } from "@/components/panel/back-to-chat";
+import type { ScrollFollow } from "@/hooks/use-scroll-follow";
 import { cn } from "@/lib/utils";
 import { vimCaretClass } from "@/vim/caret";
 import { useVim } from "@/vim/use-vim";
@@ -25,15 +27,6 @@ export interface TangentTurn {
 export interface FoldBackNote {
   readonly tone: "success" | "error";
   readonly text: string;
-}
-
-/** The scroll-follow wiring (plan 12.2) the live wrapper supplies; omitted in stories (plain scroll). */
-export interface TangentScroll {
-  readonly transcriptRef: RefObject<HTMLDivElement | null>;
-  readonly onScroll: () => void;
-  readonly atBottom: boolean;
-  readonly onScrollToBottom: () => void;
-  readonly onUserGesture: (direction: "up" | "down") => void;
 }
 
 export interface TangentShellProps {
@@ -67,7 +60,7 @@ export interface TangentShellProps {
    *  layer as the main composer, so `/vim` is respected here too. */
   readonly vimEnabled?: boolean;
   readonly className?: string;
-  readonly scroll?: TangentScroll;
+  readonly scroll?: ScrollFollow;
 }
 
 /**
@@ -125,9 +118,12 @@ export function TangentShell({
       {/* Source context header: the selected snapshot the tangent branched from, clearly labelled so the
         takeover reads as a scoped side conversation rather than the parent chat. */}
       <div className="shrink-0 border-b border-border px-3 pb-3">
-        <div className="flex items-center gap-1.5 text-label uppercase tracking-wider text-muted-foreground">
-          <GitBranch className="size-3.5" />
-          Tangent{parentLabel ? <span className="normal-case"> · from {parentLabel}</span> : null}
+        <div className="flex items-center gap-2 text-label tracking-wider text-muted-foreground">
+          <span className="inline-flex items-center gap-1 rounded border border-primary/70 bg-primary/15 px-1.5 py-0.5 font-medium text-primary uppercase">
+            <GitBranch className="size-3.5" />
+            TANGENT
+          </span>
+          {parentLabel ? <span className="normal-case">from {parentLabel}</span> : null}
         </div>
         <blockquote className="mt-1.5 border-l-2 border-primary/60 bg-muted/40 py-1 pl-3 text-sm text-muted-foreground">
           {sourceQuote}
@@ -135,15 +131,41 @@ export function TangentShell({
       </div>
 
       {/* Transcript well: the tangent's OWN turns. A creation error takes over this region. */}
-      <div className="relative flex min-h-0 flex-1 flex-col">
+      {scroll ? (
+        <LiveScrollSurface
+          className="gap-3 px-3 py-4"
+          revision={turns.map((turn) => `${turn.id}:${turn.text.length}`).join("|")}
+          scroll={scroll}
+          surfaceLabel="tangent"
+          viewportDataAttribute="data-tangent-transcript"
+        >
+          {error ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
+              <p className="text-sm text-destructive">Couldn't open the tangent</p>
+              <p className="text-xs text-muted-foreground">{error}</p>
+            </div>
+          ) : turns.length === 0 ? (
+            <div className="flex flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
+              <p className="text-sm text-muted-foreground">A fresh tangent from your selection.</p>
+              <p className="text-xs text-muted-foreground/70">
+                Ask a question below - it stays isolated from the parent conversation.
+              </p>
+            </div>
+          ) : (
+            turns.map((turn) => (
+              <div key={turn.id} data-live-scroll-item data-live-scroll-item-id={turn.id}>
+                <TangentTurnRow turn={turn} onFoldBack={onFoldBack} />
+              </div>
+            ))
+          )}
+          {busy ? (
+            <div className="px-1 py-0.5" data-live-scroll-item data-live-scroll-item-id="busy">
+              <ActionShimmer label="Working..." />
+            </div>
+          ) : null}
+        </LiveScrollSurface>
+      ) : (
         <div
-          ref={scroll?.transcriptRef}
-          onScroll={scroll?.onScroll}
-          onWheel={(event) => {
-            if (scroll && event.deltaY !== 0) {
-              scroll.onUserGesture(event.deltaY < 0 ? "up" : "down");
-            }
-          }}
           data-tangent-transcript
           className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-4"
         >
@@ -166,22 +188,11 @@ export function TangentShell({
           )}
           {busy ? (
             <div className="px-1 py-0.5">
-              <ActionShimmer label="Working in the tangent" />
+              <ActionShimmer label="Working..." />
             </div>
           ) : null}
         </div>
-
-        {scroll && !scroll.atBottom ? (
-          <button
-            type="button"
-            onClick={scroll.onScrollToBottom}
-            aria-label="Scroll to bottom"
-            className="absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-foreground"
-          >
-            <ChevronDown className="size-4" />
-          </button>
-        ) : null}
-      </div>
+      )}
 
       {/* Fold-back feedback (M8): a visible, row-scoped note that content was placed in the parent
         composer for review - never a silent merge. */}
