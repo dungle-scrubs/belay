@@ -50,7 +50,7 @@ describe("scroll-follow: unpin is direction-based and synchronous", () => {
     assert.equal(c.snapshot().lastReason, "unattributed-scroll-up");
   });
 
-  test("a known pinned layout shift does not unpin on its own upward scroll", () => {
+  test("a known pinned layout shift suppresses upward remeasure scrolls until cleared", () => {
     const c = createScrollFollowController();
     c.scrolled(geo(0)); // at the bottom, pinned
     assert.equal(c.isPinned(), true);
@@ -66,7 +66,11 @@ describe("scroll-follow: unpin is direction-based and synchronous", () => {
     assert.equal(c.snapshot().lastReason, "layout-shift");
 
     c.scrolled(geo(600));
-    assert.equal(c.isPinned(), false, "only the single app-owned upward scroll is suppressed");
+    assert.equal(c.isPinned(), true, "remeasure can produce more than one upward scroll event");
+
+    c.clearLayoutShift();
+    c.scrolled(geo(900));
+    assert.equal(c.isPinned(), false, "normal upward scrolls unpin once the layout window clears");
     assert.equal(c.snapshot().lastReason, "unattributed-scroll-up");
   });
 

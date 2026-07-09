@@ -78,6 +78,45 @@ export function useScrollFollow(itemCount: number): ScrollFollow {
 
   const pinToBottom = useCallback(() => {
     controller.repin("submit");
+    // Submit/steer means "follow what I just sent." If the controller was already logically pinned
+    // but the DOM had drifted short of the live edge, re-pin alone is a no-op, so request the same
+    // explicit live-edge scroll used by the jump affordance.
+    setBottomRequestId((id) => id + 1);
+  }, [controller]);
+
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (!el || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const pendingFrames = new Set<number>();
+    const requestPinnedResizeFollow = () => {
+      if (!controller.isPinned()) {
+        return;
+      }
+      controller.layoutShift();
+      const frame = requestAnimationFrame(() => {
+        pendingFrames.delete(frame);
+        if (controller.isPinned()) {
+          setBottomRequestId((id) => id + 1);
+        }
+        const clearFrame = requestAnimationFrame(() => {
+          pendingFrames.delete(clearFrame);
+          controller.clearLayoutShift();
+        });
+        pendingFrames.add(clearFrame);
+      });
+      pendingFrames.add(frame);
+    };
+    const observer = new ResizeObserver(requestPinnedResizeFollow);
+    observer.observe(el);
+    return () => {
+      observer.disconnect();
+      for (const frame of pendingFrames) {
+        cancelAnimationFrame(frame);
+      }
+      controller.clearLayoutShift();
+    };
   }, [controller]);
 
   useEffect(() => {

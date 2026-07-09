@@ -119,7 +119,7 @@ test("scrollToBottom re-pins and increments the request id", () => {
   assert.equal(result.current.bottomRequestId, 1);
 });
 
-test("pinToBottom re-pins on submit", () => {
+test("pinToBottom re-pins and requests a live-edge scroll on submit", () => {
   const { result } = renderHook(() => useScrollFollow(2));
   act(() => result.current.onUserGesture("up"));
   assert.equal(result.current.atBottom, false);
@@ -127,4 +127,15 @@ test("pinToBottom re-pins on submit", () => {
   act(() => result.current.pinToBottom());
 
   assert.equal(result.current.atBottom, true);
+  assert.equal(result.current.bottomRequestId, 1);
+});
+
+test("pinToBottom requests a live-edge scroll even when already pinned", () => {
+  const { result } = renderHook(() => useScrollFollow(2));
+  assert.equal(result.current.atBottom, true);
+
+  act(() => result.current.pinToBottom());
+
+  assert.equal(result.current.atBottom, true);
+  assert.equal(result.current.bottomRequestId, 1);
 });

@@ -98,7 +98,12 @@ test("a wedged provider readiness degrades to unreachable within the injected ti
   } as unknown as ProviderRegistry;
 
   const start = Date.now();
-  const results = await collectDoctorProbeResults(providers, { probeTimeoutMs: 20 });
+  const results = await collectDoctorProbeResults(providers, {
+    hostSha: null,
+    probeTimeoutMs: 20,
+    storeDiagTimeoutMs: 20,
+    storeDiagUrl: "http://127.0.0.1:1",
+  });
   const elapsed = Date.now() - start;
 
   assert.equal(

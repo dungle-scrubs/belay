@@ -349,7 +349,7 @@ export function PanelHost(props: {
   };
 
   return (
-    <div className="flex h-svh">
+    <div className="flex h-svh overflow-hidden">
       {/* The project sidebar (plan 58 M6): a collapsible left rail listing all projects and
         their sessions. Switching routes through the same safe path as `/resume`. */}
       {sidebar.open ? (
@@ -408,7 +408,7 @@ export function PanelHost(props: {
           />
         </div>
       ) : null}
-      <main className="relative flex min-w-0 flex-1 flex-col bg-smui-surface-sunken px-4 [--trevor-reasoning-fade-bg:var(--color-smui-surface-sunken)]">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-smui-surface-sunken px-4 [--trevor-reasoning-fade-bg:var(--color-smui-surface-sunken)]">
         {/* Highlight text in any message (data-message-id) to get a floating Quote action
           that drops the selection into the composer as a markdown blockquote. */}
         <QuoteSelectionToolbar onQuote={composer.quoteSelection} onTangent={onTangent} />
@@ -457,7 +457,7 @@ export function PanelHost(props: {
             data-transcript-scroll
             data-transcript-pinned={scroll.atBottom ? "true" : "false"}
             style={{ overflowAnchor: "none" }}
-            className="flex flex-1 flex-col overflow-y-auto py-4"
+            className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4"
           >
             {/* Three states, so the page never looks broken while things come up:
               1. still replaying the session stream -> a brief "connecting to session" state;

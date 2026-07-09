@@ -170,6 +170,17 @@ they belong to.
   substitute for behavioral tests. A full-browser Playwright pass against the
   running app is a future option, not yet set up.
 
+**Scroll fixes require real-browser verification.** Any change that claims to fix
+transcript scrolling, bottom pinning, scroll anchoring, virtualized row
+measurement, jump-to-bottom behavior, or document/body overflow **must** be
+verified in a real browser against the running app or the hermetic browser e2e
+runner. jsdom tests are useful for controller policy, but they do not prove real
+`scrollTop`, `scrollHeight`, `clientHeight`, `ResizeObserver`, layout, or browser
+scroll anchoring behavior. A scroll fix is not done until a browser check asserts
+the actual geometry: document/body remain viewport-locked, submitting from a
+scrolled-up transcript moves to the live edge, pinned streaming/tool/thinking
+updates keep `bottomDelta` near zero, and unpinned reading stays anchored.
+
 **E2E lanes** (in `e2e/`), so the suite stays deterministic and CI-able:
 
 - **Hermetic** - boots store + blob + host on ephemeral ports with the fake
