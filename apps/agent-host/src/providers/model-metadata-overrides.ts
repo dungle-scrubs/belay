@@ -1,11 +1,11 @@
 /**
  * Correctable per-model metadata overrides (02.16 D-003). Provider `/models` endpoints return only
- * `{id, name}`, so the catalog looks up per-model metadata (context window, reasoning, vision) from
+ * partial metadata, so the catalog looks up per-model details (context window, reasoning, vision) from
  * pi-ai's BUNDLED static registry. That registry can carry a STALE value - the motivating case was
  * MiniMax-M3, whose bundled `contextWindow` (512000) understates the model card's real 1M, so the
  * picker rendered a wrong window and the context-pressure gate fired far too early. There is no live
- * source for context windows, so the fix is a correctable override that WINS over the bundled value,
- * not a "pull it from the API".
+ * source for every metadata field on every source, so the fix is a correctable override that WINS over
+ * the bundled value, not a "pull it from the API".
  *
  * Corrections are USER-OWNED: they live in a hand-edited `<TREVOR_HOME>/models.json` (see
  * {@link USER_MODELS_JSON}), the same way pi-ai keeps `~/.pi/auth.json`, so a wrong window is fixed by
@@ -25,19 +25,28 @@ import { warn } from "@host/transport/log";
 export interface ModelMetadataOverride {
   /** The corrected context window (tokens) when pi-ai's bundled value is stale. */
   readonly contextWindow?: number;
+  /** Corrected reasoning levels when the bundled registry is missing or advertises invalid "off". */
+  readonly reasoningLevels?: readonly string[];
 }
 
 /**
- * Built-in baseline corrections keyed by `modelId` (the live `/models` id). Intentionally EMPTY:
- * corrections are user-owned in `<TREVOR_HOME>/models.json`. An entry is added here only for a
- * correction we want shipped in code ahead of any user file; the user file overrides it regardless.
+ * Built-in baseline corrections keyed by `modelId` (the live `/models` id). Kept tiny: corrections are
+ * normally user-owned in `<TREVOR_HOME>/models.json`; an entry is added here only for a same-day
+ * provider/registry gap we want shipped in code ahead of any user file. The user file overrides it
+ * regardless.
  */
-export const MODEL_METADATA_OVERRIDES: Readonly<Record<string, ModelMetadataOverride>> = {};
+export const MODEL_METADATA_OVERRIDES: Readonly<Record<string, ModelMetadataOverride>> = {
+  // OpenRouter listed Grok 4.5 before pi-ai's bundled registry did. OpenRouter rejects requests that
+  // disable reasoning for this model, so the chooser must not offer/store "off" for it.
+  "x-ai/grok-4.5": {
+    contextWindow: 200_000,
+    reasoningLevels: ["minimal", "low", "medium", "high"],
+  },
+};
 
 /**
- * Parses a raw `models.json` value into a clean overrides map, keeping only well-formed entries
- * (`{ contextWindow: <positive finite number> }`) and silently skipping anything else, so one bad
- * entry never discards the rest. Pure - no I/O.
+ * Parses a raw `models.json` value into a clean overrides map, keeping only well-formed entries and
+ * silently skipping anything else, so one bad entry never discards the rest. Pure - no I/O.
  */
 export function parseModelOverrides(raw: unknown): Record<string, ModelMetadataOverride> {
   const out: Record<string, ModelMetadataOverride> = {};
@@ -49,8 +58,20 @@ export function parseModelOverrides(raw: unknown): Record<string, ModelMetadataO
       continue;
     }
     const contextWindow = (value as { contextWindow?: unknown }).contextWindow;
+    const reasoningLevels = (value as { reasoningLevels?: unknown }).reasoningLevels;
+    const override: { contextWindow?: number; reasoningLevels?: readonly string[] } = {};
     if (typeof contextWindow === "number" && Number.isFinite(contextWindow) && contextWindow > 0) {
-      out[modelId] = { contextWindow };
+      override.contextWindow = contextWindow;
+    }
+    if (
+      Array.isArray(reasoningLevels) &&
+      reasoningLevels.length > 0 &&
+      reasoningLevels.every((level): level is string => typeof level === "string" && level !== "")
+    ) {
+      override.reasoningLevels = reasoningLevels;
+    }
+    if (override.contextWindow !== undefined || override.reasoningLevels !== undefined) {
+      out[modelId] = override;
     }
   }
   return out;
@@ -136,6 +157,14 @@ export function resolveContextWindow(
       : learnedWindow;
   }
   return typeof bundledContextWindow === "number" ? bundledContextWindow : null;
+}
+
+export function resolveReasoningLevels(
+  modelId: string,
+  bundledReasoningLevels: readonly string[],
+  overrides: Readonly<Record<string, ModelMetadataOverride>> = activeModelOverrides(),
+): readonly string[] {
+  return overrides[modelId]?.reasoningLevels ?? bundledReasoningLevels;
 }
 
 /**

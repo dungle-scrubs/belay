@@ -13,9 +13,13 @@ import { anthropicProvider } from "./anthropic";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";
 import { lmStudioIsVision, lmStudioSupportsTools } from "./lmstudio-native";
-import { reloadModelOverrides, resolveContextWindow } from "./model-metadata-overrides";
+import {
+  reloadModelOverrides,
+  resolveContextWindow,
+  resolveReasoningLevels,
+} from "./model-metadata-overrides";
 import { openAICompatProvider } from "./openai-compat";
-import { PI_KEY_PROVIDERS, piKeyAuthName, piKeyProviderFromConfig } from "./pi-key";
+import { PI_KEY_PROVIDERS, piKeyAuthName, piKeyProviderFromConfig, resolvePiModel } from "./pi-key";
 import { lookupPiModel } from "./pi-model";
 import { AUTH_PATH, oauthCredentialResolver, oauthPresent, staticKeyEntry } from "./provider-auth";
 import { defaultReasoningLevel } from "./reasoning-policy";
@@ -164,31 +168,63 @@ function projectSourceAuth(auth: Record<string, unknown>): Map<string, SourceAut
   return new Map(SOURCES.map((source) => [source.sourceId, resolveSourceAuth(source, auth)]));
 }
 
-/** The pi-ai registry Model for an id (full object), for shape + reasoning enrichment, or undefined. */
+/** The pi-ai Model for an id, exact or sibling-synthesized, for shape + reasoning enrichment. */
 type PiModel = {
+  readonly id?: string;
   readonly name?: string;
   readonly contextWindow?: number;
   readonly input?: readonly string[];
 };
 function piModelOf(piProvider: string | undefined, id: string): PiModel | undefined {
-  return piProvider ? (lookupPiModel(piProvider, id) as PiModel | undefined) : undefined;
+  if (!piProvider) {
+    return undefined;
+  }
+  const exact = lookupPiModel(piProvider, id);
+  if (exact) {
+    return exact as PiModel;
+  }
+  try {
+    const synthetic = resolvePiModel(piProvider, id) as PiModel | undefined;
+    return synthetic ? { ...synthetic, id, name: undefined } : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** The reasoning levels a model supports: a graded/binary surface for a registry model, the LM Studio
  *  on/off toggle for local, or none when the id is unknown to pi-ai. */
-function reasoningLevelsFor(source: SourceDef, model: PiModel | undefined): readonly string[] {
-  if (source.type === "local") {
-    return ["off", "on"];
-  }
-  if (!model) {
-    return [];
-  }
+function reasoningLevelsFor(
+  source: SourceDef,
+  live: Pick<LiveModel, "id">,
+  model: PiModel | undefined,
+): readonly string[] {
+  const bundled = (() => {
+    if (source.type === "local") {
+      return ["off", "on"];
+    }
+    if (!model) {
+      return [];
+    }
+    try {
+      // getSupportedThinkingLevels reads the model's adapter/reasoning shape (the same call the provider
+      // base uses), so the chooser's reasoning control matches what the turn will actually honor.
+      return getSupportedThinkingLevels(model as never) as readonly string[];
+    } catch {
+      return [];
+    }
+  })();
+  return resolveReasoningLevels(live.id, bundled);
+}
+
+function contextWindowFor(live: Pick<LiveModel, "id">, model: PiModel | undefined): number | null {
+  return resolveContextWindow(live.id, model?.contextWindow);
+}
+
+function visionFor(model: PiModel | undefined): boolean {
   try {
-    // getSupportedThinkingLevels reads the model's adapter/reasoning shape (the same call the provider
-    // base uses), so the chooser's reasoning control matches what the turn will actually honor.
-    return getSupportedThinkingLevels(model as never) as readonly string[];
+    return model?.input?.includes("image") ?? false;
   } catch {
-    return [];
+    return false;
   }
 }
 
@@ -202,7 +238,7 @@ const NON_CHAT_LOCAL =
  *  separate so neither hardcodes the other's assumptions (D-003). */
 function entryFor(source: SourceDef, live: LiveModel, freshness: CatalogFreshness): CatalogEntry {
   const model = piModelOf(source.piProvider, live.id);
-  const reasoningLevels = reasoningLevelsFor(source, model);
+  const reasoningLevels = reasoningLevelsFor(source, live, model);
   return source.type === "local"
     ? localEntry(source, live, freshness, reasoningLevels)
     : cloudEntry(source, live, freshness, model, reasoningLevels);
@@ -255,7 +291,7 @@ function cloudEntry(
     source.toolCapable === false ? [] : ["tools"],
     reasoningLevels,
   );
-  if (model?.input?.includes("image")) {
+  if (visionFor(model)) {
     capabilities.push("vision");
   }
   return {
@@ -264,7 +300,7 @@ function cloudEntry(
     kind: "cloud",
     capabilities,
     // A confirmed override wins over pi-ai's bundled (possibly stale) contextWindow (02.16 D-003).
-    contextLength: resolveContextWindow(live.id, model?.contextWindow),
+    contextLength: contextWindowFor(live, model),
   };
 }
 

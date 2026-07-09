@@ -159,6 +159,27 @@ test("a model pi-ai doesn't know uses the provider's live display name, not the 
   assert.equal(entry?.displayName, "Sakana: Fugu Ultra");
 });
 
+test("OpenRouter Grok 4.5 gets mandatory reasoning metadata before pi-ai knows the id", () => {
+  const snap = buildCatalogSnapshot(
+    { ...auth, openrouter: { key: "sk-or-test" } },
+    {
+      openrouter: [
+        {
+          id: "x-ai/grok-4.5",
+          name: "xAI: Grok 4.5",
+        },
+      ],
+    },
+  );
+  const entry = snap.catalogBySource.openrouter?.[0];
+  assert.equal(entry?.modelId, "x-ai/grok-4.5");
+  assert.equal(entry?.displayName, "xAI: Grok 4.5");
+  assert.equal(entry?.contextLength, 200_000);
+  assert.deepEqual(entry?.reasoningLevels, ["minimal", "low", "medium", "high"]);
+  assert.equal(entry?.defaultReasoning, "medium");
+  assert.ok(!entry?.reasoningLevels.includes("off"), "OpenRouter rejects disabled reasoning here");
+});
+
 test("a model with neither a registry entry nor a live name falls back to its id", () => {
   // ollama ids (e.g. gpt-oss:120b) are already readable, and its /v1/models carries no name - the id
   // is the label, and a bare-id input still works (normalized to a LiveModel).

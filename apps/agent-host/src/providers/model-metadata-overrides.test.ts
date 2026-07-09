@@ -6,6 +6,7 @@ import {
   parseModelOverrides,
   recordLearnedWindow,
   resolveContextWindow,
+  resolveReasoningLevels,
 } from "./model-metadata-overrides";
 
 /**
@@ -41,8 +42,11 @@ test("the window is null when neither an override nor a bundled value is known",
  * that file, not in code, so the built-in map stays empty.
  */
 
-test("the built-in override map is empty - corrections live in models.json, not code", () => {
-  assert.deepEqual(MODEL_METADATA_OVERRIDES, {});
+test("the built-in override map carries only shipped same-day provider metadata gaps", () => {
+  assert.deepEqual(MODEL_METADATA_OVERRIDES["x-ai/grok-4.5"], {
+    contextWindow: 200_000,
+    reasoningLevels: ["minimal", "low", "medium", "high"],
+  });
 });
 
 test("parseModelOverrides keeps well-formed { contextWindow } entries", () => {
@@ -53,11 +57,20 @@ test("parseModelOverrides keeps well-formed { contextWindow } entries", () => {
   );
 });
 
+test("parseModelOverrides keeps well-formed { reasoningLevels } entries", () => {
+  assert.deepEqual(parseModelOverrides({ "x-ai/grok-4.5": { reasoningLevels: ["low", "high"] } }), {
+    "x-ai/grok-4.5": { reasoningLevels: ["low", "high"] },
+  });
+});
+
 test("parseModelOverrides skips malformed entries but keeps the well-formed rest", () => {
   const parsed = parseModelOverrides({
     "MiniMax-M3": { contextWindow: 1_000_000 },
     "bad-shape": 512000,
     "bad-window-type": { contextWindow: "lots" },
+    "bad-reasoning-type": { reasoningLevels: "high" },
+    "bad-reasoning-empty": { reasoningLevels: [] },
+    "bad-reasoning-member": { reasoningLevels: ["high", ""] },
     "non-positive": { contextWindow: 0 },
     infinite: { contextWindow: Number.POSITIVE_INFINITY },
   });
@@ -97,6 +110,15 @@ test("a models.json correction wins over pi-ai's bundled window through resolveC
     JSON.stringify({ "MiniMax-M3": { contextWindow: 1_000_000 } }),
   );
   assert.equal(resolveContextWindow("MiniMax-M3", 512000, overrides), 1_000_000);
+});
+
+test("a reasoning-level correction wins over bundled reasoning levels", () => {
+  assert.deepEqual(
+    resolveReasoningLevels("x-ai/grok-4.5", ["off", "high"], {
+      "x-ai/grok-4.5": { reasoningLevels: ["minimal", "low", "medium", "high"] },
+    }),
+    ["minimal", "low", "medium", "high"],
+  );
 });
 
 /**
