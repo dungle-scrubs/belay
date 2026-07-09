@@ -84,6 +84,7 @@ test("scrolling away from the child transcript shows a bottom jump button", () =
   });
 
   fireEvent.scroll(transcript);
+  fireEvent.wheel(transcript, { deltaY: -40 });
 
   assert.ok(screen.getByRole("button", { name: "Scroll to bottom" }));
 });
@@ -100,9 +101,10 @@ test("the bottom jump button scrolls the child transcript back to the live edge"
     scrollTop: { configurable: true, writable: true, value: 400 },
   });
   fireEvent.scroll(transcript);
+  fireEvent.wheel(transcript, { deltaY: -40 });
 
   fireEvent.click(screen.getByRole("button", { name: "Scroll to bottom" }));
 
-  assert.equal(transcript.scrollTop, transcript.scrollHeight);
+  assert.equal(transcript.scrollTop, transcript.scrollHeight - transcript.clientHeight);
   assert.equal(screen.queryByRole("button", { name: "Scroll to bottom" }), null);
 });

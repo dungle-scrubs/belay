@@ -157,13 +157,7 @@ export function LiveTangentShell({
       foldBackNote={foldBackNote}
       onBack={onBack}
       vimEnabled={vimEnabled}
-      scroll={{
-        transcriptRef: scroll.transcriptRef,
-        onScroll: scroll.onScroll,
-        atBottom: scroll.atBottom,
-        onScrollToBottom: scroll.scrollToBottom,
-        onUserGesture: scroll.onUserGesture,
-      }}
+      scroll={scroll}
     />
   );
 }

@@ -1,10 +1,10 @@
-import { useBoolean } from "ahooks";
-import { ChevronDown, Waypoints } from "lucide-react";
+import { Waypoints } from "lucide-react";
 import { useEffect, useRef } from "react";
+import { LiveScrollSurface } from "@/components/chat/live-scroll-surface";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";
 import { BackToChat } from "@/components/panel/back-to-chat";
+import { useScrollFollow } from "@/hooks/use-scroll-follow";
 import { cn } from "@/lib/utils";
-import { atBottomOf } from "@/scroll";
 import { type TranscriptRow, transcriptRowKey } from "@/transcript-rows";
 
 /**
@@ -43,9 +43,7 @@ export function AgentDetailShell({
   readonly className?: string;
 }) {
   const ref = useRef<HTMLElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [atBottom, { set: setAtBottom, setFalse: markAwayFromBottom, setTrue: markAtBottom }] =
-    useBoolean(true);
+  const scroll = useScrollFollow(rows.length);
 
   // Own Escape + focus on mount, matching the tool-detail takeover so the two takeovers behave alike.
   useEffect(() => {
@@ -61,36 +59,6 @@ export function AgentDetailShell({
   // Keep the newest child output in view: a subagent streams to the bottom, so pin there on each
   // update - a new row OR a streaming delta within the last row (tracked by `revision`).
   const pinSignal = revision ?? rows.length;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-pin whenever the stream advances.
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (el && atBottom) {
-      el.scrollTop = el.scrollHeight;
-    }
-  }, [pinSignal, atBottom]);
-
-  const updateBottomState = () => {
-    const el = scrollRef.current;
-    if (!el) {
-      return;
-    }
-    setAtBottom(
-      atBottomOf({
-        scrollHeight: el.scrollHeight,
-        clientHeight: el.clientHeight,
-        scrollTop: el.scrollTop,
-      }),
-    );
-  };
-
-  const scrollToBottom = () => {
-    const el = scrollRef.current;
-    if (!el) {
-      return;
-    }
-    el.scrollTop = el.scrollHeight;
-    markAtBottom();
-  };
 
   return (
     <section
@@ -105,47 +73,36 @@ export function AgentDetailShell({
         <Waypoints className="size-3.5" />
         Inline agent{agent ? <span className="normal-case"> · {agent}</span> : null}
       </div>
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div
-          ref={scrollRef}
-          data-agent-transcript
-          onScroll={updateBottomState}
-          onWheel={(event) => {
-            if (event.deltaY < 0) {
-              markAwayFromBottom();
-            }
-          }}
-          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-1 py-4"
-        >
-          {rows.length === 0 ? (
-            <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
-              {replayed
-                ? "This agent hasn't produced any output yet."
-                : "Loading the agent's transcript…"}
-            </div>
-          ) : (
-            rows.map((row) => (
+      <LiveScrollSurface
+        className="gap-3 px-1 py-4"
+        revision={pinSignal}
+        scroll={scroll}
+        surfaceLabel="agent detail"
+        viewportDataAttribute="data-agent-transcript"
+      >
+        {rows.length === 0 ? (
+          <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-muted-foreground">
+            {replayed
+              ? "This agent hasn't produced any output yet."
+              : "Loading the agent's transcript…"}
+          </div>
+        ) : (
+          rows.map((row) => (
+            <div
+              key={transcriptRowKey(row)}
+              data-live-scroll-item
+              data-live-scroll-item-id={row.id}
+            >
               <TranscriptRowView
-                key={transcriptRowKey(row)}
                 row={row}
                 showThinking
                 onOpenPath={onOpenPath}
                 onDoctorRefresh={NOOP}
               />
-            ))
-          )}
-        </div>
-        {!atBottom ? (
-          <button
-            type="button"
-            onClick={scrollToBottom}
-            aria-label="Scroll to bottom"
-            className="absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:text-foreground"
-          >
-            <ChevronDown className="size-4" />
-          </button>
-        ) : null}
-      </div>
+            </div>
+          ))
+        )}
+      </LiveScrollSurface>
     </section>
   );
 }

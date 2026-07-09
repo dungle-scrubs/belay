@@ -189,6 +189,7 @@ export function VirtualTranscript({
   } = rowConfig;
   const lastRowIdRef = useRef<string | null>(null);
   const previousRowsRef = useRef<readonly TranscriptRow[] | null>(null);
+  const previousScrollTopRef = useRef<number | null>(null);
   const previousTotalSizeRef = useRef<number | null>(null);
   const visualAnchorRef = useRef<VisualAnchorSnapshot | null>(null);
   const [readyToReveal, setReadyToReveal] = useState(false);
@@ -326,27 +327,42 @@ export function VirtualTranscript({
       previousRowsRef.current !== null &&
       (previousRowsRef.current !== rows || previousTotalSizeRef.current !== totalSize);
 
-    if (contentChanged && !pinned && previousAnchor && scrollElement) {
-      const currentTop = anchorTop(scrollElement, previousAnchor.id);
-      if (currentTop !== null) {
-        const delta = currentTop - previousAnchor.top;
-        if (Math.abs(delta) > ANCHOR_EPSILON_PX) {
-          const nextTop = scrollElement.scrollTop + delta;
-          const decision = controller.requestWrite("anchor-compensation", {
-            writer: "virtualizer",
-            resultingOffset: nextTop,
-            scrollHeight: scrollElement.scrollHeight,
-            clientHeight: scrollElement.clientHeight,
-          });
-          if (decision.allowed) {
-            scrollElement.scrollTo({ top: nextTop, behavior: "auto" });
+    if (contentChanged && !pinned && scrollElement) {
+      let nextTop: number | null = null;
+      if (previousAnchor) {
+        const currentTop = anchorTop(scrollElement, previousAnchor.id);
+        if (currentTop !== null) {
+          const delta = currentTop - previousAnchor.top;
+          if (Math.abs(delta) > ANCHOR_EPSILON_PX) {
+            nextTop = scrollElement.scrollTop + delta;
           }
+        }
+      } else if (
+        previousScrollTopRef.current !== null &&
+        Math.abs(scrollElement.scrollTop - previousScrollTopRef.current) > ANCHOR_EPSILON_PX
+      ) {
+        // A single tall streaming row can fill the viewport, leaving no row-level interior anchor.
+        // In that case, preserve the reader's raw offset so appended tokens below do not push the
+        // already-visible lines upward.
+        nextTop = previousScrollTopRef.current;
+      }
+
+      if (nextTop !== null) {
+        const decision = controller.requestWrite("anchor-compensation", {
+          writer: "virtualizer",
+          resultingOffset: nextTop,
+          scrollHeight: scrollElement.scrollHeight,
+          clientHeight: scrollElement.clientHeight,
+        });
+        if (decision.allowed) {
+          scrollElement.scrollTo({ top: nextTop, behavior: "auto" });
         }
       }
     }
 
     visualAnchorRef.current = pinned ? null : visibleAnchorIn(scrollElement);
     previousRowsRef.current = rows;
+    previousScrollTopRef.current = scrollElement?.scrollTop ?? null;
     previousTotalSizeRef.current = totalSize;
   });
 
@@ -464,7 +480,7 @@ export function VirtualTranscript({
   return (
     <div
       className={cn("relative", readyToReveal ? "fade-in animate-in duration-150" : "opacity-0")}
-      style={{ height: virtualizer.getTotalSize() }}
+      style={{ height: virtualizer.getTotalSize(), overflowAnchor: "none" }}
       data-transcript-virtual-list
       data-transcript-ready={readyToReveal ? "true" : "false"}
       data-transcript-row-count={rows.length}
@@ -495,7 +511,7 @@ export function VirtualTranscript({
             data-index={item.index}
             data-transcript-virtual-row={row.kind}
             className={cn("absolute top-0 left-0 flow-root w-full", padClass)}
-            style={{ transform: `translateY(${item.start}px)` }}
+            style={{ transform: `translateY(${item.start}px)`, overflowAnchor: "none" }}
           >
             <TranscriptRowView
               onMenuAction={onMenuAction}

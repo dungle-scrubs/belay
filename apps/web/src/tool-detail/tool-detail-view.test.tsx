@@ -78,3 +78,69 @@ test("an error tool shows the Error section + an Aborted pill when aborted", () 
   assert.ok(screen.getByText("Aborted"));
   assert.ok(screen.getByText("aborted before completion"));
 });
+
+function detailScroller(): HTMLElement {
+  const element = document.querySelector<HTMLElement>("[data-tool-detail-scroll]");
+  assert.ok(element);
+  return element;
+}
+
+test("growing output follows only while pinned in the detail view", () => {
+  const { rerender } = render(
+    <ToolDetailView model={model({ status: "running", output: "line 1" })} onBack={vi.fn()} />,
+  );
+  const scroller = detailScroller();
+  Object.defineProperties(scroller, {
+    clientHeight: { configurable: true, value: 200 },
+    scrollHeight: { configurable: true, value: 260 },
+    scrollTop: { configurable: true, writable: true, value: 60 },
+  });
+  fireEvent.scroll(scroller);
+  Object.defineProperties(scroller, {
+    clientHeight: { configurable: true, value: 200 },
+    scrollHeight: { configurable: true, value: 420 },
+  });
+
+  rerender(
+    <ToolDetailView
+      model={model({ status: "running", output: "line 1\nline 2\nline 3\nline 4" })}
+      onBack={vi.fn()}
+    />,
+  );
+
+  assert.equal(scroller.scrollTop, 220);
+});
+
+test("growing output preserves manual reading position while unpinned", () => {
+  const { rerender } = render(
+    <ToolDetailView
+      model={model({
+        status: "running",
+        output: Array.from({ length: 20 }, (_, i) => `line ${i}`).join("\n"),
+      })}
+      onBack={vi.fn()}
+    />,
+  );
+  const scroller = detailScroller();
+  Object.defineProperties(scroller, {
+    clientHeight: { configurable: true, value: 200 },
+    scrollHeight: { configurable: true, value: 900 },
+    scrollTop: { configurable: true, writable: true, value: 180 },
+  });
+  fireEvent.scroll(scroller);
+  fireEvent.wheel(scroller, { deltaY: -40 });
+  scroller.scrollTop = 240;
+
+  rerender(
+    <ToolDetailView
+      model={model({
+        status: "running",
+        output: Array.from({ length: 25 }, (_, i) => `line ${i}`).join("\n"),
+      })}
+      onBack={vi.fn()}
+    />,
+  );
+
+  assert.equal(scroller.scrollTop, 180);
+  assert.ok(screen.getByRole("button", { name: "Scroll to bottom" }));
+});

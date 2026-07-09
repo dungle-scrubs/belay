@@ -112,3 +112,10 @@ test("a fold-back note is shown as visible, reviewable feedback", () => {
   });
   assert.ok(screen.getByText("Sent to the parent composer for review."));
 });
+
+test("the header uses a bright tangent badge and busy copy is concise", () => {
+  renderShell({ busy: true });
+  assert.ok(screen.getByText("TANGENT"));
+  assert.ok(screen.getAllByText("Working...").length > 0);
+  assert.equal(screen.queryByText("Working in the tangent"), null);
+});
