@@ -17,8 +17,14 @@
 
 ## 1. Research Objective
 
-Audit the assistant-ui documentation in depth and map every relevant pattern to Trevor's equivalent
-surface. For each pattern, recommend one of:
+Audit the complete assistant-ui documentation corpus in depth, not only the pages that already look
+familiar from Trevor. The research must perform a thorough comparison between assistant-ui's
+documented primitives, runtimes, adapters, tools, performance guidance, cloud/integration surfaces,
+and Trevor's current equivalents or intentional gaps. The final output is the repo-root document
+`ASSISTANT_UI_OPPORTUNITIES.md`, written so later model passes can challenge it with contrarian
+opinions.
+
+For each pattern, recommend one of:
 
 | Verdict | Meaning |
 |---------|---------|
@@ -32,9 +38,13 @@ Each recommendation must cite both sides of the comparison:
 
 - assistant-ui documentation page or API reference
 - Trevor code, test, plan, or `CONTEXT.md` evidence
+- performance implications where the assistant-ui docs or Trevor implementation suggest a meaningful
+  rendering, streaming, state-management, bundle, reconnection, persistence, or scheduling difference
 - risk if Trevor adopts it
 - risk if Trevor ignores it
 - concrete follow-up plan candidate when the verdict is `adopt` or `adapt`
+- confidence level, uncertainty, and at least one contrarian question when the decision is important
+  enough that a future model pass should re-check it
 
 Do not treat assistant-ui as one library decision. The audit must be case-by-case because the docs
 span UI primitives, runtimes, protocol adapters, cloud persistence, tool rendering, MCP, model
@@ -49,6 +59,12 @@ The audit starts from the official assistant-ui docs index and markdown corpus:
 - `https://www.assistant-ui.com/docs`
 - `https://www.assistant-ui.com/llms.txt`
 - `https://www.assistant-ui.com/llms-full.txt`
+
+`llms.txt` is the coverage ledger. Every linked page in that index must be classified as one of:
+
+- compared in detail against Trevor
+- grouped into a compared family with a named representative page
+- explicitly out of scope for Trevor with a reason
 
 The docs advertise these major areas that overlap Trevor:
 
@@ -147,14 +163,19 @@ when the docs reveal separate decisions.
 
 ### M1: Documentation Corpus Map
 
-Goal: produce a complete, deduplicated index of assistant-ui patterns relevant to Trevor.
+Goal: produce a complete, deduplicated index of assistant-ui patterns and prove coverage of the
+entire docs corpus.
 
 1. RED: Create an audit worksheet under this plan's `artifacts/` directory with the categories from
-   `llms.txt` and `llms-full.txt`, explicitly excluding virtualization by reference to plan 58.4.
-2. GREEN: Read the relevant official markdown pages and summarize each pattern in one row with source
-   URL, API/package names, maturity/stability notes, and whether it is UI-only, runtime, persistence,
-   protocol, tool, or cloud.
-3. REFACTOR: Merge duplicate docs rows where a guide, primitive, UI component, and API reference all
+   `llms.txt` and `llms-full.txt`, explicitly excluding virtualization adoption by reference to plan
+   58.4 while still noting any non-virtualization performance lessons from the virtualization docs.
+2. GREEN: Read the official markdown pages deeply enough to classify every `llms.txt` entry. Each
+   entry must either receive its own comparison row, be grouped into a named comparison family, or be
+   marked out of scope with a reason.
+3. GREEN: Summarize each compared pattern with source URL, API/package names, maturity/stability
+   notes, performance claims or implications, and whether it is UI-only, runtime, persistence,
+   protocol, tool, performance, or cloud.
+4. REFACTOR: Merge duplicate docs rows where a guide, primitive, UI component, and API reference all
    describe the same adoption decision.
 
 ### M2: Trevor Equivalent Survey
@@ -175,13 +196,17 @@ Goal: map every assistant-ui pattern to the exact Trevor owner or prove Trevor h
 Goal: decide what to adopt, adapt, keep, defer, or reject.
 
 1. RED: Add an explicit verdict rubric to the worksheet: source-of-truth fit, local-first fit,
-   accessibility, testability, bundle/runtime cost, API stability, and migration blast radius.
+   accessibility, testability, bundle/runtime cost, streaming and scroll performance, reconnection or
+   resumability behavior, API stability, and migration blast radius.
 2. GREEN: Fill the adoption matrix for every row in section 3 with the five-way verdict and rationale.
-3. GREEN: For every `adopt` or `adapt` verdict, add a follow-up candidate with a proposed numbered
+3. GREEN: For every high-value assistant-ui capability, especially performance-related capabilities,
+   state why Trevor should adopt, adapt, keep, defer, or reject it. Do not leave performance wins as
+   generic claims; tie them to a concrete Trevor surface and expected effect.
+4. GREEN: For every `adopt` or `adapt` verdict, add a follow-up candidate with a proposed numbered
    plan title, dependency, and smallest shippable slice.
-4. GREEN: For every `reject` verdict, state the architectural reason so it is not reopened as vague
+5. GREEN: For every `reject` verdict, state the architectural reason so it is not reopened as vague
    library skepticism.
-5. REFACTOR: Collapse weak recommendations. If a pattern only saves a few lines while weakening a
+6. REFACTOR: Collapse weak recommendations. If a pattern only saves a few lines while weakening a
    Trevor invariant, mark it `keep Trevor-owned`.
 
 ### M4: Highest-Leverage Follow-Up Plan Set
@@ -214,10 +239,12 @@ Goal: verify recommendations against the product as it exists, not only source n
 
 Goal: leave a reusable research deliverable that future implementation plans can consume.
 
-1. RED: Add a final report under `artifacts/assistant-ui-pattern-audit.md` with the full matrix,
-   ranked recommendations, rejected patterns, deferred patterns, and source links.
-2. GREEN: Cross-check the report against the assistant-ui docs index so no relevant pattern category
-   is missing except virtualization.
+1. RED: Add the final report at repo root as `ASSISTANT_UI_OPPORTUNITIES.md` with the full matrix,
+   ranked recommendations, rejected patterns, deferred patterns, performance opportunities, source
+   links, uncertainty notes, and contrarian-review prompts for later model passes.
+2. GREEN: Cross-check the report against the assistant-ui docs index so every docs page is accounted
+   for as compared, grouped, or explicitly out of scope. Virtualization adoption remains delegated to
+   plan 58.4, but any broader performance lessons from that docs area must still be recorded.
 3. GREEN: Cross-check report recommendations against Trevor code/plans so every verdict has local
    evidence.
 4. GREEN: Record follow-up plan candidates in the progress report's accepted/deferred section.
@@ -230,7 +257,8 @@ Goal: leave a reusable research deliverable that future implementation plans can
 - No migration of Trevor's durable transcript, session list, tools, artifacts, or model selection into
   assistant-ui runtime state during this plan.
 - No Assistant Cloud adoption.
-- No thread virtualization recommendation beyond pointing to plan 58.4.
+- No thread virtualization adoption recommendation beyond pointing to plan 58.4; non-virtualization
+  performance lessons from assistant-ui docs still belong in `ASSISTANT_UI_OPPORTUNITIES.md`.
 - No broad redesign of Trevor's chat UI.
 - No dependency upgrades unless the research proves the currently installed assistant-ui version blocks
   accurate evaluation.
@@ -243,7 +271,9 @@ Goal: leave a reusable research deliverable that future implementation plans can
 | Runtime/cloud docs bias the plan toward replacing Trevor's source of truth | high | medium | D-002 keeps Trevor-owned protocol and storage as the baseline | research |
 | Existing assistant-ui wrappers are assumed correct because they already exist | medium | medium | M2 and M5 inspect code and running UI before recommendations | research |
 | assistant-ui unstable APIs churn after adoption | medium | medium | M3 includes stability as a rubric and M6 records API maturity | research |
-| The matrix misses a relevant docs area | medium | low | M1 starts from `llms.txt` and `llms-full.txt`, then M6 cross-checks the index | research |
+| The matrix misses a relevant docs area | high | medium | M1 treats `llms.txt` as a coverage ledger and M6 requires every docs page to be compared, grouped, or explicitly out of scope | research |
+| Performance opportunities stay too abstract to act on | high | medium | M3 requires each performance claim to name the Trevor surface, expected effect, evidence, and follow-up plan slice | research |
+| Later contrarian reviews lack enough context to challenge the report | medium | medium | M6 requires uncertainty notes and contrarian-review prompts in `ASSISTANT_UI_OPPORTUNITIES.md` | research |
 
 ## 7. Validation Commands
 
@@ -257,7 +287,7 @@ pnpm test:web
 
 For the research-only plan, `pnpm lint`, `pnpm typecheck`, and `pnpm test:web` are final confidence
 checks only if implementation or docs-link edits touch source or shared docs. The required completion
-gate is the final report plus planner convergence.
+gate is the repo-root `ASSISTANT_UI_OPPORTUNITIES.md` report plus planner convergence.
 
 ## 8. Decisions
 

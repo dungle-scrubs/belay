@@ -2,28 +2,32 @@
 
 **Plan:** `58.6-assistant-ui-pattern-audit`
 **Stage:** ready for research implementation
-**Current focus:** M1 - Documentation Corpus Map (3/3)
+**Current focus:** M1 - Documentation Corpus Map (4/4)
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
-| Current-cutoff tasks (total) | 29 |
+| Current-cutoff tasks (total) | 32 |
 | Checked (done) | 0 |
-| Current-cutoff blockers (unchecked) | 29 |
+| Current-cutoff blockers (unchecked) | 32 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
 ## Current Cutoff
 
-### M1 - Documentation Corpus Map (3/3)
+### M1 - Documentation Corpus Map (4/4)
 
 - [ ] RED: Create an audit worksheet under this plan's `artifacts/` directory with the categories
-      from `llms.txt` and `llms-full.txt`, explicitly excluding virtualization by reference to plan
-      58.4.
-- [ ] GREEN: Read the relevant official markdown pages and summarize each pattern in one row with
-      source URL, API/package names, maturity/stability notes, and whether it is UI-only, runtime,
-      persistence, protocol, tool, or cloud.
+      from `llms.txt` and `llms-full.txt`, explicitly excluding virtualization adoption by reference
+      to plan 58.4 while still noting any non-virtualization performance lessons from the
+      virtualization docs.
+- [ ] GREEN: Read the official markdown pages deeply enough to classify every `llms.txt` entry. Each
+      entry must either receive its own comparison row, be grouped into a named comparison family, or
+      be marked out of scope with a reason.
+- [ ] GREEN: Summarize each compared pattern with source URL, API/package names, maturity/stability
+      notes, performance claims or implications, and whether it is UI-only, runtime, persistence,
+      protocol, tool, performance, or cloud.
 - [ ] REFACTOR: Merge duplicate docs rows where a guide, primitive, UI component, and API reference
       all describe the same adoption decision.
 
@@ -39,12 +43,16 @@
       model selection, session/thread list, diagnostics, MCP, delegation/tangents, and future-only
       surfaces.
 
-### M3 - Case-By-Case Adoption Recommendations (5/5)
+### M3 - Case-By-Case Adoption Recommendations (6/6)
 
 - [ ] RED: Add an explicit verdict rubric to the worksheet: source-of-truth fit, local-first fit,
-      accessibility, testability, bundle/runtime cost, API stability, and migration blast radius.
+      accessibility, testability, bundle/runtime cost, streaming and scroll performance, reconnection
+      or resumability behavior, API stability, and migration blast radius.
 - [ ] GREEN: Fill the adoption matrix for every row in section 3 with the five-way verdict and
       rationale.
+- [ ] GREEN: For every high-value assistant-ui capability, especially performance-related
+      capabilities, state why Trevor should adopt, adapt, keep, defer, or reject it. Tie each
+      performance claim to a concrete Trevor surface and expected effect.
 - [ ] GREEN: For every `adopt` or `adapt` verdict, add a follow-up candidate with a proposed numbered
       plan title, dependency, and smallest shippable slice.
 - [ ] GREEN: For every `reject` verdict, state the architectural reason so it is not reopened as
@@ -76,10 +84,13 @@
 
 ### M6 - Final Report And Plan Closure (5/5)
 
-- [ ] RED: Add a final report under `artifacts/assistant-ui-pattern-audit.md` with the full matrix,
-      ranked recommendations, rejected patterns, deferred patterns, and source links.
-- [ ] GREEN: Cross-check the report against the assistant-ui docs index so no relevant pattern
-      category is missing except virtualization.
+- [ ] RED: Add the final report at repo root as `ASSISTANT_UI_OPPORTUNITIES.md` with the full matrix,
+      ranked recommendations, rejected patterns, deferred patterns, performance opportunities,
+      source links, uncertainty notes, and contrarian-review prompts for later model passes.
+- [ ] GREEN: Cross-check the report against the assistant-ui docs index so every docs page is
+      accounted for as compared, grouped, or explicitly out of scope. Virtualization adoption remains
+      delegated to plan 58.4, but broader performance lessons from that docs area must still be
+      recorded.
 - [ ] GREEN: Cross-check report recommendations against Trevor code/plans so every verdict has local
       evidence.
 - [ ] GREEN: Record follow-up plan candidates in the progress report's accepted/deferred section.
@@ -88,7 +99,12 @@
 
 ## Current Cutoff Gate
 
-- [ ] The final report includes every relevant assistant-ui docs category except thread virtualization.
+- [ ] The final report exists at repo root as `ASSISTANT_UI_OPPORTUNITIES.md`.
+- [ ] The final report accounts for every assistant-ui docs page from `llms.txt` as compared,
+      grouped, or explicitly out of scope.
+- [ ] The final report includes a dedicated performance opportunities section covering rendering,
+      streaming, state management, reconnection/resumability, persistence, bundle/runtime cost, and
+      scheduling where assistant-ui has relevant docs.
 - [ ] Every recommendation cites at least one assistant-ui source and one Trevor source, plan, or
       explicit `no current surface` finding.
 - [ ] Every pattern has exactly one verdict: `adopt`, `adapt`, `keep Trevor-owned`, `defer`, or
@@ -99,6 +115,7 @@
       evaluated against Trevor's local-first protocol/storage ownership rather than treated as generic
       conveniences.
 - [ ] Plan 58.4 remains the sole owner of assistant-ui thread virtualization.
+- [ ] The report preserves uncertainty and contrarian-review prompts for later model passes.
 - [ ] Running-UI inspection has either confirmed the high-leverage recommendations or corrected them.
 - [ ] Planner progress and convergence checks pass.
 
