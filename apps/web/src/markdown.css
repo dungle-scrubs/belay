@@ -351,6 +351,38 @@
   max-width: none;
 }
 
+.trevor-mermaid__svg--fullscreen {
+  min-width: max-content;
+}
+
+.trevor-mermaid__fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  background: hsl(var(--background));
+}
+
+.trevor-mermaid__fullscreen-toolbar {
+  display: flex;
+  min-height: 2.5rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid hsl(var(--border));
+  background: hsl(var(--smui-surface-1));
+  padding: 0.35rem 0.5rem 0.35rem 0.75rem;
+}
+
+.trevor-mermaid__fullscreen-canvas {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+  background: hsl(var(--background));
+}
+
 .trevor-mermaid__error {
   display: flex;
   flex-direction: column;

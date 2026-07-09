@@ -1,6 +1,6 @@
-import { useBoolean } from "ahooks";
+import { useBoolean, useEventListener } from "ahooks";
 import DOMPurify from "dompurify";
-import { Code2, Copy, RotateCcw, ZoomIn, ZoomOut } from "lucide-react";
+import { Code2, Copy, Maximize2, RotateCcw, X, ZoomIn, ZoomOut } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { copyText } from "@/lib/clipboard";
@@ -58,6 +58,8 @@ const MERMAID_THEME_FALLBACKS = {
   smuiSurface1: "#21252e",
   smuiSurface2: "#292e38",
 } as const;
+
+const MERMAID_RENDER_DEBOUNCE_MS = 350;
 
 function currentDocumentStyles(): Pick<CSSStyleDeclaration, "getPropertyValue"> | null {
   if (typeof window === "undefined" || typeof document === "undefined") {
@@ -229,12 +231,32 @@ export function MermaidBlock({
   );
   const [state, setState] = useState<RenderState>({ status: "loading" });
   const [sourceOpen, { toggle: toggleSource }] = useBoolean(false);
+  const [fullscreenOpen, { setFalse: closeFullscreen, setTrue: openFullscreen }] =
+    useBoolean(false);
   const [zoom, setZoom] = useState(1);
   const svgStyle: MermaidSvgStyle = useMemo(() => ({ "--trevor-mermaid-zoom": zoom }), [zoom]);
 
+  useEventListener(
+    "keydown",
+    (event) => {
+      if (event.key === "Escape") {
+        closeFullscreen();
+      }
+    },
+    {
+      enable: fullscreenOpen,
+      target: () => document,
+    },
+  );
+
+  useEffect(() => {
+    if (state.status !== "rendered" && fullscreenOpen) {
+      closeFullscreen();
+    }
+  }, [closeFullscreen, fullscreenOpen, state.status]);
+
   useEffect(() => {
     let cancelled = false;
-    setState({ status: "loading" });
     const timer = window.setTimeout(() => {
       renderDiagram(renderId, source)
         .then((svg) => {
@@ -247,7 +269,7 @@ export function MermaidBlock({
             setState({ status: "error", message: messageFromError(error) });
           }
         });
-    }, 0);
+    }, MERMAID_RENDER_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
@@ -304,6 +326,16 @@ export function MermaidBlock({
           >
             <ZoomIn aria-hidden="true" />
           </button>
+          {state.status === "rendered" ? (
+            <button
+              type="button"
+              aria-label="Open Mermaid diagram fullscreen"
+              title="Open Mermaid diagram fullscreen"
+              onClick={openFullscreen}
+            >
+              <Maximize2 aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
       </div>
       <div className="trevor-mermaid__canvas" aria-live="polite">
@@ -337,6 +369,60 @@ export function MermaidBlock({
           {source}
         </pre>
       )}
+      {state.status === "rendered" && fullscreenOpen ? (
+        <div
+          className="trevor-mermaid__fullscreen"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mermaid diagram fullscreen viewer"
+        >
+          <div className="trevor-mermaid__fullscreen-toolbar">
+            <span className="trevor-mermaid__label">Mermaid</span>
+            <div className="trevor-mermaid__actions">
+              <button
+                type="button"
+                aria-label="Zoom fullscreen Mermaid diagram out"
+                title="Zoom out"
+                onClick={() => setZoom((value) => Math.max(0.6, Number((value - 0.1).toFixed(1))))}
+              >
+                <ZoomOut aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label="Reset fullscreen Mermaid diagram zoom"
+                title="Reset zoom"
+                onClick={() => setZoom(1)}
+              >
+                <RotateCcw aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label="Zoom fullscreen Mermaid diagram in"
+                title="Zoom in"
+                onClick={() => setZoom((value) => Math.min(1.8, Number((value + 0.1).toFixed(1))))}
+              >
+                <ZoomIn aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                aria-label="Close Mermaid fullscreen viewer"
+                title="Close"
+                onClick={closeFullscreen}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+          <div className="trevor-mermaid__fullscreen-canvas">
+            <div
+              className="trevor-mermaid__svg trevor-mermaid__svg--fullscreen"
+              style={svgStyle}
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: Mermaid SVG is sanitized with DOMPurify before insertion.
+              dangerouslySetInnerHTML={{ __html: state.svg }}
+            />
+          </div>
+        </div>
+      ) : null}
     </figure>
   );
 }

@@ -391,6 +391,7 @@ test("an ordinary assistant message still renders as markdown (anomaly path unto
 test("an assistant transcript message routes explicit Mermaid diagrams inline", () => {
   renderRow(
     assistant({
+      done: true,
       text: `Here is the flow:
 
 \`\`\`mermaid
@@ -410,6 +411,22 @@ const ordinary = true;
   // mermaid fence keeps its diagram route.
   const tsCode = document.querySelector("pre code.language-ts");
   assert.ok(tsCode?.textContent?.includes("const ordinary = true;"));
+});
+
+test("a streaming assistant transcript message keeps Mermaid fences as ordinary code", () => {
+  const { container } = renderRow(
+    assistant({
+      done: false,
+      text: `Still writing:
+
+\`\`\`mermaid
+flowchart LR
+  A -->`,
+    }),
+  );
+
+  assert.equal(screen.queryByTestId("mermaid-block"), null);
+  assert.ok(container.querySelector("pre code.language-mermaid"));
 });
 
 test("a user transcript message keeps Mermaid fences as ordinary code", () => {

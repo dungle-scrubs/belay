@@ -599,7 +599,8 @@ export function TranscriptRowView({
   return (
     <div data-message-id={message.id} className="flex flex-col gap-3 pl-3.5">
       {thinking ? <ReasoningTrace content={thinking} streaming={reasoningStreaming} /> : null}
-      {anomalyNote ?? (message.text ? <MarkdownBody text={message.text} mermaid /> : null)}
+      {anomalyNote ??
+        (message.text ? <MarkdownBody text={message.text} mermaid={message.done} /> : null)}
       {overflowNote}
       {errorNote}
       {cancelledNote}

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, test, vi } from "vitest";
 import {
   createMermaidRenderConfig,
@@ -9,6 +9,7 @@ import {
 } from "./mermaid-block";
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   for (const tokenName of [
     "--background",
@@ -190,6 +191,85 @@ test("rerendering replaces the prior SVG instead of duplicating nodes", async ()
   assert.ok(await screen.findByText("Second"));
   assert.equal(container.querySelectorAll(".trevor-mermaid__svg svg").length, 1);
   assert.equal(screen.queryByText("First"), null);
+});
+
+test("debounces rapidly changing Mermaid source so streaming text does not thrash the renderer", async () => {
+  vi.useFakeTimers();
+  const renderDiagram = vi.fn<MermaidRender>().mockResolvedValue(validSvg);
+
+  const { rerender } = render(
+    <MermaidBlock
+      source={`flowchart TB
+  A -->`}
+      renderDiagram={renderDiagram}
+    />,
+  );
+
+  await act(async () => {
+    vi.advanceTimersByTime(200);
+  });
+  rerender(
+    <MermaidBlock
+      source={`flowchart TB
+  A --> B`}
+      renderDiagram={renderDiagram}
+    />,
+  );
+  await act(async () => {
+    vi.advanceTimersByTime(200);
+  });
+  rerender(
+    <MermaidBlock
+      source={`flowchart TB
+  A --> B
+  B --> C`}
+      renderDiagram={renderDiagram}
+    />,
+  );
+
+  await act(async () => {
+    vi.advanceTimersByTime(349);
+  });
+  assert.equal(renderDiagram.mock.calls.length, 0);
+
+  await act(async () => {
+    vi.advanceTimersByTime(1);
+  });
+
+  assert.equal(renderDiagram.mock.calls.length, 1);
+  assert.equal(
+    renderDiagram.mock.calls[0]?.[1],
+    `flowchart TB
+  A --> B
+  B --> C`,
+  );
+});
+
+test("opens rendered Mermaid SVG in a fullscreen zoom viewer", async () => {
+  const renderDiagram = vi.fn<MermaidRender>().mockResolvedValue(validSvg);
+
+  render(
+    <MermaidBlock
+      source={`graph TD
+  A-->B`}
+      renderDiagram={renderDiagram}
+    />,
+  );
+
+  await screen.findByText("Rendered flow");
+  fireEvent.click(screen.getByLabelText("Open Mermaid diagram fullscreen"));
+
+  assert.ok(screen.getByRole("dialog", { name: "Mermaid diagram fullscreen viewer" }));
+  assert.ok(screen.getByLabelText("Zoom fullscreen Mermaid diagram in"));
+
+  fireEvent.keyDown(document, { key: "Escape" });
+  assert.equal(screen.queryByRole("dialog", { name: "Mermaid diagram fullscreen viewer" }), null);
+
+  fireEvent.click(screen.getByLabelText("Open Mermaid diagram fullscreen"));
+  assert.ok(screen.getByRole("dialog", { name: "Mermaid diagram fullscreen viewer" }));
+
+  fireEvent.click(screen.getByLabelText("Close Mermaid fullscreen viewer"));
+  assert.equal(screen.queryByRole("dialog", { name: "Mermaid diagram fullscreen viewer" }), null);
 });
 
 test("reduced-motion users still get a static rendered diagram", async () => {
