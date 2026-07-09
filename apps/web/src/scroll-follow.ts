@@ -30,6 +30,7 @@ export type PinReason =
   | "init"
   | "user-gesture-up"
   | "unattributed-scroll-up"
+  | "layout-shift"
   | "user-return-to-bottom"
   | "jump"
   | "submit";
@@ -103,6 +104,11 @@ export interface ScrollFollowController {
   /** A scroll event from the element, with its current geometry. Reconciles self-writes, unpins on an
    *  unattributed upward move, and re-pins on a genuine user arrival at the bottom. */
   scrolled(geo: ScrollGeometry): void;
+  /** A known app-owned layout change is about to move content. While pinned, suppress one unmatched
+   *  upward scroll event so a collapse/re-measure cannot masquerade as the user reading upward. */
+  layoutShift(): void;
+  /** Clears an unused layout-shift suppression window after the current browser layout turn. */
+  clearLayoutShift(): void;
   /** An explicit re-pin command: the jump-to-bottom affordance or a prompt submit. Re-pins from anywhere. */
   repin(reason: "jump" | "submit"): void;
   /** Ask whether a programmatic scroll write may run, and record it for self-write recognition. */
@@ -161,6 +167,7 @@ export function createScrollFollowController(
   // Writers already named in the dev log for the current unpinned span, so each is warned about at most
   // once (a denied follow write is EXPECTED while reading; we just want the writer named, not a flood).
   const warnedWriters = new Set<ScrollWriter>();
+  let suppressNextUpwardScroll = false;
 
   const listeners = new Set<() => void>();
   const notify = (): void => {
@@ -175,6 +182,7 @@ export function createScrollFollowController(
     }
     pinned = next;
     lastReason = reason;
+    suppressNextUpwardScroll = false;
     if (pinned) {
       // Fresh pinned state: the per-span dev-log dedup, the stale last denial, and any leftover ledger
       // entries all belonged to the unpinned span that just ended.
@@ -245,6 +253,10 @@ export function createScrollFollowController(
     const movedDown = geo.scrollTop > previous + EPSILON_PX;
 
     if (pinned) {
+      if (movedUp && suppressNextUpwardScroll) {
+        suppressNextUpwardScroll = false;
+        return;
+      }
       // The catch-all unpin: an unattributed UPWARD scroll that leaves the bottom band (keyboard
       // PageUp, touch drag, a scrollbar where one is shown). Both conditions matter: a follow write
       // momentarily trailing a fast stream moves DOWN (never trips this), and a sub-band nudge that
@@ -266,6 +278,18 @@ export function createScrollFollowController(
 
   const repin = (reason: "jump" | "submit"): void => {
     setPinned(true, reason);
+  };
+
+  const layoutShift = (): void => {
+    if (!pinned) {
+      return;
+    }
+    lastReason = "layout-shift";
+    suppressNextUpwardScroll = true;
+  };
+
+  const clearLayoutShift = (): void => {
+    suppressNextUpwardScroll = false;
   };
 
   const requestWrite = (
@@ -332,6 +356,8 @@ export function createScrollFollowController(
       };
     },
     gesture,
+    clearLayoutShift,
+    layoutShift,
     scrolled,
     repin,
     requestWrite,

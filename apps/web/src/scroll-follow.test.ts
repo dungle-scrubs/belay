@@ -50,6 +50,38 @@ describe("scroll-follow: unpin is direction-based and synchronous", () => {
     assert.equal(c.snapshot().lastReason, "unattributed-scroll-up");
   });
 
+  test("a known pinned layout shift does not unpin on its own upward scroll", () => {
+    const c = createScrollFollowController();
+    c.scrolled(geo(0)); // at the bottom, pinned
+    assert.equal(c.isPinned(), true);
+
+    c.layoutShift();
+    c.scrolled(geo(300));
+
+    assert.equal(
+      c.isPinned(),
+      true,
+      "the collapse/re-measure scroll is app-owned, not user intent",
+    );
+    assert.equal(c.snapshot().lastReason, "layout-shift");
+
+    c.scrolled(geo(600));
+    assert.equal(c.isPinned(), false, "only the single app-owned upward scroll is suppressed");
+    assert.equal(c.snapshot().lastReason, "unattributed-scroll-up");
+  });
+
+  test("clearing an unused layout-shift window restores normal upward unpin", () => {
+    const c = createScrollFollowController();
+    c.scrolled(geo(0));
+
+    c.layoutShift();
+    c.clearLayoutShift();
+    c.scrolled(geo(300));
+
+    assert.equal(c.isPinned(), false);
+    assert.equal(c.snapshot().lastReason, "unattributed-scroll-up");
+  });
+
   test("a downward gesture does not, by itself, re-pin", () => {
     const c = createScrollFollowController();
     c.gesture("up");

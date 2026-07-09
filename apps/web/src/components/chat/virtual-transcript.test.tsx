@@ -57,6 +57,34 @@ function assistantRow(id: string, text: string): TranscriptRow {
   };
 }
 
+function thinkingAssistantRow({
+  done,
+  id,
+  text = "",
+  thinking,
+}: {
+  readonly done: boolean;
+  readonly id: string;
+  readonly text?: string;
+  readonly thinking: string;
+}): TranscriptRow {
+  return {
+    kind: "message",
+    id: `message:${id}`,
+    compactAbove: false,
+    message: {
+      kind: "assistant",
+      id,
+      runId: "r1",
+      text,
+      thinking,
+      done,
+      warm: false,
+      model: "glm",
+    },
+  };
+}
+
 /** Wrap a controller so a test can count the writes it APPROVES, by class (the "did it auto-follow /
  *  did it compensate?" signal that survives jsdom having no real geometry - where a yank and a no-op
  *  top-anchored compensation both target scrollTop 0). */
@@ -356,6 +384,54 @@ describe("VirtualTranscript", () => {
     });
 
     assert.ok(follows.follow > 0, "a pinned append must follow the live edge");
+  });
+
+  test("while pinned, a same-row thinking collapse and answer start follows the live edge", async () => {
+    const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const controller = createScrollFollowController();
+    const follows = trackApprovedWrites(controller);
+    const rows = [
+      userRow(1),
+      thinkingAssistantRow({
+        id: "a-live",
+        thinking: "checking the repo\nreading the transcript\nchoosing the fix",
+        done: false,
+      }),
+    ];
+    const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
+    await waitFor(() => {
+      assert.equal(
+        container
+          .querySelector("[data-transcript-virtual-list]")
+          ?.getAttribute("data-transcript-ready"),
+        "true",
+      );
+    });
+    follows.follow = 0;
+
+    await act(async () => {
+      rerender(
+        <Harness
+          rows={[
+            rows[0] as TranscriptRow,
+            thinkingAssistantRow({
+              id: "a-live",
+              thinking: "checking the repo\nreading the transcript\nchoosing the fix",
+              text: "Yes. The answer is now streaming.",
+              done: true,
+            }),
+          ]}
+          controller={controller}
+        />,
+      );
+      await raf();
+      await raf();
+    });
+
+    assert.ok(
+      follows.follow > 0,
+      "settling the existing assistant row must keep a pinned transcript on the live edge",
+    );
   });
 
   test("the settle loop terminates on user intent instead of force-scrolling to the edge", async () => {

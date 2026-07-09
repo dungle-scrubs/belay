@@ -327,6 +327,17 @@ export function VirtualTranscript({
       previousRowsRef.current !== null &&
       (previousRowsRef.current !== rows || previousTotalSizeRef.current !== totalSize);
 
+    let clearLayoutShiftFrame: number | null = null;
+    if (
+      contentChanged &&
+      pinned &&
+      previousTotalSizeRef.current !== null &&
+      totalSize < previousTotalSizeRef.current - ANCHOR_EPSILON_PX
+    ) {
+      controller.layoutShift();
+      clearLayoutShiftFrame = requestAnimationFrame(() => controller.clearLayoutShift());
+    }
+
     if (contentChanged && !pinned && scrollElement) {
       let nextTop: number | null = null;
       if (previousAnchor) {
@@ -364,6 +375,12 @@ export function VirtualTranscript({
     previousRowsRef.current = rows;
     previousScrollTopRef.current = scrollElement?.scrollTop ?? null;
     previousTotalSizeRef.current = totalSize;
+    return () => {
+      if (clearLayoutShiftFrame !== null) {
+        cancelAnimationFrame(clearLayoutShiftFrame);
+        controller.clearLayoutShift();
+      }
+    };
   });
 
   useLayoutEffect(() => {
