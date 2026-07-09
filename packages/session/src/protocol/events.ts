@@ -105,8 +105,9 @@ export type TurnStopCause = KnownTurnStopCause | (string & {});
 export const TURN_STOP_CAUSE_DESCRIPTIONS = {
   /** The model produced an ordinary final answer. */
   answered: "The model produced an ordinary final answer.",
-  /** The prompt is close enough to the context window that the host synthesized before more tools. */
-  context_pressure: "The prompt approached the context window.",
+  /** The prompt was close enough to the context window that the host stopped tools and wrote a final answer. */
+  context_pressure:
+    "The prompt approached the context window; tools stopped and a final answer was written.",
   /** The high runaway circuit breaker fired before context pressure. */
   step_backstop: "The high step circuit breaker fired.",
   /** The host saw repeated tool cycles without enough progress. */

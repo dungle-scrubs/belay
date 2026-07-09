@@ -47,7 +47,7 @@ function lastTurnNextAction(cause: string | undefined): DoctorNextAction | undef
     case "step_backstop":
       return { label: "Continue with a follow-up prompt or narrow the task" };
     case "context_pressure":
-      return { label: "Let the synthesized answer finish, then compact or continue" };
+      return { label: "Continue chatting, or run /compact for more tool room" };
     case "loop_stalled":
       return { label: "Inspect repeated tool calls and continue with a narrower instruction" };
     case "provider_protocol_anomaly":

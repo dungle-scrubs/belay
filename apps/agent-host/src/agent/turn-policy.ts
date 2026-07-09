@@ -169,7 +169,7 @@ function decideTermination(obs: TurnPolicyObservation): TurnTerminationDecision 
       {
         cause: "context_pressure",
         action: "synthesized",
-        summary: `Context pressure reached ${(analysis.pressure * 100).toFixed(1)}%; synthesizing before opening more tools.`,
+        summary: `Context pressure reached ${(analysis.pressure * 100).toFixed(1)}%; this turn stopped opening tools and wrote a final answer from what was already gathered.`,
         steps: obs.steps,
         ...(analysis.context ? { context: analysis.context } : {}),
       },

@@ -26,6 +26,14 @@ test("context pressure returns context_pressure and a synthesize action", () => 
   assert.equal(result.type === "synthesize" && result.stop.cause, "context_pressure");
   assert.equal(result.type === "synthesize" && result.stop.action, "synthesized");
   assert.equal(result.type === "synthesize" && result.stop.context?.pressure, 0.82);
+  assert.match(
+    result.type === "synthesize" ? result.stop.summary : "",
+    /stopped opening tools and wrote a final answer/,
+  );
+  assert.doesNotMatch(
+    result.type === "synthesize" ? result.stop.summary : "",
+    /synthesizing before/,
+  );
 });
 
 test("low-context max-step backstop pauses instead of reporting an ordinary answer", () => {
