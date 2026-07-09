@@ -1,4 +1,5 @@
 import type { SessionSummary, WorktreeSummary } from "@trevor/session";
+import { sessionProjectPath } from "../session/session-root";
 
 /**
  * The project sidebar read model (plan 58 M5 + plan 58.2): a pure grouping of active sessions under
@@ -93,13 +94,7 @@ export function buildWorktreeSessionMap(
 /** The default number of sessions shown per project before a "Show more" affordance (M6). */
 export const SESSION_CAP = 5;
 
-/**
- * Resolves a session's project path (plan 58 M3): the durable `projectPath` marker wins, then
- * `workspace`, then `cwd`, then null for ungrouped sessions. Pure; null means "no project binding".
- */
-export function sessionProjectPath(summary: SessionSummary): string | null {
-  return summary.projectPath ?? summary.workspace ?? summary.cwd ?? null;
-}
+export { sessionProjectPath };
 
 /** The last path segment of a canonical path (the project's default display name). Browser-safe: no
  *  `node:path` (the web bundle stays free of node-only modules); mirrors `workspaceBasename`. */

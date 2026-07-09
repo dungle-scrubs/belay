@@ -4,6 +4,7 @@ import {
   type LoopControl,
   type ModelRef,
   PRODUCER_IDS,
+  type SessionSummary,
   SUPERVISOR_SESSION_ID,
   tangentsOf,
 } from "@trevor/session";
@@ -50,6 +51,7 @@ import { isNewSessionCommand, NEW_SESSION_COMMAND } from "@/new-session/new-sess
 import { NewSessionPicker } from "@/new-session/new-session-picker";
 import { useLaunch } from "@/new-session/use-launch";
 import { useSupervisor } from "@/new-session/use-supervisor";
+import { type ResumeAction, resumeActionForSession } from "@/session/resume-policy";
 import { isComposerSubmitKey } from "@/shortcuts/composer-submit";
 import { formatChord } from "@/shortcuts/keys";
 import { type ShortcutId, shortcut } from "@/shortcuts/registry";
@@ -409,6 +411,8 @@ export function App() {
   // seq 0, so a subscription opened the instant the user clicks Start still catches the durable result.
   const [startRequested, setStartRequested] = useState(false);
   const [freshLaunchSessionId, setFreshLaunchSessionId] = useState<string | null>(null);
+  const [exactLaunchSessionId, setExactLaunchSessionId] = useState<string | null>(null);
+  const autoStartedSessionRef = useRef<string | null>(null);
   const startControl = useSessionWithTransport(
     sessionTransport,
     startRequested ? SUPERVISOR_SESSION_ID : null,
@@ -417,6 +421,10 @@ export function App() {
     controlEvents: startControl.events,
     onNavigate: navigateToSession,
   });
+  const selectedSummary = useMemo(
+    () => modal.inventory.sessions.find((summary) => summary.sessionId === target) ?? null,
+    [modal.inventory.sessions, target],
+  );
   // The known root, derived ONCE (plan 44.3 M1.5) from the viewed session's own host announcement (a
   // dead/stale host still latches its workspace/cwd), then the inventory summary, then the supervisor's
   // projects mapping. Only a resolvable root turns the no-host hint into a "start host" affordance;
@@ -427,10 +435,10 @@ export function App() {
     () =>
       resolveKnownRoot({
         host,
-        summary: modal.inventory.sessions.find((s) => s.sessionId === target),
+        summary: selectedSummary ?? undefined,
         project: supervisor.recents.find((p) => p.sessionId === target),
       }),
-    [host, modal.inventory.sessions, supervisor.recents, target],
+    [host, selectedSummary, supervisor.recents, target],
   );
   const onStartHost = useCallback(() => {
     if (knownRoot === null) {
@@ -439,6 +447,14 @@ export function App() {
     setStartRequested(true);
     sessionLaunch.launch(knownRoot, { sessionId: target });
   }, [knownRoot, sessionLaunch.launch, target]);
+  const launchExactSession = useCallback(
+    (root: string, sessionId: string) => {
+      setExactLaunchSessionId(sessionId);
+      setStartRequested(true);
+      sessionLaunch.launch(root, { sessionId });
+    },
+    [sessionLaunch.launch],
+  );
   // `/new <path>` and `/cd <path>` (plan 58 M4): mint a FRESH session id (not the deterministic
   // projectSessionId) and launch a project-scoped session with a session.project marker. The
   // supervisor stamps the marker + touches the registry before spawning the host. Reuses the same
@@ -446,6 +462,7 @@ export function App() {
   const startFreshProjectSession = useCallback(
     (projectPath: string) => {
       const sessionId = crypto.randomUUID();
+      setExactLaunchSessionId(null);
       setFreshLaunchSessionId(sessionId);
       setStartRequested(true);
       sessionLaunch.launch(projectPath, { sessionId, projectPath });
@@ -463,6 +480,7 @@ export function App() {
   useEffect(() => {
     if (startRequested && host.present && !freshLaunchSessionId) {
       setStartRequested(false);
+      setExactLaunchSessionId(null);
       resetSessionLaunch();
     }
   }, [startRequested, host.present, freshLaunchSessionId, resetSessionLaunch]);
@@ -481,10 +499,15 @@ export function App() {
   useEffect(() => {
     if (launchTargetRef.current !== target) {
       launchTargetRef.current = target;
+      if (exactLaunchSessionId === target) {
+        return;
+      }
       setStartRequested(false);
+      setExactLaunchSessionId(null);
+      autoStartedSessionRef.current = null;
       resetSessionLaunch();
     }
-  }, [target, resetSessionLaunch]);
+  }, [exactLaunchSessionId, target, resetSessionLaunch]);
   // The project sidebar (plan 58 M6): a persistent supervisor subscription that fetches the project
   // registry list and dispatches project actions (add/rename/collapse/remove) whenever the sidebar is
   // open. Separate from the picker's useSupervisor (which gates on picker-open + owns the launch
@@ -503,6 +526,30 @@ export function App() {
     onNewSession: (projectKey) => startFreshProjectSession(projectKey),
     onArchiveSession: (sessionId) => void archiveSession(sessionId),
   });
+  const selectedResumeAction = useMemo(
+    () => (selectedSummary ? resumeActionForSession(selectedSummary, now) : null),
+    [now, selectedSummary],
+  );
+  const onSelectSidebarSession = useCallback(
+    (summary: SessionSummary) => {
+      navigateToSession(summary.sessionId);
+      if (autoStartedSessionRef.current === summary.sessionId) {
+        return;
+      }
+      const action = resumeActionForSession(summary, now);
+      if (action.kind === "auto-start") {
+        autoStartedSessionRef.current = summary.sessionId;
+        launchExactSession(action.root, action.sessionId);
+      }
+    },
+    [launchExactSession, navigateToSession, now],
+  );
+  const onResumeSelectedSession = useCallback(
+    (action: Extract<ResumeAction, { readonly kind: "manual" }>) => {
+      launchExactSession(action.root, action.sessionId);
+    },
+    [launchExactSession],
+  );
 
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
   // browser on an archived session; the main UI then gates sending behind an explicit unarchive.
@@ -1533,6 +1580,10 @@ export function App() {
         </span>
       ) : host.present ? (
         <span className="text-smui-yellow">● host starting…</span>
+      ) : selectedResumeAction?.kind === "manual" ||
+        selectedResumeAction?.kind === "auto-start" ||
+        selectedResumeAction?.kind === "unlaunchable" ? (
+        <span className="text-smui-yellow">● host offline</span>
       ) : (
         // No live host: the 44.3 recovery affordances. A launch in flight reads "restarting host…" when
         // a host was here before (a stale/dead host - `announcement !== null`) and "starting host…" for
@@ -1581,6 +1632,7 @@ export function App() {
           caret: composerCaret,
           onCaretChange: setComposerCaret,
           disabled: !sessionId,
+          disabledReason: "Resume host to continue",
           placeholder: `message ${activeLabel}… (/ for commands, @ for files, ! for shell)`,
           onExpand: () => editor.open({ text: draft, onConfirm: setDraft }),
           vimEnabled,
@@ -1695,7 +1747,7 @@ export function App() {
           // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
           // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
           // the durable log and replay on return); the row's activity bar shows it from the other view.
-          onSelect: navigateToSession,
+          onSelect: onSelectSidebarSession,
           onShowMore: projectSidebar.onShowMore,
           onAddProject: projectSidebar.onAddProject,
           onNewSession: projectSidebar.onNewSession,
@@ -1711,6 +1763,35 @@ export function App() {
           liveActivity: modal.sidebarLiveActivity,
           nowMs: now,
         }}
+        resumeHost={
+          selectedResumeAction?.kind === "manual" || selectedResumeAction?.kind === "auto-start"
+            ? sessionLaunch.launchState === "starting"
+              ? { phase: "starting", label: "Starting host..." }
+              : sessionLaunch.launchState === "failed" || sessionLaunch.error
+                ? {
+                    phase: "failed",
+                    error: sessionLaunch.error ?? "The host could not be started.",
+                    onRetry:
+                      selectedResumeAction.kind === "manual"
+                        ? () => onResumeSelectedSession(selectedResumeAction)
+                        : () =>
+                            launchExactSession(
+                              selectedResumeAction.root,
+                              selectedResumeAction.sessionId,
+                            ),
+                  }
+                : selectedResumeAction.kind === "manual"
+                  ? {
+                      phase: "manual",
+                      updatedAt: selectedResumeAction.updatedAt,
+                      nowMs: now,
+                      onResume: () => onResumeSelectedSession(selectedResumeAction),
+                    }
+                  : null
+            : selectedResumeAction?.kind === "unlaunchable"
+              ? { phase: "unlaunchable", updatedAt: selectedResumeAction.updatedAt, nowMs: now }
+              : null
+        }
         sessionName={sessionName}
         onTangent={openTangent}
         chooser={

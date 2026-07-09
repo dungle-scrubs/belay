@@ -9,6 +9,7 @@ import type { HostStatus } from "../../derive";
 import type { InventoryState } from "../../resume";
 import type { SessionStream } from "../../session/use-session";
 import { readOnlyToolBatches } from "../../transcript";
+import type { ResumeHostRowState } from "../chat/resume-host-row";
 import { PanelHost } from "./panel-host";
 
 /** Wraps in TooltipProvider (needed by ProjectLabel's Radix tooltip inside the sidebar). */
@@ -55,8 +56,9 @@ function PanelHostHarness(props: {
     readonly width?: number;
     readonly onResize?: (width: number) => void;
   };
+  readonly resumeHost?: ResumeHostRowState | null;
 }) {
-  const { onLoopControl, fileMenu, turnStatusHeader, tasks, sidebar } = props;
+  const { onLoopControl, fileMenu, turnStatusHeader, tasks, sidebar, resumeHost } = props;
   const composer = useComposer();
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -102,6 +104,7 @@ function PanelHostHarness(props: {
         commandPreview: null,
         caret: 0,
         disabled: false,
+        disabledReason: "Resume host to continue",
         fileMenu: {
           open: fileMenu?.open ?? false,
           matches: fileMenu?.matches ?? [],
@@ -191,9 +194,12 @@ function PanelHostHarness(props: {
         onUnqueue: vi.fn(),
         queue: [],
         toolBatches: readOnlyToolBatches([]),
-        transcript: [],
+        transcript: [
+          { kind: "user", id: "u1", text: "hello from history", artifacts: [], pastes: [] },
+        ],
         ...(turnStatusHeader ? { turnStatusHeader } : {}),
       }}
+      resumeHost={resumeHost}
     />
   );
 }
@@ -312,4 +318,60 @@ test("sidebar drag previews width locally and persists once on release", () => {
   expect(onResize).toHaveBeenCalledTimes(1);
   expect(onResize).toHaveBeenCalledWith(442);
   expect(container.querySelector("[data-transcript-scroll]")).toBeTruthy();
+});
+
+test("manual resume row appears above the composer without hiding transcript content", () => {
+  renderWithTooltip(
+    <PanelHostHarness
+      onLoopControl={vi.fn()}
+      resumeHost={{
+        phase: "manual",
+        updatedAt: new Date(2026, 6, 8, 12).toISOString(),
+        nowMs: new Date(2026, 6, 9, 12).getTime(),
+        onResume: vi.fn(),
+      }}
+    />,
+  );
+
+  expect(screen.getByText("hello from history")).toBeTruthy();
+  expect(screen.getByText("Resume this conversation")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+  expect(screen.getByRole("textbox").getAttribute("disabled")).not.toBeNull();
+});
+
+test("resume row renders starting, failed retry, and unlaunchable states", () => {
+  const retry = vi.fn();
+  const { rerender } = renderWithTooltip(
+    <PanelHostHarness
+      onLoopControl={vi.fn()}
+      resumeHost={{ phase: "starting", label: "Starting host..." }}
+    />,
+  );
+  expect(screen.getByText("Starting host...")).toBeTruthy();
+
+  rerender(
+    <TooltipProvider>
+      <PanelHostHarness
+        onLoopControl={vi.fn()}
+        resumeHost={{ phase: "failed", error: "Launch failed", onRetry: retry }}
+      />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(retry).toHaveBeenCalledTimes(1);
+
+  rerender(
+    <TooltipProvider>
+      <PanelHostHarness
+        onLoopControl={vi.fn()}
+        resumeHost={{
+          phase: "unlaunchable",
+          updatedAt: new Date(2026, 6, 9, 12).toISOString(),
+          nowMs: new Date(2026, 6, 9, 13).getTime(),
+        }}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.getByText("No launch root is available")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
 });

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { seedFileIndex, storeTransport } from "./lane-b-fixtures";
+import { seedFileIndex, seedProjectPath, storeTransport } from "./lane-b-fixtures";
 
 /**
  * Lane B EZE (plan 30 M5): the REAL app against the hermetic store, with a workspace file index seeded
@@ -12,6 +12,7 @@ test("type @, fuzzy-find a file, insert the mention, submit, and see it in the t
 }) => {
   const transport = storeTransport();
   const sessionId = `mention-${test.info().workerIndex}-${Date.now()}`;
+  await seedProjectPath(transport, sessionId, "/Users/kevin/dev/trevor");
   await seedFileIndex(transport, sessionId, [
     "apps/web/src/app.tsx",
     "apps/web/src/hooks/use-composer.ts",
@@ -20,7 +21,7 @@ test("type @, fuzzy-find a file, insert the mention, submit, and see it in the t
 
   await page.goto(`/?session=${sessionId}`);
 
-  const composer = page.getByRole("textbox");
+  const composer = page.getByRole("textbox", { name: /message/i });
   await composer.click();
   await composer.pressSequentially("@use");
 

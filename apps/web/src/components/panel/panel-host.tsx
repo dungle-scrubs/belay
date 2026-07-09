@@ -8,6 +8,7 @@ import type {
   LoopInventoryRow,
   ProviderQuestionAnswer,
   SessionActivity,
+  SessionSummary,
   TaskSnapshot,
   WorktreeSummary,
 } from "@trevor/session";
@@ -36,6 +37,7 @@ import { FILE_MENTION_LISTBOX_ID, FileMentionMenu } from "@/components/chat/file
 import { LoopInventory } from "@/components/chat/loop/loop-inventory";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
+import { ResumeHostRow, type ResumeHostRowState } from "@/components/chat/resume-host-row";
 import { TurnStatusHeader } from "@/components/chat/turn-status-header";
 import { type TranscriptRowConfig, VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { RowChooserModal } from "@/components/command-modal";
@@ -143,6 +145,7 @@ export interface ComposeWiring {
   /** Report the composer caret up to App, so it can detect the active `@` token (mention menu). */
   readonly onCaretChange: (caret: number) => void;
   readonly disabled: boolean;
+  readonly disabledReason?: string;
   readonly placeholder: string;
   /** Open the current draft in the full-surface prompt editor (02.12). */
   readonly onExpand: () => void;
@@ -222,7 +225,7 @@ export interface SidebarBinding {
   /** Toggle a project's collapsed state (persists via the supervisor). */
   readonly onToggleProject: (key: string) => void;
   /** Select (navigate to) a session. */
-  readonly onSelect: (sessionId: string) => void;
+  readonly onSelect: (summary: SessionSummary) => void;
   /** Reveal more sessions under a project (past SESSION_CAP). */
   readonly onShowMore: (key: string) => void;
   /** Add a project (opens the OS folder picker via the supervisor). */
@@ -306,6 +309,7 @@ export function PanelHost(props: {
     readonly onReject: (handoffId: string) => void;
     readonly onEdit: (handoffId: string, prompt: string) => void;
   };
+  resumeHost?: ResumeHostRowState | null;
 }) {
   const {
     composer,
@@ -535,6 +539,8 @@ export function PanelHost(props: {
 
         <QueuedPrompts queue={queue} onUnqueue={onUnqueue} />
 
+        {props.resumeHost ? <ResumeHostRow state={props.resumeHost} /> : null}
+
         {/* Pinned bottom: composer, then a two-column footer (status + model controls).
           Files dropped anywhere here upload as attachments. */}
         {/* biome-ignore lint/a11y/noStaticElementInteractions: passive drop target; the
@@ -614,8 +620,12 @@ export function PanelHost(props: {
                 onKeyDown={compose.onInputKeyDown}
                 caret={compose.caret}
                 onCaretChange={compose.onCaretChange}
-                disabled={compose.disabled}
-                placeholder={compose.placeholder}
+                disabled={compose.disabled || Boolean(props.resumeHost)}
+                placeholder={
+                  props.resumeHost
+                    ? (compose.disabledReason ?? "Resume host to continue")
+                    : compose.placeholder
+                }
                 onExpand={compose.onExpand}
                 vimEnabled={compose.vimEnabled}
                 // Either composer menu owning the keys suspends the Vim layer (arrows/Enter/Escape).

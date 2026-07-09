@@ -39,7 +39,7 @@ export interface ProjectSidebarProps {
   /** Toggle a project's collapsed state (persisted by the live owner). */
   readonly onToggleProject: (key: string) => void;
   /** Select (navigate to) a session. */
-  readonly onSelectSession: (sessionId: string) => void;
+  readonly onSelectSession: (summary: SessionSummary) => void;
   /** Reveal more sessions under a project (past {@link SESSION_CAP}). */
   readonly onShowMore: (key: string) => void;
   /** The active search query (echoed into the search field; drives filtering the owner does). */
@@ -109,7 +109,7 @@ function SessionRow({
   activity: SessionActivity;
   selected: boolean;
   nowMs: number;
-  onSelect: (sessionId: string) => void;
+  onSelect: (summary: SessionSummary) => void;
   onArchiveSession?: (sessionId: string) => void;
   renaming: boolean;
   onStartRename?: () => void;
@@ -139,7 +139,7 @@ function SessionRow({
       ) : (
         <button
           type="button"
-          onClick={() => onSelect(summary.sessionId)}
+          onClick={() => onSelect(summary)}
           className="flex min-w-0 flex-1 items-center gap-1 pr-16 text-left"
         >
           <span className="min-w-0 flex-1 truncate">{summary.title}</span>

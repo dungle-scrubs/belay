@@ -58,6 +58,15 @@ export async function seedFileIndex(
   );
 }
 
+export async function seedProjectPath(
+  transport: SessionTransport,
+  sessionId: string,
+  path: string,
+): Promise<void> {
+  await transport.ensureSession(sessionId);
+  await publish(transport, sessionId, events.sessionProject({ path }), HOST);
+}
+
 function hostOnlineWithJobs(jobs: readonly JobSnapshot[]) {
   return events.hostOnline({
     instanceId: E2E_HOST_ID,
