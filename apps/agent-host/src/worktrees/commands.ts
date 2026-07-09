@@ -109,6 +109,11 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
         cwd: result.record.worktreePath,
         sessionId: result.record.sessionId,
         workspace: result.record.worktreePath,
+        worktree: {
+          id: result.record.id,
+          branch: result.record.branch,
+          path: result.record.worktreePath,
+        },
       });
       await reply.ok(`✓ created ${name} and switched in`, {
         focusSessionId: result.record.sessionId,

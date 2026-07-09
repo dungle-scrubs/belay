@@ -2,15 +2,15 @@ import type { SessionSummary, WorktreeSummary } from "@trevor/session";
 import { sessionProjectPath } from "../session/session-root";
 
 /**
- * The project sidebar read model (plan 58 M5 + plan 58.2): a pure grouping of active sessions under
- * projects, built from registry records + the session inventory, with an optional scoped join to the
- * currently viewed host's `WorktreeSummary[]` for badge attachment.
+ * The project sidebar read model (plan 58 M5 + plan 58.2 + plan 58.7): a pure grouping of active
+ * sessions under projects, built from registry records + the session inventory. Worktree badges
+ * attach from the DURABLE `session.worktree` marker on each summary (so they survive a view switch),
+ * enriched with live git state from the viewed host's `WorktreeSummary[]` snapshot when available.
  *
  * Grouping keys on the durable project path already folded into `SessionSummary.projectPath`
- * (offline-safe). Badge attachment keys ONLY on `WorktreeSummary.sessionId` from the supplied
- * snapshot - never on paths. The optional `worktrees` argument is the CURRENT HOST's announced
- * worktree list, not an all-project index (see FP1); rows whose sessionIds are absent from that
- * snapshot simply receive no badge.
+ * (offline-safe). Badge presence keys on the durable `SessionSummary.worktree` marker (plan 58.7);
+ * live git state (dirty/ahead/behind) keys ONLY on `WorktreeSummary.sessionId` from the supplied
+ * snapshot - never on paths.
  *
  * Pure over injected inputs; no React. A `ProjectGroup` is the unit the sidebar renders: a project
  * row with expand/collapse state plus session rows nested under it.
@@ -39,8 +39,9 @@ export interface ProjectSidebarRecord {
 
 /**
  * One session row in a project group (plan 58.2): the inventory summary plus an optional attached
- * worktree summary for badge/tooltip rendering. `worktree` is set only when a non-baseline entry in
- * the supplied host snapshot joins by `sessionId`.
+ * worktree summary for badge/tooltip rendering. `worktree` is set when EITHER the session carries a
+ * durable `session.worktree` marker (plan 58.7 - badges even when the worktree's host is not the
+ * viewed session) OR the viewed host's snapshot includes it for live git-state enrichment.
  */
 export interface ProjectSessionRow {
   readonly summary: SessionSummary;
@@ -59,7 +60,7 @@ export interface ProjectGroup {
   readonly collapsed: boolean;
   /** True when no registry record exists but the project has active sessions. */
   readonly isTransient: boolean;
-  /** Active sessions under this project, newest activity first, with optional worktree join. */
+  /** Active sessions under this project, newest creation first, with optional worktree join. */
   readonly sessions: readonly ProjectSessionRow[];
   /** Count of active sessions (== sessions.length; named for the UI's count badge). */
   readonly activeCount: number;
@@ -89,6 +90,35 @@ export function buildWorktreeSessionMap(
     map.set(wt.sessionId, wt);
   }
   return map;
+}
+
+/**
+ * Synthesizes a minimal identity-only {@link WorktreeSummary} from a session's durable worktree
+ * marker (plan 58.7), so the badge renders even when the worktree's own host is NOT the viewed
+ * session (no live snapshot to enrich from). Git state defaults to clean/zero since only the host
+ * can read it; the live snapshot from `buildWorktreeSessionMap` overrides this when available.
+ * Returns null when the session has no durable worktree marker (a baseline or plain session).
+ */
+export function worktreeSummaryFromIdentity(summary: SessionSummary): WorktreeSummary | null {
+  if (!summary.worktree) {
+    return null;
+  }
+  return {
+    id: summary.worktree.id,
+    baseRepo: summary.projectPath ?? summary.workspace ?? summary.cwd ?? "",
+    baseRepoName: summary.project ?? "",
+    branch: summary.worktree.branch,
+    path: summary.worktree.path,
+    sessionId: summary.sessionId,
+    dirty: false,
+    ahead: 0,
+    behind: 0,
+    conflict: false,
+    detached: false,
+    current: false,
+    baseline: false,
+    missing: false,
+  };
 }
 
 /** The default number of sessions shown per project before a "Show more" affordance (M6). */
@@ -129,15 +159,17 @@ function canonicalizePath(rawPath: string, allPaths: readonly string[]): string 
  *
  * Ordering: creation order (oldest first), by the registry record's `createdAt`, so projects stay
  * put and do not re-order on activity. Transient projects (sessions with no registry record) sort
- * after known ones. Sessions within a project are sorted by `updatedAt` descending.
+ * after known ones. Sessions within a project are sorted by `createdAt` descending (newest first)
+ * so a live sibling emitting events never moves them.
  */
 export function buildProjectSidebar(
   projects: readonly ProjectSidebarRecord[],
   sessions: readonly SessionSummary[],
   /**
-   * Optional current-host worktree snapshot (plan 58.2). When supplied, non-baseline entries join
-   * session rows by `sessionId` for badge attachment. This is NOT an all-project worktree index;
-   * sessions outside the viewed host's base repo simply get `worktree: null`.
+   * Optional current-host worktree snapshot (plan 58.2). When supplied, non-baseline entries ENRICH
+   * matching session rows with live git state (dirty/ahead/behind). Badge PRESENCE no longer depends
+   * on this snapshot - it comes from the durable `session.worktree` marker on each summary (plan
+   * 58.7), so a session stays badged even when its host is not the viewed session.
    */
   worktrees?: readonly WorktreeSummary[],
 ): readonly ProjectGroup[] {
@@ -168,9 +200,15 @@ export function buildProjectSidebar(
       continue;
     }
     const canon = canonicalizePath(path, allRawPaths);
+    // The badge: the durable session.worktree marker (plan 58.7) makes a row a worktree regardless
+    // of which session is viewed. The viewed host's live WorktreeSummary snapshot enriches it with
+    // git state (dirty/ahead/behind/conflict) when available; otherwise a minimal identity-only
+    // summary is synthesized from the marker so the badge + tooltip still render. This is what keeps
+    // the badge from vanishing when you switch away from the worktree session.
+    const live = worktreeBySession.get(summary.sessionId);
     const row: ProjectSessionRow = {
       summary,
-      worktree: worktreeBySession.get(summary.sessionId) ?? null,
+      worktree: live ?? worktreeSummaryFromIdentity(summary),
     };
     const list = sessionsByPath.get(canon);
     if (list) {
@@ -186,9 +224,16 @@ export function buildProjectSidebar(
   const groups: ProjectGroup[] = [];
   for (const key of keys) {
     const record = byPath.get(key);
-    const projectSessions = (sessionsByPath.get(key) ?? []).sort((a, b) =>
-      b.summary.updatedAt.localeCompare(a.summary.updatedAt),
-    );
+    // Sessions are ordered by CREATION time (newest first), not by activity (updatedAt). Activity
+    // ordering churned once concurrent worktree sessions (plan 58.7) put two live hosts in one
+    // project: each host.online re-announcement / streaming delta bumped its session's updatedAt,
+    // making the two rows leapfrog on every render. Creation order is stable - a sibling emitting
+    // an event never moves another session. A sessionId tiebreaker keeps equal-createdAt sessions
+    // from swapping between renders.
+    const projectSessions = (sessionsByPath.get(key) ?? []).sort((a, b) => {
+      const byCreation = b.summary.createdAt.localeCompare(a.summary.createdAt);
+      return byCreation === 0 ? a.summary.sessionId.localeCompare(b.summary.sessionId) : byCreation;
+    });
 
     // The aggregate updatedAt: the max of the registry record and all the project's sessions.
     const candidates = [

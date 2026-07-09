@@ -42,6 +42,12 @@ export type WorkspaceTarget = {
   readonly cwd: string;
   readonly sessionId: string;
   readonly workspace: string;
+  /**
+   * Worktree identity (plan 58.7 follow-up): when set, the target is a managed worktree and both the
+   * `session.project` (base repo) and `session.worktree` (branch + path) markers are stamped on the
+   * target session before spawn. Absent for a plain `/cd` or `/clear` (no worktree badge).
+   */
+  readonly worktree?: { readonly id: string; readonly branch: string; readonly path: string };
 };
 
 /** The live main.ts state the switch mechanics read - the scheduler/turn seams. */
@@ -201,6 +207,19 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
       );
     }
     await publishToSession(target.sessionId, events.sessionProject({ path: baseRepo }));
+    // Plan 58.7 follow-up: stamp the worktree identity marker too, so the inventory can badge the
+    // session as a worktree WITHOUT depending on the currently-viewed session's host.online. The
+    // marker carries identity only (branch + path); live git state still rides host.online.
+    if (target.worktree) {
+      await publishToSession(
+        target.sessionId,
+        events.sessionWorktree({
+          id: target.worktree.id,
+          branch: target.worktree.branch,
+          path: target.worktree.path,
+        }),
+      );
+    }
   }
 
   async function clearToFreshSession(): Promise<void> {

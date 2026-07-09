@@ -47,6 +47,21 @@ export interface SessionSummary {
    * thread seeded only with the selected snapshot, kept out of ordinary top-level navigation.
    */
   readonly tangentOf: TangentAnchor | null;
+  /**
+   * Durable worktree identity (plan 58.7): present when this session is a managed worktree. Carries
+   * the branch + path stamped at spawn. Lets the sidebar badge the session as a worktree WITHOUT
+   * depending on the currently-viewed session's host.online worktree list. Live git state
+   * (dirty/ahead/behind) still rides host.online; this is identity only.
+   */
+  readonly worktree: WorktreeIdentity | null;
+}
+
+/** A durable worktree identity projected from the `session.worktree` marker (plan 58.7). */
+export interface WorktreeIdentity {
+  /** The worktree's registry id (the key /worktree-delete|merge expect). */
+  readonly id: string;
+  readonly branch: string;
+  readonly path: string;
 }
 
 /** A session's fork lineage: the parent it branched from and the parent seq it branched at. */
@@ -108,6 +123,8 @@ export interface InventoryRow {
   readonly tangentOf: SessionEvent | null;
   /** The session.project marker (plan 58 M3), if any - the durable, immutable project path. */
   readonly projectMarker: SessionEvent | null;
+  /** The session.worktree marker (plan 58.7), if any - the durable worktree identity (branch + path). */
+  readonly worktreeMarker: SessionEvent | null;
   /** Whether a host socket is connected to this session right now. */
   readonly hostPresent: boolean;
 }
@@ -256,6 +273,11 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
           createdAt: row.tangentOf?.createdAt ?? row.createdAt,
         }
       : null;
+  const worktreeEvent = row.worktreeMarker ? decodeTrevorEvent(row.worktreeMarker) : null;
+  const worktree: WorktreeIdentity | null =
+    worktreeEvent?.type === "session.worktree" && worktreeEvent.branch
+      ? { id: worktreeEvent.id, branch: worktreeEvent.branch, path: worktreeEvent.path }
+      : null;
 
   return {
     sessionId: row.sessionId,
@@ -275,6 +297,7 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
     deleted,
     forkedFrom,
     tangentOf,
+    worktree,
   };
 }
 

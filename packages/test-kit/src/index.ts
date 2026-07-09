@@ -456,6 +456,7 @@ export function sessionSummary(over?: Partial<SessionSummary>): SessionSummary {
     deleted: false,
     forkedFrom: null,
     tangentOf: null,
+    worktree: null,
     ...over,
   };
 }

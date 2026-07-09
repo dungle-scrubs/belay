@@ -29,6 +29,7 @@ function sessionSummary(over: Partial<SessionSummary> & { sessionId: string }): 
     deleted: false,
     forkedFrom: null,
     tangentOf: null,
+    worktree: null,
     ...over,
   };
 }

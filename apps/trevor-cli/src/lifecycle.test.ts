@@ -38,6 +38,7 @@ function summary(over: Partial<SessionSummary> & { sessionId: string }): Session
     deleted: false,
     forkedFrom: null,
     tangentOf: null,
+    worktree: null,
     ...over,
   };
 }

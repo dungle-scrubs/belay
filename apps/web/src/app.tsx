@@ -1723,6 +1723,11 @@ export function App() {
           onRenameSession: (sessionId, title) => void renameSession(sessionId, title),
           onRenameProject: projectSidebar.onRenameProject,
           onRemoveProject: projectSidebar.onRemoveProject,
+          onMergeWorktree: (worktreeId) => void command("/worktree-merge", worktreeId),
+          onDeleteWorktree: (worktreeId, sessionId, force) => {
+            void command("/worktree-delete", force ? `${worktreeId} force` : worktreeId);
+            void archiveSession(sessionId);
+          },
           onViewArchive: (projectKey) => {
             setArchiveProjectFilter(projectKey);
             modal.setArchiveOpen(true);

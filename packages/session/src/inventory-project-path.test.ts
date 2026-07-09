@@ -52,6 +52,7 @@ function row(over: Partial<InventoryRow> = {}): InventoryRow {
     forkedFrom: null,
     tangentOf: null,
     projectMarker: null,
+    worktreeMarker: null,
     hostPresent: false,
     ...over,
   };
@@ -100,4 +101,21 @@ test("a legacy session (no marker, old host.online workspace) groups via project
   );
   assert.equal(summary.projectPath, "/Users/kevin/dev/legacy");
   assert.equal(summary.project, "legacy");
+});
+
+test("summarizeSession projects a worktree identity from the session.worktree marker", () => {
+  const marker = stored(
+    events.sessionWorktree({ id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" }),
+  );
+  const summary = summarizeSession(row({ worktreeMarker: marker }));
+  assert.deepEqual(summary.worktree, {
+    id: "wt-1",
+    branch: "feat/x",
+    path: "/dev/.worktrees/trevor/feat-x",
+  });
+});
+
+test("summarizeSession worktree is null without a marker (a baseline or plain session)", () => {
+  const summary = summarizeSession(row());
+  assert.equal(summary.worktree, null);
 });

@@ -76,6 +76,25 @@ test("/clear and /cd are retired from the announced specs (plan 58 M4)", () => {
   );
 });
 
+test("/worktree-* are announced as host-owned specs so they are typeable from the prompt", () => {
+  const registry = buildCommandRegistry();
+  const names = registry.specs.filter((s) => s.name.startsWith("/worktree-"));
+  assert.deepEqual(
+    names.map((s) => s.name).sort(),
+    [
+      "/worktree-delete",
+      "/worktree-merge",
+      "/worktree-new",
+      "/worktree-reconcile",
+      "/worktree-switch",
+    ],
+    "all five /worktree-* commands are in the announced inventory",
+  );
+  // /worktree-new carries a usage so the menu shows the <branch> argument.
+  const newSpec = registry.specs.find((s) => s.name === "/worktree-new");
+  assert.match(newSpec?.usage ?? "", /<branch>/);
+});
+
 test("/init drafts AGENTS.md from repo evidence without writing", async () => {
   const root = tree();
   write(join(root, "README.md"), "# Demo");

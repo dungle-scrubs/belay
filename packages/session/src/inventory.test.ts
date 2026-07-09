@@ -60,6 +60,7 @@ const baseRow = (over: Partial<InventoryRow> = {}): InventoryRow => ({
   forkedFrom: null,
   tangentOf: null,
   projectMarker: null,
+  worktreeMarker: null,
   hostPresent: false,
   ...over,
 });
@@ -219,6 +220,7 @@ test("sortInventory puts the current project first, each block by recency desc",
     deleted: false,
     forkedFrom: null,
     tangentOf: null,
+    worktree: null,
   });
   const list = [
     mk("a", "other", "2026-06-26T05:00:00.000Z"),

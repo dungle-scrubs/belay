@@ -240,6 +240,10 @@ export interface SidebarBinding {
   readonly onRenameProject: (key: string, name: string) => void;
   /** Remove a project (persisted via the supervisor; blocked by active sessions). */
   readonly onRemoveProject: (key: string) => void;
+  /** Merge a worktree's branch back into baseline (session context menu). */
+  readonly onMergeWorktree?: (worktreeId: string) => void;
+  /** Delete a worktree AND archive its session. `force` bypasses the dirty/unpushed guard. */
+  readonly onDeleteWorktree?: (worktreeId: string, sessionId: string, force: boolean) => void;
   /** View an archive-only project's archived sessions, filtered to that project (plan 58 M7). */
   readonly onViewArchive?: (projectKey: string) => void;
   /** Open the global archived-session browser from the pinned project sidebar footer. */
@@ -369,6 +373,8 @@ export function PanelHost(props: {
             onRenameSession={sidebar.onRenameSession}
             onRenameProject={sidebar.onRenameProject}
             onRemoveProject={sidebar.onRemoveProject}
+            onMergeWorktree={sidebar.onMergeWorktree}
+            onDeleteWorktree={sidebar.onDeleteWorktree}
             onViewArchive={sidebar.onViewArchive}
             onViewArchived={sidebar.onViewArchived}
             liveActivity={sidebar.liveActivity}

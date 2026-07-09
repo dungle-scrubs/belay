@@ -699,6 +699,12 @@ export type DecodedEvent =
     }
   | { readonly type: "session.project"; readonly path: string }
   | {
+      readonly type: "session.worktree";
+      readonly id: string;
+      readonly branch: string;
+      readonly path: string;
+    }
+  | {
       readonly type: "tangent.foldedBack";
       readonly tangentSessionId: string;
       readonly parentSessionId: string;
@@ -1235,6 +1241,13 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
     }
     case "session.project":
       return { type: "session.project", path: str(p.path, "") };
+    case "session.worktree":
+      return {
+        type: "session.worktree",
+        id: str(p.id, ""),
+        branch: str(p.branch, ""),
+        path: str(p.path, ""),
+      };
     case "tangent.foldedBack":
       return {
         type: "tangent.foldedBack",
@@ -1658,6 +1671,7 @@ const sessionFamily: EventFamily = {
     "session.forkedFrom",
     "session.tangentOf",
     "session.project",
+    "session.worktree",
     "tangent.foldedBack",
     "tangent.created",
     "file.index.requested",

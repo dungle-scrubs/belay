@@ -322,3 +322,176 @@ describe("ProjectSidebar action UI", () => {
     expect(onRemoveProject).toHaveBeenCalledWith("/dev/trevor");
   });
 });
+
+describe("ProjectSidebar session context menu (worktree actions)", () => {
+  function groupsWithWorktreeSession() {
+    return buildProjectSidebar(
+      [project({ path: "/dev/trevor" })],
+      [
+        sessionSummary({
+          sessionId: "wt-s1",
+          projectPath: "/dev/trevor",
+          title: "worktree session",
+          worktree: { id: "wt-abc", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+        }),
+      ],
+    );
+  }
+
+  test("right-clicking a session row with a worktree badge opens a menu with Merge + Delete", () => {
+    const { getByText } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groupsWithWorktreeSession()}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onRenameSession={() => {}}
+        onArchiveSession={() => {}}
+        onMergeWorktree={() => {}}
+        onDeleteWorktree={() => {}}
+      />,
+    );
+    // The session row contains the title text; right-click it.
+    fireEvent.contextMenu(getByText("worktree session"));
+    expect(getByText("Rename")).toBeTruthy();
+    expect(getByText("Archive")).toBeTruthy();
+    expect(getByText("Merge to baseline")).toBeTruthy();
+    expect(getByText("Delete worktree")).toBeTruthy();
+  });
+
+  test("Merge calls onMergeWorktree with the worktree id", () => {
+    const onMergeWorktree = vi.fn<(worktreeId: string) => void>();
+    const { getByText } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groupsWithWorktreeSession()}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onMergeWorktree={onMergeWorktree}
+      />,
+    );
+    fireEvent.contextMenu(getByText("worktree session"));
+    fireEvent.click(getByText("Merge to baseline"));
+    expect(onMergeWorktree).toHaveBeenCalledWith("wt-abc");
+  });
+
+  test("Delete calls onDeleteWorktree with the worktree id (clean tree, no confirm)", () => {
+    const onDeleteWorktree =
+      vi.fn<(worktreeId: string, sessionId: string, force: boolean) => void>();
+    const { getByText } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groupsWithWorktreeSession()}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onDeleteWorktree={onDeleteWorktree}
+      />,
+    );
+    fireEvent.contextMenu(getByText("worktree session"));
+    fireEvent.click(getByText("Delete worktree"));
+    expect(onDeleteWorktree).toHaveBeenCalledWith("wt-abc", "wt-s1", false);
+  });
+
+  test("Delete on a dirty worktree shows a confirm step before force-deleting", () => {
+    const onDeleteWorktree =
+      vi.fn<(worktreeId: string, sessionId: string, force: boolean) => void>();
+    const dirtyGroups = buildProjectSidebar(
+      [project({ path: "/dev/trevor" })],
+      [
+        sessionSummary({
+          sessionId: "wt-s1",
+          projectPath: "/dev/trevor",
+          title: "dirty wt",
+          worktree: { id: "wt-dirty", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+        }),
+      ],
+      // Live snapshot marks the worktree dirty.
+      [
+        {
+          id: "wt-dirty",
+          baseRepo: "/dev/trevor",
+          baseRepoName: "trevor",
+          branch: "feat/x",
+          path: "/dev/.worktrees/trevor/feat-x",
+          sessionId: "wt-s1",
+          dirty: true,
+          ahead: 0,
+          behind: 0,
+          conflict: false,
+          detached: false,
+          current: false,
+          baseline: false,
+          missing: false,
+        },
+      ],
+    );
+    const { getByText, queryByText } = renderWithTooltip(
+      <ProjectSidebar
+        groups={dirtyGroups}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onDeleteWorktree={onDeleteWorktree}
+      />,
+    );
+    fireEvent.contextMenu(getByText("dirty wt"));
+    fireEvent.click(getByText("Delete worktree"));
+    // Not yet deleted: the confirm step shows.
+    expect(onDeleteWorktree).not.toHaveBeenCalled();
+    expect(getByText("Force delete")).toBeTruthy();
+    // Confirm -> force delete fires.
+    fireEvent.click(getByText("Force delete"));
+    expect(onDeleteWorktree).toHaveBeenCalledWith("wt-dirty", "wt-s1", true);
+    // The warning is gone after the action.
+    expect(queryByText("Force delete")).toBeNull();
+  });
+
+  test("the session context menu is absent without worktree callbacks or a badge", () => {
+    const { queryByText, container } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groupsWithSession()}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+      />,
+    );
+    // Right-click a plain (non-worktree) session - no menu items.
+    fireEvent.contextMenu(container.querySelector("button") as HTMLElement);
+    expect(queryByText("Delete worktree")).toBeNull();
+    expect(queryByText("Merge to baseline")).toBeNull();
+  });
+});
+
+describe("ProjectSidebar Show more", () => {
+  test("clicking Show N more expands the session list past SESSION_CAP", () => {
+    const many = Array.from({ length: 8 }, (_, i) =>
+      sessionSummary({ sessionId: `s${i}`, projectPath: "/dev/trevor", title: `session ${i}` }),
+    );
+    const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], many);
+    const { getByText, queryByText } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groups}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+      />,
+    );
+    // SESSION_CAP is 5, so only 5 show initially + a "Show 3 more" button.
+    expect(getByText("session 0")).toBeTruthy();
+    expect(getByText("session 4")).toBeTruthy();
+    expect(queryByText("session 5")).toBeNull();
+    expect(getByText("Show 3 more")).toBeTruthy();
+
+    // Click expands to all 8 and hides the button.
+    fireEvent.click(getByText("Show 3 more"));
+    expect(getByText("session 5")).toBeTruthy();
+    expect(getByText("session 7")).toBeTruthy();
+    expect(queryByText("Show 3 more")).toBeNull();
+  });
+});

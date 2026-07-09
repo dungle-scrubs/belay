@@ -104,6 +104,41 @@ export interface CommandRegistry {
 
 const noContext = (): void => undefined;
 
+/**
+ * The /worktree-* command specs (D-091): each handler lives in the programmatic dispatcher in
+ * main.ts (sent by the web worktree switcher or typed at the prompt). Declaring the specs here
+ * announces them on host.online so they appear in slash autocomplete; their run() is handled by
+ * the live host, never this registry's `run()`. Without this they were dispatchable but invisible
+ * - untypeable from the prompt (a file-loaded `.trevor/commands/*.md` of the same name is dropped
+ * by the registry's `byName` guard, since this built-in always wins).
+ */
+const WORKTREE_COMMAND_SPECS: readonly CommandSpec[] = [
+  {
+    name: "/worktree-switch",
+    summary: "Switch to a managed worktree (or the baseline checkout) by id",
+    usage: "/worktree-switch <id>",
+  },
+  {
+    name: "/worktree-new",
+    summary: "Create a managed worktree on a new branch and open it as a concurrent session",
+    usage: "/worktree-new <branch>",
+  },
+  {
+    name: "/worktree-merge",
+    summary: "Merge a worktree's branch back into the baseline checkout",
+    usage: "/worktree-merge <id>",
+  },
+  {
+    name: "/worktree-delete",
+    summary: "Delete a managed worktree (add `force` to remove a dirty/unpushed tree)",
+    usage: "/worktree-delete <id> [force]",
+  },
+  {
+    name: "/worktree-reconcile",
+    summary: "Drop managed worktrees whose path is gone from the registry",
+  },
+];
+
 function buildHelpCommand(commands: readonly Command<unknown>[]): Command {
   return {
     spec: { name: "/help", summary: "List available host commands" },
@@ -351,6 +386,14 @@ export function buildCommandRegistry(
       summary: "Retry the last user prompt",
     },
   ] as const) {
+    add(buildHostOwnedCommand(spec, `${spec.name} is handled by the live host.`));
+  }
+
+  // The /worktree-* programmatic handlers live in the programmatic dispatcher in main.ts (sent by
+  // the web worktree switcher or typed). Announcing them here as host-owned specs puts them in
+  // host.online + slash autocomplete; their run() is a pointer to the live host, like the handlers
+  // above. Without this they were dispatchable but invisible - untypeable from the prompt.
+  for (const spec of WORKTREE_COMMAND_SPECS) {
     add(buildHostOwnedCommand(spec, `${spec.name} is handled by the live host.`));
   }
 

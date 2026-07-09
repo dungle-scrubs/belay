@@ -84,6 +84,55 @@ describe("WorktreeBadge", () => {
     });
   });
 
+  test("tooltip shows the full path (wraps, never truncates) and a copy button", async () => {
+    const longPath =
+      "~/.worktrees/trevor/feat-an-extremely-long-branch-name-that-keeps-going-and-going-and-going";
+    renderWithTooltip(
+      <WorktreeBadge worktree={wt({ sessionId: "wt-s1", branch: "feat/badge", path: longPath })} />,
+    );
+    const badge = screen.getByLabelText("worktree");
+    fireEvent.pointerMove(badge);
+    fireEvent.focus(badge);
+    await waitFor(() => {
+      // The full path text is present in the tooltip, not clipped by `truncate`.
+      expect(screen.getAllByText(longPath).length).toBeGreaterThan(0);
+      expect(screen.getAllByLabelText("Copy worktree path").length).toBeGreaterThan(0);
+    });
+    // The path span must allow wrapping + shrinking (no truncate), so long paths stay distinguishable.
+    const pathSpan = screen.getAllByText(longPath)[0];
+    if (!pathSpan) throw new Error("path span not rendered");
+    expect(pathSpan.className).not.toMatch(/truncate/);
+    expect(pathSpan.className).toMatch(/break-all/);
+  });
+
+  test("the copy button writes the full path to the clipboard", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { clipboard: { writeText } });
+    renderWithTooltip(
+      <WorktreeBadge
+        worktree={wt({
+          sessionId: "wt-s1",
+          path: "~/.worktrees/trevor/feat-copy-me",
+        })}
+      />,
+    );
+    const badge = screen.getByLabelText("worktree");
+    fireEvent.pointerMove(badge);
+    fireEvent.focus(badge);
+    await waitFor(() => {
+      expect(screen.getAllByLabelText("Copy worktree path").length).toBeGreaterThan(0);
+    });
+    // Radix renders a visually-hidden a11y copy of the tooltip, so there are multiple matching
+    // buttons; click the first.
+    const button = screen.getAllByLabelText("Copy worktree path")[0];
+    if (!button) throw new Error("copy button not rendered");
+    fireEvent.click(button);
+    await waitFor(() => {
+      expect(writeText.mock.calls[0]?.[0]).toBe("~/.worktrees/trevor/feat-copy-me");
+    });
+    vi.unstubAllGlobals();
+  });
+
   test("worktreeTooltipText is pure over the summary", () => {
     expect(
       worktreeTooltipText(wt({ sessionId: "x", branch: "b", path: "~/p", behind: 4 })),

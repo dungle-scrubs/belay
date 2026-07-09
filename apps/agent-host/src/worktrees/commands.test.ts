@@ -57,6 +57,7 @@ test("/worktree-new creates a concurrent session and emits a focus command resul
       cwd: "/dev/.worktrees/trevor/feat-x",
       sessionId: "worktree-session",
       workspace: "/dev/.worktrees/trevor/feat-x",
+      worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
     },
   ]);
   const result = emitted

@@ -178,6 +178,40 @@ describe("createWorktreeSession concurrent path (plan 58.7 M1)", () => {
     });
   });
 
+  test("stamps session.worktree when the target carries worktree identity (plan 58.7)", async () => {
+    const calls: Call[] = [];
+    const api = makeSessionSwitch(recordingDeps({ calls }));
+
+    await api.createWorktreeSession({
+      ...TARGET,
+      worktree: { id: "wt-1", branch: "feat/x", path: TARGET.cwd },
+    });
+
+    const publishes = calls.filter((c) => c.name === "publishToSession");
+    // Two markers: session.project (base repo) then session.worktree (identity).
+    assert.equal(publishes.length, 2);
+    assert.deepEqual(publishes[0]?.detail, {
+      sessionId: TARGET.sessionId,
+      event: events.sessionProject({ path: "/dev/trevor" }),
+    });
+    assert.deepEqual(publishes[1]?.detail, {
+      sessionId: TARGET.sessionId,
+      event: events.sessionWorktree({ id: "wt-1", branch: "feat/x", path: TARGET.cwd }),
+    });
+  });
+
+  test("does not stamp session.worktree without worktree identity (backward compat)", async () => {
+    const calls: Call[] = [];
+    const api = makeSessionSwitch(recordingDeps({ calls }));
+
+    await api.createWorktreeSession(TARGET);
+
+    const publishes = calls.filter((c) => c.name === "publishToSession");
+    assert.equal(publishes.length, 1);
+    const firstPublish = publishes[0]?.detail as { event: TrevorEventInput } | undefined;
+    assert.equal(firstPublish?.event.type, "session.project");
+  });
+
   test("fails before spawning when the base repo cannot be resolved", async () => {
     const calls: Call[] = [];
     const api = makeSessionSwitch(

@@ -8,6 +8,7 @@ import {
   Archive,
   Folder,
   FolderOpen,
+  GitMerge,
   Inbox,
   MoreVertical,
   Pencil,
@@ -66,6 +67,10 @@ export interface ProjectSidebarProps {
   readonly onRenameProject?: (key: string, name: string) => void;
   /** Remove a project (context menu action, with blocking). */
   readonly onRemoveProject?: (key: string) => void;
+  /** Merge a worktree's branch back into baseline (session context menu, requires worktree badge). */
+  readonly onMergeWorktree?: (worktreeId: string) => void;
+  /** Delete a worktree AND archive its session (session context menu, requires worktree badge). */
+  readonly onDeleteWorktree?: (worktreeId: string, sessionId: string, force: boolean) => void;
   /** Live run state per session, layered over each row's durable activity (D-093 M3). */
   readonly liveActivity?: ReadonlyMap<string, SessionActivity>;
   /** The currently selected session id (for highlight). */
@@ -105,6 +110,8 @@ function SessionRow({
   onStartRename,
   onRenameSave,
   onRenameCancel,
+  onMergeWorktree,
+  onDeleteWorktree,
 }: {
   summary: SessionSummary;
   worktree?: WorktreeSummary | null;
@@ -117,10 +124,23 @@ function SessionRow({
   onStartRename?: () => void;
   onRenameSave?: (name: string) => void;
   onRenameCancel?: () => void;
+  onMergeWorktree?: (worktreeId: string) => void;
+  onDeleteWorktree?: (worktreeId: string, sessionId: string, force: boolean) => void;
 }) {
   const hasActions = Boolean(onArchiveSession || onStartRename);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const canMenu = Boolean(onMergeWorktree || onDeleteWorktree || onArchiveSession || onStartRename);
+  const hasWorktree = Boolean(worktree && !worktree.baseline);
+
+  function handleContextMenu(e: React.MouseEvent<HTMLDivElement>) {
+    if (!canMenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+    setMenuOpen(true);
+  }
 
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: session row right-click opens a context menu; the inner button handles selection for keyboard users
     <div
       className={cn(
         "group relative flex w-full items-center overflow-hidden py-1.5 pl-7 pr-2.5 text-left text-ui",
@@ -131,6 +151,7 @@ function SessionRow({
       style={{
         ["--row-bg" as string]: selected ? "hsl(var(--card))" : "transparent",
       }}
+      onContextMenu={canMenu ? handleContextMenu : undefined}
     >
       {renaming ? (
         <RenameInput
@@ -185,6 +206,21 @@ function SessionRow({
                 <Archive className="size-3" />
               </button>
             ) : null}
+            {hasWorktree && canMenu ? (
+              <button
+                type="button"
+                aria-label="Session actions"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.currentTarget.blur();
+                  setMenuOpen((v) => !v);
+                }}
+                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+              >
+                <MoreVertical className="size-3" />
+              </button>
+            ) : null}
           </span>
         ) : null}
         <span
@@ -218,6 +254,27 @@ function SessionRow({
           )}
         </span>
       </span>
+      {menuOpen ? (
+        <SessionContextMenu
+          worktree={worktree}
+          onRename={() => onStartRename?.()}
+          onArchive={onArchiveSession ? () => onArchiveSession(summary.sessionId) : undefined}
+          onMergeWorktree={
+            onMergeWorktree && worktree ? () => onMergeWorktree(worktree.id) : undefined
+          }
+          onDeleteWorktree={
+            onDeleteWorktree && worktree
+              ? () =>
+                  onDeleteWorktree(
+                    worktree.id,
+                    summary.sessionId,
+                    worktree.dirty || (worktree.ahead ?? 0) > 0 || worktree.conflict,
+                  )
+              : undefined
+          }
+          onClose={() => setMenuOpen(false)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -369,6 +426,153 @@ function ProjectContextMenu({
           <span>View archive</span>
         </button>
       ) : null}
+    </div>
+  );
+}
+
+/** The context menu for a session row: Rename, Archive, and worktree actions (Merge / Delete) when
+ *  the session has a worktree badge. The worktree actions use the WorktreeSummary's registry id so
+ *  the user never has to discover it. Delete shows a confirm when the worktree is dirty/unpushed. */
+function SessionContextMenu({
+  worktree,
+  onRename,
+  onArchive,
+  onMergeWorktree,
+  onDeleteWorktree,
+  onClose,
+}: {
+  worktree?: WorktreeSummary | null;
+  onRename: () => void;
+  onArchive?: () => void;
+  onMergeWorktree?: () => void;
+  onDeleteWorktree?: () => void;
+  onClose: () => void;
+}) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  // Two-step confirm for dirty/unpushed worktrees: first click reveals the warning, second click
+  // (or "Force delete") fires the action. A clean tree deletes immediately - the host-side guard
+  // still protects if git state changed between the menu opening and the command running.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+
+  useEffect(() => {
+    function handlePointerDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [onClose]);
+
+  const dirty = worktree?.dirty || (worktree?.ahead ?? 0) > 0 || worktree?.conflict;
+
+  return (
+    <div
+      ref={menuRef}
+      className="absolute right-0 top-full z-50 mt-1 min-w-36 rounded-md border border-border bg-popover py-1 shadow-md"
+    >
+      {confirmingDelete ? (
+        <div className="px-2.5 py-2">
+          <p className="mb-2 text-ui text-smui-orange">
+            Uncommitted or unpushed changes will be lost.
+          </p>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                onDeleteWorktree?.();
+                onClose();
+              }}
+              className="flex-1 rounded bg-smui-red/90 px-2 py-1 text-ui text-white hover:bg-smui-red"
+            >
+              Force delete
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(false)}
+              className="rounded px-2 py-1 text-ui text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onRename();
+              onClose();
+            }}
+            className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui text-foreground hover:bg-card/60"
+          >
+            <Pencil className="size-3" />
+            <span>Rename</span>
+          </button>
+          {onArchive ? (
+            <button
+              type="button"
+              onClick={() => {
+                onArchive();
+                onClose();
+              }}
+              className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui text-foreground hover:bg-card/60"
+            >
+              <Archive className="size-3" />
+              <span>Archive</span>
+            </button>
+          ) : null}
+          {worktree && !worktree.baseline ? (
+            <>
+              <div className="my-1 border-t border-border" />
+              <div className="px-2.5 py-0.5 text-label tracking-wider text-muted-foreground/50">
+                Worktree
+              </div>
+              {onMergeWorktree ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onMergeWorktree();
+                    onClose();
+                  }}
+                  className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui text-foreground hover:bg-card/60"
+                >
+                  <GitMerge className="size-3" />
+                  <span>Merge to baseline</span>
+                </button>
+              ) : null}
+              {onDeleteWorktree ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (dirty) {
+                      setConfirmingDelete(true);
+                    } else {
+                      onDeleteWorktree();
+                      onClose();
+                    }
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui",
+                    dirty ? "text-smui-orange" : "text-smui-red hover:bg-card/60",
+                  )}
+                  title={
+                    dirty
+                      ? "Worktree has uncommitted/unpushed changes - click to confirm force delete"
+                      : undefined
+                  }
+                >
+                  <Trash2 className="size-3" />
+                  <span>Delete worktree</span>
+                  {dirty ? (
+                    <span className="ml-auto text-label text-muted-foreground/50">dirty</span>
+                  ) : null}
+                </button>
+              ) : null}
+            </>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }
@@ -560,6 +764,8 @@ export function ProjectSidebar({
   onRenameSession,
   onRenameProject,
   onRemoveProject,
+  onMergeWorktree,
+  onDeleteWorktree,
   liveActivity,
   currentSessionId,
   nowMs = Date.now(),
@@ -567,6 +773,11 @@ export function ProjectSidebar({
 }: ProjectSidebarProps) {
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
+  // Locally tracks which projects have been expanded past SESSION_CAP via "Show N more". The
+  // presentational component owns this so the expansion is immediate (no round-trip through the
+  // hook's state); `onShowMore` is still called so the live owner CAN react (e.g. analytics), but
+  // rendering no longer depends on it.
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
 
   function handleRenameSave(key: string) {
     return (name: string) => {
@@ -633,7 +844,12 @@ export function ProjectSidebar({
         ) : (
           <div className="pb-2">
             {groups.map((group) => {
-              const visible = group.collapsed ? [] : group.sessions.slice(0, SESSION_CAP);
+              const isExpanded = expandedProjects.has(group.key);
+              const visible = group.collapsed
+                ? []
+                : isExpanded
+                  ? group.sessions
+                  : group.sessions.slice(0, SESSION_CAP);
               const hidden = group.collapsed ? 0 : Math.max(0, group.sessions.length - SESSION_CAP);
               return (
                 <div key={group.key}>
@@ -676,13 +892,22 @@ export function ProjectSidebar({
                                 : undefined
                             }
                             onRenameCancel={handleSessionRenameCancel}
+                            onMergeWorktree={onMergeWorktree}
+                            onDeleteWorktree={onDeleteWorktree}
                           />
                         ))
                       )}
-                      {hidden > 0 ? (
+                      {hidden > 0 && !isExpanded ? (
                         <button
                           type="button"
-                          onClick={() => onShowMore(group.key)}
+                          onClick={() => {
+                            setExpandedProjects((prev) => {
+                              const next = new Set(prev);
+                              next.add(group.key);
+                              return next;
+                            });
+                            onShowMore(group.key);
+                          }}
                           className="w-full py-1 pl-7 pr-2.5 text-left text-label tracking-wider text-muted-foreground/60 hover:text-foreground"
                         >
                           Show {hidden} more

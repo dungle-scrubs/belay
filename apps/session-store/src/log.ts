@@ -502,6 +502,7 @@ export class SessionLog {
       forkedFrom: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionForkedFrom),
       tangentOf: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionTangentOf),
       projectMarker: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionProject),
+      worktreeMarker: this.latestOfType(s.sessionId, INVENTORY_EVENT_TYPES.sessionWorktree),
     };
   }
 

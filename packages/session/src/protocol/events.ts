@@ -946,6 +946,18 @@ export const events = {
     payload: { path: p.path },
   }),
   /**
+   * A durable WORKTREE marker for a session (plan 58.7 follow-up): stamped on a worktree session at
+   * spawn time so the inventory can badge the session as a worktree WITHOUT depending on the
+   * currently-viewed session's host.online worktree list. Carries the branch + worktree path. Like
+   * session.project it is emitted early and is immutable for the session's life. The badge's live git
+   * state (dirty/ahead/behind) still rides host.online when that host is up; this marker only carries
+   * identity (is-this-a-worktree + branch + path), so the badge survives a host switch.
+   */
+  sessionWorktree: (p: { id: string; branch: string; path: string }): TrevorEventInput => ({
+    type: "session.worktree",
+    payload: { id: p.id, branch: p.branch, path: p.path },
+  }),
+  /**
    * An EXPLICIT tangent fold-back (plan 37, M8): the durable, auditable record that the user deliberately
    * carried a chosen piece of a tangent's outcome (a `quote`/`message`/`summary`) back toward the PARENT
    * session. It is NOT an automatic merge and NOT hidden context: the folded content is placed into the
@@ -1635,4 +1647,5 @@ export const INVENTORY_EVENT_TYPES = {
   sessionForkedFrom: "session.forkedFrom",
   sessionTangentOf: "session.tangentOf",
   sessionProject: "session.project",
+  sessionWorktree: "session.worktree",
 } as const satisfies Readonly<Record<string, DecodedEvent["type"]>>;

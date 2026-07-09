@@ -20,6 +20,7 @@ function summary(overrides: Partial<SessionSummary>): SessionSummary {
     projectPath: "/repo/project",
     sessionId: "s1",
     tangentOf: null,
+    worktree: null,
     title: "Session",
     updatedAt: new Date(2026, 6, 9, 0, 1).toISOString(),
     workspace: null,

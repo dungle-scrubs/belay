@@ -167,29 +167,71 @@ describe("buildProjectSidebar", () => {
     expect(groups.map((g) => g.key)).toEqual(["/dev/alpha", "/dev/mango", "/dev/zebra"]);
   });
 
-  test("sessions within a project sorted by updatedAt descending", () => {
+  test("sessions within a project sorted by createdAt descending (newest first)", () => {
     const groups = buildProjectSidebar(
       [project({ path: "/dev/trevor" })],
       [
         sessionSummary({
           sessionId: "old",
           projectPath: "/dev/trevor",
+          createdAt: "2026-06-01T00:00:00.000Z",
           updatedAt: "2026-06-01T00:00:00.000Z",
         }),
         sessionSummary({
           sessionId: "new",
           projectPath: "/dev/trevor",
+          createdAt: "2026-06-09T00:00:00.000Z",
           updatedAt: "2026-06-09T00:00:00.000Z",
         }),
         sessionSummary({
           sessionId: "mid",
           projectPath: "/dev/trevor",
+          createdAt: "2026-06-05T00:00:00.000Z",
           updatedAt: "2026-06-05T00:00:00.000Z",
         }),
       ],
     );
     const group = sole(groups);
     expect(group.sessions.map((s) => s.summary.sessionId)).toEqual(["new", "mid", "old"]);
+  });
+
+  test("sessions keep a stable order when a sibling's activity changes (concurrent worktrees)", () => {
+    // Two sessions in the same project. `base` is older (createdAt) but has MORE recent activity
+    // (updatedAt) than `worktree`. Activity-ordering would put `base` first; creation-ordering keeps
+    // `worktree` (newer creation) first regardless of activity churn.
+    const base = {
+      sessionId: "base",
+      projectPath: "/dev/trevor",
+      createdAt: "2026-06-01T00:00:00.000Z",
+      updatedAt: "2026-06-01T00:00:00.000Z",
+    };
+    const worktree = {
+      sessionId: "wt",
+      projectPath: "/dev/trevor",
+      createdAt: "2026-06-09T00:00:00.000Z",
+      updatedAt: "2026-06-09T00:00:00.000Z",
+    };
+
+    // Initial render.
+    const g1 = sole(
+      buildProjectSidebar(
+        [project({ path: "/dev/trevor" })],
+        [sessionSummary(base), sessionSummary(worktree)],
+      ),
+    );
+    expect(g1.sessions.map((s) => s.summary.sessionId)).toEqual(["wt", "base"]);
+
+    // `base` now has newer activity than `wt` (e.g. its host re-announced). The order must NOT flip.
+    const g2 = sole(
+      buildProjectSidebar(
+        [project({ path: "/dev/trevor" })],
+        [
+          sessionSummary({ ...base, updatedAt: "2026-07-01T00:00:00.000Z" }),
+          sessionSummary(worktree),
+        ],
+      ),
+    );
+    expect(g2.sessions.map((s) => s.summary.sessionId)).toEqual(["wt", "base"]);
   });
 
   test("updatedAt is the max of registry updatedAt and session updatedAt", () => {
@@ -405,5 +447,74 @@ describe("plan 58.2 worktree session join", () => {
     const other = groups.find((g) => g.key === "/dev/other");
     expect(trevor?.sessions[0]?.worktree?.sessionId).toBe("trevor-wt");
     expect(other?.sessions[0]?.worktree).toBeNull();
+  });
+});
+
+describe("plan 58.7 durable worktree badge (survives a view switch)", () => {
+  test("a session with a durable worktree marker is badged WITHOUT any host snapshot", () => {
+    // No worktrees argument at all (e.g. a different session is viewed). The durable marker alone
+    // drives the badge - this is the core fix for the vanishing-badge bug.
+    const groups = buildProjectSidebar(
+      [project({ path: "/dev/trevor" })],
+      [
+        sessionSummary({
+          sessionId: "wt-s1",
+          projectPath: "/dev/trevor",
+          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+        }),
+        sessionSummary({ sessionId: "plain", projectPath: "/dev/trevor" }),
+      ],
+    );
+    const group = sole(groups);
+    const byId = new Map(group.sessions.map((r) => [r.summary.sessionId, r]));
+    expect(byId.get("wt-s1")?.worktree).not.toBeNull();
+    expect(byId.get("wt-s1")?.worktree?.branch).toBe("feat/x");
+    expect(byId.get("plain")?.worktree).toBeNull();
+  });
+
+  test("the durable badge enriches with live git state when the viewed host snapshot is present", () => {
+    const liveSnapshot = wt({
+      sessionId: "wt-s1",
+      branch: "feat/x",
+      dirty: true,
+      ahead: 3,
+    });
+    const groups = buildProjectSidebar(
+      [project({ path: "/dev/trevor" })],
+      [
+        sessionSummary({
+          sessionId: "wt-s1",
+          projectPath: "/dev/trevor",
+          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+        }),
+      ],
+      [liveSnapshot],
+    );
+    const group = sole(groups);
+    // The live snapshot wins (dirty: true, ahead: 3), not the identity-only default (clean).
+    expect(group.sessions[0]?.worktree?.dirty).toBe(true);
+    expect(group.sessions[0]?.worktree?.ahead).toBe(3);
+  });
+
+  test("the durable badge shows identity-only (clean git state) when the host is not viewed", () => {
+    // The worktree's own host is NOT the viewed session, so no live snapshot enriches it. The
+    // badge still renders (from the durable marker) with clean/zero defaults for git state.
+    const groups = buildProjectSidebar(
+      [project({ path: "/dev/trevor" })],
+      [
+        sessionSummary({
+          sessionId: "wt-s1",
+          projectPath: "/dev/trevor",
+          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+        }),
+      ],
+      // A snapshot for a DIFFERENT session, not wt-s1.
+      [wt({ sessionId: "other-wt" })],
+    );
+    const group = sole(groups);
+    expect(group.sessions[0]?.worktree).not.toBeNull();
+    expect(group.sessions[0]?.worktree?.branch).toBe("feat/x");
+    expect(group.sessions[0]?.worktree?.dirty).toBe(false);
+    expect(group.sessions[0]?.worktree?.ahead).toBe(0);
   });
 });
