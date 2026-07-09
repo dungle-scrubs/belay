@@ -22,6 +22,7 @@ import {
   type ManifestExport,
   runCommand,
 } from "./capabilities";
+import { type CatalogSnapshot, listCatalog } from "./catalog";
 import { SdkError, type SdkOperation, urlClass, withSdkError } from "./errors";
 import { DEFAULT_SDK_PRODUCER_ID, sdkIdentity } from "./identity";
 import {
@@ -268,6 +269,11 @@ export class TrevorClient {
     options?: { readonly timeoutMs?: number },
   ): Promise<DoctorSnapshot | null> {
     return doctorSnapshot(this, sessionId, options);
+  }
+
+  /** Reads the latest host-announced model sources + per-source catalog from the session log. */
+  listCatalog(sessionId: string, options?: ReadLogOptions): Promise<CatalogSnapshot> {
+    return listCatalog(this, sessionId, options);
   }
 
   // --- Artifacts (M3) ---

@@ -22,6 +22,12 @@ export {
   runCommand,
 } from "./capabilities";
 export {
+  type CatalogSnapshot,
+  EMPTY_CATALOG_SNAPSHOT,
+  listCatalog,
+  projectCatalog,
+} from "./catalog";
+export {
   createTrevorClient,
   TrevorClient,
   type TrevorClientConfig,

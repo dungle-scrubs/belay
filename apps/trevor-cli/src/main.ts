@@ -1,7 +1,9 @@
+import { spawnSync } from "node:child_process";
 import { homedir } from "node:os";
 import { basename } from "node:path";
 import {
   formatStatus,
+  type LaunchOutcome,
   launch,
   loadHosts,
   nodeFs,
@@ -13,10 +15,20 @@ import {
   TREVOR_STATE_HOME,
 } from "@trevor/launcher";
 import { createTrevorClient, resolveOpenTarget } from "@trevor/sdk";
-import { errorMessage, PRODUCER_IDS, type SessionSummary } from "@trevor/session";
-import { commandUsageText, createCommandRouter } from "./command-router";
+import {
+  errorMessage,
+  events,
+  freshSessionId,
+  PRODUCER_IDS,
+  type SessionSummary,
+} from "@trevor/session";
+import { commandUsageText, createCommandRouter, flagValue } from "./command-router";
+import { resolveModelConfig } from "./config";
+import { runPrompt } from "./headless";
 import type { HostControlIo, LifecycleIo } from "./lifecycle";
+import { resolveModelRef } from "./model-flags";
 import { createSpinner } from "./spinner";
+import { CliStageError, isCliStageError, withCliStage } from "./stage-error";
 
 // Honor the same node-side URL overrides the host and supervisor do, so `trevor` can be pointed at a
 // remote store/blob (e.g. in a container or a shared dev box), not only the local loopback default.
@@ -62,6 +74,7 @@ const commandRouter = createCommandRouter({
   client,
   lifecycleIo,
   hostControlIo,
+  ensureHostOnline: () => ensureHostOnline(),
   projectName: () => basename(resolveProjectRoot(process.cwd(), nodeFs)),
 });
 
@@ -82,18 +95,62 @@ const USAGE = commandUsageText();
  */
 async function launchWith(options: {
   readonly debug?: boolean;
+  readonly noBrowser?: boolean;
   readonly session?: { sessionId: string; root: string };
-}): Promise<void> {
+}): Promise<LaunchOutcome> {
   const spinner = createSpinner();
   spinner.step(options.session ? "opening session…" : "starting Trevor…");
   try {
     const outcome = await launch(nodePlatform({ step: (text) => spinner.step(text) }), options);
+    if (!outcome.online) {
+      throw new CliStageError("waitForHostOnline", "host did not join before the timeout");
+    }
     spinner.succeed("Trevor ready");
-    process.stdout.write(`${formatStatus(outcome)}\n`);
+    if (!options.noBrowser) {
+      process.stdout.write(`${formatStatus(outcome)}\n`);
+    }
+    return outcome;
   } catch (error) {
     spinner.fail("Trevor failed to start");
-    throw error;
+    throw isCliStageError(error) ? error : new CliStageError("host-launch", errorMessage(error));
   }
+}
+
+async function ensureHostOnline(): Promise<LaunchOutcome> {
+  return launchWith({ noBrowser: true });
+}
+
+function spawnedByThisInvocation(hostAction: LaunchOutcome["hostAction"]): boolean {
+  return hostAction !== "reuse" && hostAction !== "reused-concurrent";
+}
+
+function liveHostOwnsRoot(root: string): boolean {
+  return Object.values(loadHosts(nodeFs, TREVOR_STATE_HOME)).some(
+    (record) => record.root === root && processAlive(record.pid),
+  );
+}
+
+function baseRepoForRoot(root: string): string | null {
+  const result = spawnSync("git", ["-C", root, "worktree", "list", "--porcelain"], {
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    return null;
+  }
+  const first = result.stdout
+    .split("\n")
+    .find((line) => line.startsWith("worktree "))
+    ?.slice("worktree ".length)
+    .trim();
+  return first && first !== root ? first : null;
+}
+
+async function stampBaseRepoForWorktree(sessionId: string, root: string): Promise<void> {
+  const baseRepo = baseRepoForRoot(root);
+  if (!baseRepo) {
+    return;
+  }
+  await client.publishEvent(sessionId, events.sessionProject({ path: baseRepo }), "publishEvent");
 }
 
 /**
@@ -122,6 +179,70 @@ async function runOpen(sessionId: string): Promise<void> {
   await launchWith({ session: target });
 }
 
+function oneShotPrompt(args: readonly string[]): string | undefined {
+  const prompt = flagValue(args, "-p") ?? flagValue(args, "--prompt");
+  return prompt?.trim() ? prompt : undefined;
+}
+
+async function runOneShotPrompt(args: readonly string[], text: string): Promise<void> {
+  const ephemeral = args.includes("--ephemeral");
+  const root = resolveProjectRoot(process.cwd(), nodeFs);
+  if (ephemeral && liveHostOwnsRoot(root)) {
+    throw new CliStageError(
+      "cwd-ownership",
+      `a live host already owns ${root}; refusing duplicate ephemeral mutating host`,
+    );
+  }
+  const outcome = ephemeral
+    ? await launchWith({
+        noBrowser: true,
+        session: { sessionId: freshSessionId(), root },
+      })
+    : await ensureHostOnline();
+  try {
+    await stampBaseRepoForWorktree(outcome.sessionId, root).catch((error: unknown) => {
+      throw new CliStageError("session-project", errorMessage(error));
+    });
+    const modelConfig = resolveModelConfig({
+      flagModel: flagValue(args, "--model"),
+      flagReasoning: flagValue(args, "--reasoning"),
+    });
+    if (modelConfig.warning) {
+      process.stderr.write(`${modelConfig.warning}\n`);
+    }
+    const model =
+      modelConfig.model || modelConfig.reasoning
+        ? resolveModelRef(
+            await withCliStage("catalog-read", () => client.listCatalog(outcome.sessionId)),
+            modelConfig,
+          )
+        : undefined;
+    const json = args.includes("--json");
+    const timeout = flagValue(args, "--timeout");
+    const result = await withCliStage("turn", () =>
+      runPrompt(client, {
+        sessionId: outcome.sessionId,
+        text,
+        provider: model?.sourceId ?? flagValue(args, "--provider") ?? "",
+        json,
+        ...(model ? { model } : {}),
+        ...(timeout ? { timeoutMs: Number(timeout) } : {}),
+        ...(json ? {} : { onDelta: (delta) => process.stderr.write(delta) }),
+      }),
+    );
+    process.stdout.write(`${result.stdout}\n`);
+  } finally {
+    if (ephemeral && outcome.hostPid && spawnedByThisInvocation(outcome.hostAction)) {
+      try {
+        process.kill(outcome.hostPid, "SIGTERM");
+      } catch {
+        // The host may already have exited after the one-shot turn.
+      }
+      removeHost(nodeFs, TREVOR_STATE_HOME, outcome.sessionId);
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   if (args.includes("--help") || args.includes("-h")) {
@@ -130,6 +251,11 @@ async function main(): Promise<void> {
   }
   if (args.includes("--version") || args.includes("-v")) {
     process.stdout.write("trevor launcher\n");
+    return;
+  }
+  const prompt = oneShotPrompt(args);
+  if (prompt) {
+    await runOneShotPrompt(args, prompt);
     return;
   }
   // `trevor open <session>` is a launch variant (spinner + full platform), handled before the
@@ -150,6 +276,10 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`trevor: ${errorMessage(error)}\n`);
+  if (process.argv.includes("--json") && isCliStageError(error)) {
+    process.stderr.write(`${JSON.stringify({ stage: error.stage, message: error.message })}\n`);
+  } else {
+    process.stderr.write(`trevor: ${errorMessage(error)}\n`);
+  }
   process.exit(1);
 });
