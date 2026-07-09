@@ -19,7 +19,7 @@ import { events } from "@trevor/session";
  */
 export interface CommandReplier {
   /** Emit a success `command.result`. */
-  ok(text: string): Promise<void>;
+  ok(text: string, options?: { readonly focusSessionId?: string }): Promise<void>;
   /** Emit a failure `command.result`. */
   fail(text: string): Promise<void>;
   /** Emit a `command.result` whose ok is computed (e.g. a sub-operation's `result.ok`). */
@@ -34,7 +34,7 @@ export type ReplyFor = (command: string) => CommandReplier;
 /** Builds a {@link ReplyFor} over an emit sink; a command factory wires it once from its injected emit. */
 export function commandReplier(emit: EmitEvent): ReplyFor {
   return (command) => ({
-    ok: (text) => emit(events.commandResult({ command, text, ok: true })),
+    ok: (text, options) => emit(events.commandResult({ command, text, ok: true, ...options })),
     fail: (text) => emit(events.commandResult({ command, text, ok: false })),
     result: (text, ok) => emit(events.commandResult({ command, text, ok })),
     failed: (error, verb) =>

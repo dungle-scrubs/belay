@@ -29,6 +29,8 @@ export interface WorktreeCommandsDeps {
   readonly blockedFromWorkspaceSwitch: SessionSwitchApi["blockedFromWorkspaceSwitch"];
   /** The shared workspace-switch mechanic (D-091): ensure session, spawn, session.switch, retire. */
   readonly switchToWorkspace: SessionSwitchApi["switchToWorkspace"];
+  /** Create a new concurrent worktree session without retiring the current host. */
+  readonly createWorktreeSession: SessionSwitchApi["createWorktreeSession"];
   /** Re-announce host.online so every client's worktree rows refresh. */
   announceOnline(): void;
 }
@@ -41,6 +43,7 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
     emit,
     blockedFromWorkspaceSwitch,
     switchToWorkspace,
+    createWorktreeSession,
     announceOnline,
   } = deps;
   const replyFor = commandReplier(emit);
@@ -102,12 +105,13 @@ export function makeWorktreeCommands(deps: WorktreeCommandsDeps) {
       return;
     }
     try {
-      await reply.ok(`✓ created ${name} and switched in`);
-      await switchToWorkspace({
+      await createWorktreeSession({
         cwd: result.record.worktreePath,
         sessionId: result.record.sessionId,
         workspace: result.record.worktreePath,
-        reason: "worktree",
+      });
+      await reply.ok(`✓ created ${name} and switched in`, {
+        focusSessionId: result.record.sessionId,
       });
     } catch (error) {
       warn("host", "worktree: create-switch failed", { error: msg(error) });

@@ -23,6 +23,7 @@ import {
   isTurnActive,
   jobsFrom,
   lastUserModelFrom,
+  latestCommandFocusSession,
   latestSessionSwitch,
   modelPrefsFrom,
   parseBangShell,
@@ -309,6 +310,35 @@ test("latestSessionSwitch ignores replayed handoffs when scoped after replay", (
     latestSessionSwitch([historical, live], { afterSeq: historical.seq }),
     "opchain-20260626-125838z-34a7fc20",
   );
+});
+
+test("latestCommandFocusSession follows command-result focus hints without session.switch", () => {
+  const historical = evt("command.result", {
+    command: "/worktree-new",
+    text: "created old",
+    ok: true,
+    focusSessionId: "old-worktree",
+  });
+  const live = evt("command.result", {
+    command: "/worktree-new",
+    text: "created new",
+    ok: true,
+    focusSessionId: "new-worktree",
+  });
+  const failed = evt("command.result", {
+    command: "/worktree-new",
+    text: "failed",
+    ok: false,
+    focusSessionId: "failed-worktree",
+  });
+
+  assert.equal(latestCommandFocusSession([historical], { afterSeq: historical.seq }), null);
+  assert.equal(latestCommandFocusSession([historical, failed], { afterSeq: historical.seq }), null);
+  assert.equal(
+    latestCommandFocusSession([historical, live], { afterSeq: historical.seq }),
+    "new-worktree",
+  );
+  assert.equal(latestSessionSwitch([historical, live]), null);
 });
 
 test("tasksFrom returns the latest checklist snapshot", () => {

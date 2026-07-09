@@ -651,7 +651,7 @@ export function worktreesFrom(announcement: HostAnnouncement | null): WorktreeSu
   return [...(announcement?.worktrees ?? [])];
 }
 
-interface LatestSessionSwitchOptions {
+interface LatestAfterSeqOptions {
   readonly afterSeq?: number;
 }
 
@@ -696,12 +696,26 @@ export function admissionWaiting(events: readonly SessionEvent[]): AdmissionWait
 
 export function latestSessionSwitch(
   events: readonly SessionEvent[],
-  options: LatestSessionSwitchOptions = {},
+  options: LatestAfterSeqOptions = {},
 ): string | null {
   const afterSeq = options.afterSeq ?? Number.NEGATIVE_INFINITY;
   return (
     latest(events, (d, event) =>
       d.type === "session.switch" && d.sessionId && event.seq > afterSeq ? d.sessionId : undefined,
+    ) ?? null
+  );
+}
+
+export function latestCommandFocusSession(
+  events: readonly SessionEvent[],
+  options: LatestAfterSeqOptions = {},
+): string | null {
+  const afterSeq = options.afterSeq ?? Number.NEGATIVE_INFINITY;
+  return (
+    latest(events, (d, event) =>
+      d.type === "command.result" && d.ok && d.focusSessionId && event.seq > afterSeq
+        ? d.focusSessionId
+        : undefined,
     ) ?? null
   );
 }

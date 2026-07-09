@@ -67,6 +67,24 @@ export async function seedProjectPath(
   await publish(transport, sessionId, events.sessionProject({ path }), HOST);
 }
 
+export async function appendCommandFocusResult(
+  transport: SessionTransport,
+  sessionId: string,
+  targetSessionId: string,
+): Promise<void> {
+  await publish(
+    transport,
+    sessionId,
+    events.commandResult({
+      command: "/worktree-new",
+      text: `Created worktree session ${targetSessionId}`,
+      ok: true,
+      focusSessionId: targetSessionId,
+    }),
+    HOST,
+  );
+}
+
 function hostOnlineWithJobs(jobs: readonly JobSnapshot[]) {
   return events.hostOnline({
     instanceId: E2E_HOST_ID,

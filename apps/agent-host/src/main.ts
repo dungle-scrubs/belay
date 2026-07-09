@@ -660,6 +660,7 @@ const {
   blockedFromWorkspaceSwitch,
   cdToFreshSession,
   switchToWorkspace,
+  createWorktreeSession,
 } = makeSessionSwitch({
   sessionId: SESSION_ID,
   transport,
@@ -711,6 +712,7 @@ const { worktreeSwitch, worktreeNew, worktreeMerge, worktreeDelete, worktreeReco
     emit,
     blockedFromWorkspaceSwitch,
     switchToWorkspace,
+    createWorktreeSession,
     announceOnline,
   });
 

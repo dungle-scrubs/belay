@@ -151,4 +151,21 @@ describe("command.result carries the menu over the wire (backward-compatible)", 
     expect(decoded.menu).toBeUndefined();
     expect(decoded.text).toBe("the help text");
   });
+
+  test("a focus session hint round-trips without requiring a menu", () => {
+    const decoded = decodeTrevorEvent(
+      wire(
+        events.commandResult({
+          command: "/worktree-new",
+          text: "created",
+          ok: true,
+          focusSessionId: "worktree-session",
+        }),
+      ),
+    );
+    expect(decoded?.type).toBe("command.result");
+    if (decoded?.type !== "command.result") return;
+    expect(decoded.focusSessionId).toBe("worktree-session");
+    expect(decoded.menu).toBeUndefined();
+  });
 });

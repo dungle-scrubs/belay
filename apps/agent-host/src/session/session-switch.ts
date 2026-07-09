@@ -188,6 +188,21 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     retireAfterSessionSwitch();
   }
 
+  async function stampWorktreeProject(target: WorkspaceTarget): Promise<void> {
+    const baseRepo = baseRepoFor?.(target.cwd) ?? null;
+    if (!baseRepo) {
+      throw new Error(
+        `cannot resolve base repo for worktree switch at ${target.cwd} - refusing to spawn a host without a durable project stamp`,
+      );
+    }
+    if (!publishToSession) {
+      throw new Error(
+        "publishToSession is required for worktree switches so session.project can land on the target session",
+      );
+    }
+    await publishToSession(target.sessionId, events.sessionProject({ path: baseRepo }));
+  }
+
   async function clearToFreshSession(): Promise<void> {
     const reply = replyFor("/clear");
     const nextSessionId = freshSessionId();
@@ -291,18 +306,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     // before the replacement host starts, so inventory groups under the base project from the
     // first events. Emit writes the retiring session, so this uses publishToSession instead.
     if (opts.reason === "worktree") {
-      const baseRepo = baseRepoFor?.(opts.cwd) ?? null;
-      if (!baseRepo) {
-        throw new Error(
-          `cannot resolve base repo for worktree switch at ${opts.cwd} - refusing to spawn a host without a durable project stamp`,
-        );
-      }
-      if (!publishToSession) {
-        throw new Error(
-          "publishToSession is required for worktree switches so session.project can land on the target session",
-        );
-      }
-      await publishToSession(opts.sessionId, events.sessionProject({ path: baseRepo }));
+      await stampWorktreeProject(opts);
     }
     const spawned = spawnReplacementHost({
       cwd: opts.cwd,
@@ -311,6 +315,22 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     });
     await announceSwitchAndRetire(opts.sessionId, opts.reason);
     log("host", `${opts.reason}: switched session`, {
+      cwd: opts.cwd,
+      from: SESSION_ID,
+      pid: spawned.pid,
+      to: opts.sessionId,
+    });
+  }
+
+  async function createWorktreeSession(opts: WorkspaceTarget): Promise<void> {
+    await transport.ensureSession(opts.sessionId);
+    await stampWorktreeProject(opts);
+    const spawned = spawnReplacementHost({
+      cwd: opts.cwd,
+      sessionId: opts.sessionId,
+      workspace: opts.workspace,
+    });
+    log("host", "worktree: created concurrent session", {
       cwd: opts.cwd,
       from: SESSION_ID,
       pid: spawned.pid,
@@ -327,6 +347,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     blockedFromWorkspaceSwitch,
     cdToFreshSession,
     switchToWorkspace,
+    createWorktreeSession,
   };
 }
 

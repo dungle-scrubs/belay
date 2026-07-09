@@ -676,6 +676,8 @@ export type DecodedEvent =
       readonly ok: boolean;
       /** An optional host-owned nested command menu (plan 03); absent for plain text results. */
       readonly menu?: CommandMenuPayload;
+      /** Transient browser focus hint for command-created sessions; not durable switch semantics. */
+      readonly focusSessionId?: string;
     }
   | { readonly type: "session.switch"; readonly sessionId: string; readonly reason: string }
   | { readonly type: "session.archived"; readonly archived: boolean }
@@ -1198,6 +1200,9 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
         text: str(p.text),
         ok: p.ok === true,
         ...(menu ? { menu } : {}),
+        ...(typeof p.focusSessionId === "string" && p.focusSessionId
+          ? { focusSessionId: p.focusSessionId }
+          : {}),
       };
     }
     case "session.switch":

@@ -6,6 +6,7 @@ import {
   hostAnnouncement,
   isSessionArchived,
   lastUserModelFrom,
+  latestCommandFocusSession,
   latestSessionSwitch,
   modelPrefsFrom,
   pendingHandoffFrom,
@@ -40,6 +41,7 @@ export interface SessionReadModel {
   readonly sources: ReturnType<typeof sourcesFrom>;
   readonly staleTasks: boolean;
   readonly switchAfterReplay: (replayThroughSeq: number | null) => string | null;
+  readonly commandFocusAfterReplay: (replayThroughSeq: number | null) => string | null;
   readonly tasks: ReturnType<typeof tasksFrom>;
   readonly toolBatches: ReturnType<typeof readOnlyToolBatches>;
   readonly transcript: ReturnType<typeof toTranscript>;
@@ -88,6 +90,10 @@ export function createSessionReadModel(
       replayThroughSeq === null
         ? null
         : latestSessionSwitch(events, { afterSeq: replayThroughSeq }),
+    commandFocusAfterReplay: (replayThroughSeq) =>
+      replayThroughSeq === null
+        ? null
+        : latestCommandFocusSession(events, { afterSeq: replayThroughSeq }),
     tasks: tasksFrom(events),
     toolBatches: readOnlyToolBatches(transcript),
     transcript,

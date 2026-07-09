@@ -850,9 +850,16 @@ export const events = {
     text: string;
     ok: boolean;
     menu?: CommandMenuPayload;
+    focusSessionId?: string;
   }): TrevorEventInput => ({
     type: "command.result",
-    payload: { command: p.command, text: p.text, ok: p.ok, ...(p.menu ? { menu: p.menu } : {}) },
+    payload: {
+      command: p.command,
+      text: p.text,
+      ok: p.ok,
+      ...(p.menu ? { menu: p.menu } : {}),
+      ...(p.focusSessionId ? { focusSessionId: p.focusSessionId } : {}),
+    },
   }),
   /**
    * Host-authored session handoff. Used by /clear to move the browser into a newly minted durable

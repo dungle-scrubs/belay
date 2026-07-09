@@ -153,3 +153,50 @@ describe("switchToWorkspace worktree stamping (plan 58.2 M1)", () => {
     assert.ok(names.includes("emit"));
   });
 });
+
+describe("createWorktreeSession concurrent path (plan 58.7 M1)", () => {
+  test("ensures target, stamps base repo, spawns target host, and leaves source host alive", async () => {
+    const calls: Call[] = [];
+    const api = makeSessionSwitch(recordingDeps({ calls }));
+
+    await api.createWorktreeSession(TARGET);
+
+    const names = calls.map((c) => c.name);
+    assert.deepEqual(names, [
+      "ensureSession",
+      "baseRepoFor",
+      "publishToSession",
+      "spawnReplacementHost",
+    ]);
+    assert.ok(!names.includes("emit"), "concurrent create must not emit session.switch");
+    assert.ok(!names.includes("clearPending"), "source scheduler queue must stay intact");
+
+    const publish = calls.find((c) => c.name === "publishToSession");
+    assert.deepEqual(publish?.detail, {
+      sessionId: TARGET.sessionId,
+      event: events.sessionProject({ path: "/dev/trevor" }),
+    });
+  });
+
+  test("fails before spawning when the base repo cannot be resolved", async () => {
+    const calls: Call[] = [];
+    const api = makeSessionSwitch(
+      recordingDeps({
+        calls,
+        baseRepoFor: (cwd) => {
+          calls.push({ name: "baseRepoFor", detail: cwd });
+          return null;
+        },
+      }),
+    );
+
+    await assert.rejects(() => api.createWorktreeSession(TARGET), /base repo/i);
+
+    const names = calls.map((c) => c.name);
+    assert.ok(names.includes("ensureSession"));
+    assert.ok(names.includes("baseRepoFor"));
+    assert.ok(!names.includes("publishToSession"));
+    assert.ok(!names.includes("spawnReplacementHost"));
+    assert.ok(!names.includes("emit"));
+  });
+});

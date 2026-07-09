@@ -319,11 +319,20 @@ export function App() {
     () => readModel.switchAfterReplay(replayThroughSeq),
     [readModel, replayThroughSeq],
   );
+  const commandFocusTarget = useMemo(
+    () => readModel.commandFocusAfterReplay(replayThroughSeq),
+    [readModel, replayThroughSeq],
+  );
   useEffect(() => {
     if (switchTarget && switchTarget !== target) {
       navigateToSession(switchTarget);
     }
   }, [navigateToSession, switchTarget, target]);
+  useEffect(() => {
+    if (commandFocusTarget && commandFocusTarget !== target) {
+      navigateToSession(commandFocusTarget);
+    }
+  }, [commandFocusTarget, navigateToSession, target]);
   // Runs of 2+ consecutive read-only tool rows were one concurrent batch (D-050); group them so
   // they render as a single compact block instead of stacked cards.
   const toolBatches = readModel.toolBatches;
