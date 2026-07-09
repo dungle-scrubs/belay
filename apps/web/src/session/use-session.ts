@@ -196,7 +196,34 @@ export async function createTangentSessionWith(
   for (const input of plan.events) {
     await publishEvent(sessionTransport, tangentSessionId, input);
   }
+  await publishTangentCreatedWakeUp(sessionTransport, {
+    parentSessionId: plan.parentSessionId,
+    sourceMessageId: plan.sourceMessageId,
+    tangentSessionId: plan.tangentSessionId,
+  });
   return tangentSessionId;
+}
+
+async function publishTangentCreatedWakeUp(
+  sessionTransport: SessionTransport,
+  args: {
+    readonly parentSessionId: string;
+    readonly sourceMessageId: string;
+    readonly tangentSessionId: string;
+  },
+): Promise<void> {
+  try {
+    await publishWebEvent(
+      sessionTransport,
+      args.parentSessionId,
+      sessionEvents.tangentCreated({
+        sourceMessageId: args.sourceMessageId,
+        tangentSessionId: args.tangentSessionId,
+      }),
+    );
+  } catch {
+    // Best-effort fast path: the tangent marker is durable, and the host inventory poll repairs misses.
+  }
 }
 
 /**

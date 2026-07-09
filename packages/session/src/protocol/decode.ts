@@ -705,6 +705,11 @@ export type DecodedEvent =
       readonly preview: string;
     }
   | {
+      readonly type: "tangent.created";
+      readonly tangentSessionId: string;
+      readonly sourceMessageId: string;
+    }
+  | {
       readonly type: "lucid.published";
       readonly lucidId: string;
       readonly version: number;
@@ -1233,6 +1238,12 @@ function decodeKnownTrevorEvent(event: SessionEvent): DecodedEvent | null {
         mode: str(p.mode, "quote"),
         preview: str(p.preview),
       };
+    case "tangent.created":
+      return {
+        type: "tangent.created",
+        tangentSessionId: str(p.tangentSessionId),
+        sourceMessageId: str(p.sourceMessageId),
+      };
     case "lucid.published": {
       const title = optStr(p.title);
       return {
@@ -1643,6 +1654,7 @@ const sessionFamily: EventFamily = {
     "session.tangentOf",
     "session.project",
     "tangent.foldedBack",
+    "tangent.created",
     "file.index.requested",
     "file.index.result",
     "session.launch.requested",

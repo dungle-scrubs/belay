@@ -82,6 +82,21 @@ describe("tangent lineage + fold-back events", () => {
       preview: "the tangent concluded X",
     });
   });
+
+  it("tangent.created round-trips as a parent-session wake-up hint", () => {
+    const input = events.tangentCreated({
+      tangentSessionId: "tangent-1",
+      sourceMessageId: "e2",
+    });
+
+    expect(input.type).toBe("tangent.created");
+    expect(decodeTrevorEvent(ev(10, "tangent.created", input.payload))).toEqual({
+      type: "tangent.created",
+      tangentSessionId: "tangent-1",
+      sourceMessageId: "e2",
+    });
+    expect(JSON.stringify(input.payload)).not.toContain("blobs are content-addressed");
+  });
 });
 
 describe("planTangent seeds an ISOLATED tangent (no parent copy)", () => {

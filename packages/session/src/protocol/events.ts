@@ -960,6 +960,19 @@ export const events = {
     },
   }),
   /**
+   * A parent-session wake-up hint that a tangent was created. The parent host uses this to adopt the
+   * new tangent immediately instead of waiting for the inventory repair poll. It intentionally carries
+   * only ids - never selected text, parent transcript content, or hidden prompt context. The durable
+   * isolation source of truth remains the tangent session's own `session.tangentOf` marker.
+   */
+  tangentCreated: (p: { tangentSessionId: string; sourceMessageId: string }): TrevorEventInput => ({
+    type: "tangent.created",
+    payload: {
+      tangentSessionId: p.tangentSessionId,
+      sourceMessageId: p.sourceMessageId,
+    },
+  }),
+  /**
    * A LUCID artifact was published into the session (plan 27, M2/M6): the agent (or an external/import
    * path) produced or re-produced an addressable HTML artifact. `lucidId` is the STABLE per-artifact
    * identity across versions; `version` increments per revision; `htmlHash` is the HTML blob's sha256;

@@ -49,6 +49,12 @@ export type { ChatMessage, Provider, ProviderEvent } from "@host/providers";
 // The typed provider error, so cross-service e2e can drive a retryable transport drop through a real
 // store (the DeepSeek-style thinking-only reconnect path) without reaching into host internals.
 export { ProviderUnavailable } from "@host/providers/errors";
+// Tangent adoption manager, exposed for hermetic e2e fast-path/repair verification without importing
+// host internals directly from the e2e workspace.
+export {
+  makeTangentAdoption,
+  type TangentAdoptionDeps,
+} from "@host/session/tangent-adoption";
 // The typed tool failures + the model-facing mcp tool builder (plan 23 M9), so the e2e MCP
 // capability suite discriminates failures and drives the same action surface the model sees.
 export { ToolExecutionError, ToolInputError } from "@host/tools/errors";

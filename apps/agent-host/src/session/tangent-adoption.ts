@@ -64,6 +64,11 @@ export interface TangentAdoptionDeps {
 /** The manager main.ts drives: converge the live worker set to the discovered tangent ids. */
 export interface TangentAdoption {
   /**
+   * Adopt one newly-created tangent from the parent-session event stream. This is a fast path only:
+   * it never drops other workers, so the inventory poll remains the authoritative repair reconcile.
+   */
+  readonly adopt: (tangentId: string, source?: "event" | "poll") => void;
+  /**
    * Converge the adopted-worker set to `tangentIds` (the parent's live, non-deleted tangents).
    * Idempotent: a tangent already adopted is left running; a newly-seen id spins up one worker; an
    * id no longer present (soft-deleted/archived out of {@link tangentsOf}) has its worker torn down.
@@ -115,14 +120,20 @@ export function makeTangentAdoption(deps: TangentAdoptionDeps): TangentAdoption 
       },
     });
 
+  const adopt = (tangentId: string, source: "event" | "poll" = "poll"): void => {
+    if (workers.has(tangentId)) {
+      return;
+    }
+    workers.set(tangentId, startTangentWorker(tangentId));
+    log("host", "tangent adopted", { parent: parentSessionId, source, tangent: tangentId });
+  };
+
   return {
+    adopt,
     reconcile: (tangentIds) => {
       const desired = new Set(tangentIds);
       for (const id of desired) {
-        if (!workers.has(id)) {
-          workers.set(id, startTangentWorker(id));
-          log("host", "tangent adopted", { parent: parentSessionId, tangent: id });
-        }
+        adopt(id, "poll");
       }
       // Drop workers for tangents that fell out of the discovered set (soft-deleted / archived away).
       for (const [id, worker] of workers) {

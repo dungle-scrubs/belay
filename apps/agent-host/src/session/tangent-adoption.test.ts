@@ -265,6 +265,59 @@ test("reconcile adopts a new tangent once (idempotent) and teardownAll disconnec
   );
 });
 
+test("adopt starts one tangent worker without fetching or dropping existing workers", async () => {
+  const rec = recordingTransport();
+  const tracked = trackingTransport(rec);
+  const { providers } = capturingProviders("event adopted");
+  const adoption = makeTangentAdoption(deps(tracked.transport, providers, () => true));
+
+  adoption.reconcile(["existing"]);
+  await settle();
+  adoption.adopt("tangent-event", "event");
+  adoption.adopt("tangent-event", "event");
+  await settle();
+
+  assert.equal(
+    adoption.adoptedCount(),
+    2,
+    "event adoption adds one worker beside existing workers",
+  );
+  assert.equal(
+    rec.connects.filter((c) => c.sessionId === "tangent-event").length,
+    1,
+    "the event-created tangent stream was opened exactly once",
+  );
+  assert.deepEqual(tracked.closed, [], "single-tangent adoption never releases unrelated workers");
+
+  adoption.teardownAll();
+});
+
+test("adopted event tangent catches up a pending prompt immediately", async () => {
+  const rec = recordingTransport();
+  const pending = tangentPrompt("tangent-event", "answer from the event path", 2);
+  rec.seed("tangent-event", [tangentMarker("tangent-event"), pending]);
+  const { providers } = capturingProviders("fast path answer");
+  const adoption = makeTangentAdoption(deps(rec.transport, providers, () => true));
+
+  adoption.adopt("tangent-event", "event");
+
+  await waitFor(
+    () => rec.publishedBy("tangent-event").some((e) => e.type === "assistant.completed"),
+    {
+      label: "event-adopted tangent turn completed",
+    },
+  );
+  const completed = rec.publishedBy("tangent-event").find((e) => e.type === "assistant.completed");
+  assert.equal(completed?.payload.text, "fast path answer");
+  assert.equal(
+    rec.publishedBy(PARENT_ID).length,
+    0,
+    "the event path still publishes only to tangent",
+  );
+
+  adoption.teardownAll();
+});
+
 test("a user.cancel hard-cancels the tangent's in-flight run (a cancelled completion is published)", async () => {
   const rec = recordingTransport();
   rec.seed("tangent-1", [tangentMarker("tangent-1")]);

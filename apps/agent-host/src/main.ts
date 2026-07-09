@@ -933,7 +933,14 @@ function handleEvent(message: SessionEvent): void {
   if (!decoded) {
     return;
   }
-  if (decoded.type === "user.message" && isAnswerableProducer(message.producerId, PRODUCER_ID)) {
+  if (decoded.type === "tangent.created") {
+    if (live && lease.isLeader()) {
+      tangentAdoption.adopt(decoded.tangentSessionId, "event");
+    }
+  } else if (
+    decoded.type === "user.message" &&
+    isAnswerableProducer(message.producerId, PRODUCER_ID)
+  ) {
     mainWorker.observePromptProvider(message);
     scheduler.noteTurn(message);
   } else if (

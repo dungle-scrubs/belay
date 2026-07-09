@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { answerProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
+import {
+  answerProvider,
+  makeTangentAdoption,
+  type Provider,
+  publishTurnVia,
+  type TangentAdoptionDeps,
+  transportEmit,
+} from "@trevor/agent-host/testing";
 import type { RunningServer } from "@trevor/server-kit";
 import {
   decodeTrevorEvent,
@@ -7,10 +14,16 @@ import {
   PRODUCER_IDS,
   planTangent,
   type SessionEvent,
+  type SessionTransport,
   seedTangentPrompt,
   events as sessionEvents,
   streamTransport,
+  tangentsOf,
+  UNKNOWN_INTERNET,
 } from "@trevor/session";
+import { NOOP_SINK } from "@trevor/session/telemetry";
+import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
+import { testIdentity } from "@trevor/session/testing";
 import { createWorkflowDriver } from "@trevor/test-kit";
 import { bootStore } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
@@ -40,6 +53,25 @@ async function readLog(url: string, sessionId: string): Promise<readonly Session
   const events = [...workflow.events];
   workflow.close();
   return events;
+}
+
+function tangentAdoptionDeps(
+  transport: SessionTransport,
+  parentSessionId: string,
+): TangentAdoptionDeps {
+  const providers: Record<string, Provider> = { fake: answerProvider("event tangent answered") };
+  return {
+    parentSessionId,
+    producerId: PRODUCER_IDS.host,
+    instanceId: "e2e-event-adopter",
+    transport,
+    providers,
+    residency: { onActiveModelChanged: () => Promise.resolve() },
+    internet: { refreshIfStale: () => Promise.resolve(UNKNOWN_INTERNET) },
+    lease: { isLeader: () => true },
+    hostTelemetry: NOOP_SINK,
+    providerTrace: createProviderTraceWriter({ enabled: false }),
+  };
 }
 
 test("create -> isolated chat -> fold-back keeps the parent transcript intact", async () => {
@@ -143,4 +175,111 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
   assert.ok(!parentAfterFold.some((e) => e.type === "tangent.foldedBack"));
 
   workflow.close();
+});
+
+test("delivered tangent.created wakes adoption before the inventory poll interval", async () => {
+  const transport = streamTransport(store.url);
+  const parent = "event-parent-fast";
+  const tangentSessionId = freshSessionId({ prefix: "tangent" });
+  const quote = "event-selected snapshot";
+  const plan = planTangent({
+    anchor: { parentSessionId: parent, sourceMessageId: "event-source", quote },
+    tangentSessionId,
+  });
+  await transport.ensureSession(parent);
+  await transport.ensureSession(tangentSessionId);
+  for (const input of plan.events) {
+    await transport.publishEvent(tangentSessionId, input);
+  }
+  await transport.publishEvent(tangentSessionId, {
+    ...sessionEvents.userMessage({
+      text: seedTangentPrompt(quote, "answer before polling"),
+      provider: "fake",
+    }),
+    producerId: PRODUCER_IDS.web,
+  });
+
+  const workflow = await createWorkflowDriver(transport, tangentSessionId, {
+    who: "event-reader",
+  });
+  const adoption = makeTangentAdoption(tangentAdoptionDeps(transport, parent));
+  const parentConnection = transport.connectSession({
+    sessionId: parent,
+    identity: testIdentity("event-parent-host"),
+    afterSeq: 0,
+    onEvent: (event) => {
+      const decoded = decodeTrevorEvent(event);
+      if (decoded?.type === "tangent.created") {
+        adoption.adopt(decoded.tangentSessionId, "event");
+      }
+    },
+  });
+  try {
+    const startedAt = Date.now();
+    await transport.publishEvent(parent, {
+      ...sessionEvents.tangentCreated({ tangentSessionId, sourceMessageId: "event-source" }),
+      producerId: PRODUCER_IDS.web,
+    });
+    await workflow.waitForType("assistant.completed", {
+      label: "event-adopted tangent completed",
+    });
+
+    const completed = workflow.events.find((event) => event.type === "assistant.completed");
+    assert.ok(completed, "the delivered wake-up produced a tangent response");
+    assert.ok(
+      Date.now() - startedAt < 4_000,
+      "event adoption completed before the 4s inventory repair poll interval",
+    );
+    assert.equal(String(completed.payload.text ?? ""), "event tangent answered");
+  } finally {
+    parentConnection.close();
+    workflow.close();
+    adoption.teardownAll();
+  }
+});
+
+test("missing tangent.created still repairs through inventory reconcile", async () => {
+  const transport = streamTransport(store.url);
+  const parent = "event-parent-repair";
+  const tangentSessionId = freshSessionId({ prefix: "tangent" });
+  const quote = "repair-selected snapshot";
+  const plan = planTangent({
+    anchor: { parentSessionId: parent, sourceMessageId: "repair-source", quote },
+    tangentSessionId,
+  });
+  await transport.ensureSession(parent);
+  await transport.ensureSession(tangentSessionId);
+  for (const input of plan.events) {
+    await transport.publishEvent(tangentSessionId, input);
+  }
+  await transport.publishEvent(tangentSessionId, {
+    ...sessionEvents.userMessage({
+      text: seedTangentPrompt(quote, "answer from inventory repair"),
+      provider: "fake",
+    }),
+    producerId: PRODUCER_IDS.web,
+  });
+
+  const adoption = makeTangentAdoption(tangentAdoptionDeps(transport, parent));
+  const summaries = await transport.fetchInventory();
+  const tangentIds = tangentsOf(summaries, parent).map((summary) => summary.sessionId);
+  adoption.reconcile(tangentIds);
+
+  const workflow = await createWorkflowDriver(transport, tangentSessionId, {
+    who: "repair-reader",
+  });
+  try {
+    await workflow.waitForType("assistant.completed", {
+      label: "inventory-repaired tangent completed",
+    });
+    assert.equal(
+      String(
+        workflow.events.find((event) => event.type === "assistant.completed")?.payload.text ?? "",
+      ),
+      "event tangent answered",
+    );
+  } finally {
+    workflow.close();
+    adoption.teardownAll();
+  }
 });

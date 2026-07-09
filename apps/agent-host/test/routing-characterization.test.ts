@@ -46,6 +46,7 @@ const ROUTED: readonly string[] = [
   "host.hello",
   "model.switch.requested",
   "provider.question.answer",
+  "tangent.created",
   "tasks.current",
   "tool.completed",
   "tool.started",
