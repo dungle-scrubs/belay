@@ -183,6 +183,8 @@ export const QuoteSelectionToolbar: FC<{
   usePersistedHighlight(snapshot?.range ?? null);
 
   useEffect(() => {
+    let mouseSelectionInProgress = false;
+
     // A rAF lets the browser finish applying the selection (notably for double-click)
     // before we read it.
     const capture = (point: Anchor | null, onEmpty: () => void) => {
@@ -196,7 +198,18 @@ export const QuoteSelectionToolbar: FC<{
       });
     };
 
+    const endMouseSelection = () => {
+      mouseSelectionInProgress = false;
+    };
+
+    const onMouseDown = (e: MouseEvent) => {
+      if (e.button !== 0) return;
+      if ((e.target as Element | null)?.closest(`.${TOOLBAR_CLASS}`)) return;
+      mouseSelectionInProgress = true;
+    };
+
     const onMouseUp = (e: MouseEvent) => {
+      endMouseSelection();
       // Ignore clicks on the toolbar itself so it neither repositions to itself nor
       // dismisses when an action button is pressed.
       if ((e.target as Element | null)?.closest(`.${TOOLBAR_CLASS}`)) return;
@@ -214,15 +227,22 @@ export const QuoteSelectionToolbar: FC<{
 
     // Scroll reattaches the toolbar to the live selection while it survives; once the
     // selection has collapsed (re-render), the snapshot stays put - never dismissed here.
-    const onScroll = () => capture(null, () => {});
+    const onScroll = () => {
+      if (mouseSelectionInProgress) return;
+      capture(null, () => {});
+    };
 
+    document.addEventListener("mousedown", onMouseDown);
     document.addEventListener("mouseup", onMouseUp);
     document.addEventListener("keyup", onKeyUp);
     document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("blur", endMouseSelection);
     return () => {
+      document.removeEventListener("mousedown", onMouseDown);
       document.removeEventListener("mouseup", onMouseUp);
       document.removeEventListener("keyup", onKeyUp);
       document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("blur", endMouseSelection);
     };
   }, []);
 
