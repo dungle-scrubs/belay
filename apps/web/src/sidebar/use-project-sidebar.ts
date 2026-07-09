@@ -1,4 +1,4 @@
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary, WorktreeSummary } from "@trevor/session";
 import { useCallback, useMemo, useState } from "react";
 import {
   buildProjectSidebar,
@@ -32,6 +32,11 @@ export interface UseProjectSidebarOptions {
   readonly sessions: readonly SessionSummary[];
   /** Project registry records (mapped from the supervisor's `projects.list.result`). */
   readonly projects: readonly ProjectSidebarRecord[];
+  /**
+   * Current-host worktree snapshot from the viewed session's latest `host.online` (plan 58.2).
+   * Badge join is scoped to this list; it is not an all-project worktree index.
+   */
+  readonly worktrees?: readonly WorktreeSummary[];
   /** Dispatch a supervisor project action (add/rename/collapse/remove). App owns the publish. */
   readonly onProjectAction: (action: ProjectAction) => void;
   /** Launch a fresh project-scoped session (M4): mint a UUID, publish session.launch.requested. */
@@ -90,15 +95,20 @@ function useCollapsedKeys(projects: readonly ProjectSidebarRecord[]) {
 }
 
 export function useProjectSidebar(options: UseProjectSidebarOptions): UseProjectSidebar {
-  const { sessions, projects, onProjectAction, onNewSession, onArchiveSession } = options;
+  const { sessions, projects, worktrees, onProjectAction, onNewSession, onArchiveSession } =
+    options;
 
   const { collapsedKeys, toggle } = useCollapsedKeys(projects);
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Build the base read model, then layer local collapsed overrides (the registry record's collapsed
-  // state is the seed, but the user may have toggled locally without a round trip yet).
-  const baseGroups = useMemo(() => buildProjectSidebar(projects, sessions), [projects, sessions]);
+  // Build the base read model (groups + scoped worktree join), then layer local collapsed overrides
+  // (the registry record's collapsed state is the seed, but the user may have toggled locally
+  // without a round trip yet). worktrees is the current host snapshot only.
+  const baseGroups = useMemo(
+    () => buildProjectSidebar(projects, sessions, worktrees),
+    [projects, sessions, worktrees],
+  );
 
   const groupsWithLocalCollapse = useMemo(() => {
     return baseGroups.map((group) => ({

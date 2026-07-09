@@ -1,13 +1,18 @@
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary, WorktreeSummary } from "@trevor/session";
 
 /**
- * The project sidebar read model (plan 58 M5): a pure grouping of active sessions under projects,
- * built from registry records + the session inventory. The browser owns this projection (per the
- * plan's boundaries); it never scans local state itself - it joins the registry (canonical-path-keyed
- * metadata, no session ids) with `SessionSummary`s by each session's resolved project path.
+ * The project sidebar read model (plan 58 M5 + plan 58.2): a pure grouping of active sessions under
+ * projects, built from registry records + the session inventory, with an optional scoped join to the
+ * currently viewed host's `WorktreeSummary[]` for badge attachment.
  *
- * Pure over injected inputs; no React, no live wiring (M6). A `ProjectGroup` is the unit the sidebar
- * renders: a project row with expand/collapse state plus the sessions nested under it.
+ * Grouping keys on the durable project path already folded into `SessionSummary.projectPath`
+ * (offline-safe). Badge attachment keys ONLY on `WorktreeSummary.sessionId` from the supplied
+ * snapshot - never on paths. The optional `worktrees` argument is the CURRENT HOST's announced
+ * worktree list, not an all-project index (see FP1); rows whose sessionIds are absent from that
+ * snapshot simply receive no badge.
+ *
+ * Pure over injected inputs; no React. A `ProjectGroup` is the unit the sidebar renders: a project
+ * row with expand/collapse state plus session rows nested under it.
  */
 
 /**
@@ -31,6 +36,16 @@ export interface ProjectSidebarRecord {
   readonly updatedAt: string;
 }
 
+/**
+ * One session row in a project group (plan 58.2): the inventory summary plus an optional attached
+ * worktree summary for badge/tooltip rendering. `worktree` is set only when a non-baseline entry in
+ * the supplied host snapshot joins by `sessionId`.
+ */
+export interface ProjectSessionRow {
+  readonly summary: SessionSummary;
+  readonly worktree: WorktreeSummary | null;
+}
+
 /** One project row in the sidebar, with its grouped sessions. */
 export interface ProjectGroup {
   /** Canonical project path (or the transient key - the resolved session path). */
@@ -43,14 +58,36 @@ export interface ProjectGroup {
   readonly collapsed: boolean;
   /** True when no registry record exists but the project has active sessions. */
   readonly isTransient: boolean;
-  /** Active sessions under this project, newest activity first. */
-  readonly sessions: readonly SessionSummary[];
+  /** Active sessions under this project, newest activity first, with optional worktree join. */
+  readonly sessions: readonly ProjectSessionRow[];
   /** Count of active sessions (== sessions.length; named for the UI's count badge). */
   readonly activeCount: number;
   /** The max of the registry updatedAt and the project's session updatedAt values. */
   readonly updatedAt: string;
   /** ISO timestamp of first registration (creation order). */
   readonly createdAt: string;
+}
+
+/**
+ * Builds the sessionId -> non-baseline WorktreeSummary map used for badge attachment (plan 58.2).
+ * Baseline rows are excluded so the main checkout session is never badged as a worktree. Paths are
+ * never joined on: only the durable `sessionId` identity is a valid key. The map is current-host
+ * scoped - callers must pass the viewed host's worktree snapshot, not an all-project catalog.
+ */
+export function buildWorktreeSessionMap(
+  worktrees: readonly WorktreeSummary[] | undefined,
+): ReadonlyMap<string, WorktreeSummary> {
+  const map = new Map<string, WorktreeSummary>();
+  if (!worktrees) {
+    return map;
+  }
+  for (const wt of worktrees) {
+    if (wt.baseline) {
+      continue;
+    }
+    map.set(wt.sessionId, wt);
+  }
+  return map;
 }
 
 /** The default number of sessions shown per project before a "Show more" affordance (M6). */
@@ -102,10 +139,17 @@ function canonicalizePath(rawPath: string, allPaths: readonly string[]): string 
 export function buildProjectSidebar(
   projects: readonly ProjectSidebarRecord[],
   sessions: readonly SessionSummary[],
+  /**
+   * Optional current-host worktree snapshot (plan 58.2). When supplied, non-baseline entries join
+   * session rows by `sessionId` for badge attachment. This is NOT an all-project worktree index;
+   * sessions outside the viewed host's base repo simply get `worktree: null`.
+   */
+  worktrees?: readonly WorktreeSummary[],
 ): readonly ProjectGroup[] {
   // Active sessions only: archived, deleted, AND tangents are excluded. Tangents surface only from
   // their parent session, never in ordinary top-level navigation (see activeSessions).
   const active = sessions.filter((s) => !s.archived && !s.deleted && !s.tangentOf);
+  const worktreeBySession = buildWorktreeSessionMap(worktrees);
 
   // Collect all raw paths (from registry records + sessions) so canonicalization can infer the home
   // prefix from absolute siblings (e.g. resolve `~` to `/Users/<name>` when both are present).
@@ -121,19 +165,23 @@ export function buildProjectSidebar(
   }
 
   // Group active sessions by resolved project path. A null path (ungrouped) is skipped: a session
-  // with no project binding does not surface its own project row.
-  const sessionsByPath = new Map<string, SessionSummary[]>();
+  // with no project binding does not surface its own project row. Join worktrees by sessionId only.
+  const sessionsByPath = new Map<string, ProjectSessionRow[]>();
   for (const summary of active) {
     const path = sessionProjectPath(summary);
     if (path == null) {
       continue;
     }
     const canon = canonicalizePath(path, allRawPaths);
+    const row: ProjectSessionRow = {
+      summary,
+      worktree: worktreeBySession.get(summary.sessionId) ?? null,
+    };
     const list = sessionsByPath.get(canon);
     if (list) {
-      list.push(summary);
+      list.push(row);
     } else {
-      sessionsByPath.set(canon, [summary]);
+      sessionsByPath.set(canon, [row]);
     }
   }
 
@@ -144,11 +192,14 @@ export function buildProjectSidebar(
   for (const key of keys) {
     const record = byPath.get(key);
     const projectSessions = (sessionsByPath.get(key) ?? []).sort((a, b) =>
-      b.updatedAt.localeCompare(a.updatedAt),
+      b.summary.updatedAt.localeCompare(a.summary.updatedAt),
     );
 
     // The aggregate updatedAt: the max of the registry record and all the project's sessions.
-    const candidates = [record?.updatedAt ?? "", ...projectSessions.map((s) => s.updatedAt)];
+    const candidates = [
+      record?.updatedAt ?? "",
+      ...projectSessions.map((s) => s.summary.updatedAt),
+    ];
     const updatedAt = candidates.reduce((max, v) => (v > max ? v : max), "");
 
     const isTransient = record == null;
@@ -157,7 +208,7 @@ export function buildProjectSidebar(
     // when the absolute form is known).
     const displayPath = key;
     const collapsed = record?.collapsed ?? false;
-    const createdAt = record?.createdAt ?? projectSessions[0]?.createdAt ?? updatedAt;
+    const createdAt = record?.createdAt ?? projectSessions[0]?.summary.createdAt ?? updatedAt;
 
     groups.push({
       key,
@@ -212,7 +263,9 @@ export function filterProjectSidebar(
       continue;
     }
 
-    const matchingSessions = group.sessions.filter((s) => s.title.toLowerCase().includes(q));
+    const matchingSessions = group.sessions.filter((s) =>
+      s.summary.title.toLowerCase().includes(q),
+    );
     if (matchingSessions.length > 0) {
       out.push({ ...group, sessions: matchingSessions, collapsed: false });
     }

@@ -2,15 +2,15 @@
 
 **Plan:** `58.2-worktree-sidebar-surface`
 **Stage:** implementing
-**Current focus:** M2 - Sidebar grouping and scoped sessionId worktree join (5/5)
+**Current focus:** Current-cutoff gate (all milestones complete)
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks (total) | 15 |
-| Checked (done) | 5 |
-| Current-cutoff blockers (unchecked) | 10 |
+| Checked (done) | 15 |
+| Current-cutoff blockers (unchecked) | 0 |
 | Accepted/deferred follow-up | 8 |
 | Superseded/obsolete | 0 |
 
@@ -31,23 +31,23 @@
 
 ### M2 - Sidebar grouping and scoped `sessionId` worktree join (5/5)
 
-- [ ] RED: Worktree session groups under base repo via durable `projectPath` with no host online.
-- [ ] RED: Worktree join keys on `sessionId` and excludes `baseline === true`.
-- [ ] RED: No path inference: worktree-looking paths receive no badge when `sessionId` is absent from
+- [x] RED: Worktree session groups under base repo via durable `projectPath` with no host online.
+- [x] RED: Worktree join keys on `sessionId` and excludes `baseline === true`.
+- [x] RED: No path inference: worktree-looking paths receive no badge when `sessionId` is absent from
       the supplied worktree snapshot.
-- [ ] GREEN: Add `ProjectSessionRow { summary, worktree }`; group by `sessionProjectPath(summary)`.
-- [ ] GREEN: Pass current `readModel.worktrees` through `useProjectSidebar`; document/test that this
+- [x] GREEN: Add `ProjectSessionRow { summary, worktree }`; group by `sessionProjectPath(summary)`.
+- [x] GREEN: Pass current `readModel.worktrees` through `useProjectSidebar`; document/test that this
       is current-host-scoped, not an all-project index.
 
 ### M3 - Worktree badge and tooltip (5/5)
 
-- [ ] RED: Session row with `row.worktree` renders a `FolderGit2` badge labeled `worktree`; rows
+- [x] RED: Session row with `row.worktree` renders a `FolderGit2` badge labeled `worktree`; rows
       without `row.worktree` do not.
-- [ ] GREEN: Add `worktree-badge.tsx` with lucide `FolderGit2` and Radix tooltip primitives.
-- [ ] GREEN: Preserve stable row layout: title, badge, truncation, and the existing right slot do not
+- [x] GREEN: Add `worktree-badge.tsx` with lucide `FolderGit2` and Radix tooltip primitives.
+- [x] GREEN: Preserve stable row layout: title, badge, truncation, and the existing right slot do not
       overlap.
-- [ ] RED: Tooltip hover/focus shows branch, abbreviated path, and git state.
-- [ ] GREEN: Add Storybook stories for normal, worktree, long-title worktree, and baseline no-badge.
+- [x] RED: Tooltip hover/focus shows branch, abbreviated path, and git state.
+- [x] GREEN: Add Storybook stories for normal, worktree, long-title worktree, and baseline no-badge.
 
 ---
 

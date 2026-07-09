@@ -496,6 +496,9 @@ export function App() {
   const projectSidebar = useProjectSidebar({
     sessions: modal.inventory.sessions,
     projects: sidebarSupervisor.projects,
+    // Plan 58.2: current-host worktree snapshot only (not an all-project index). Badges attach for
+    // sessions covered by the viewed host's host.online worktrees list.
+    worktrees: readModel.worktrees,
     onProjectAction: sidebarSupervisor.onProjectAction,
     onNewSession: (projectKey) => startFreshProjectSession(projectKey),
     onArchiveSession: (sessionId) => void archiveSession(sessionId),

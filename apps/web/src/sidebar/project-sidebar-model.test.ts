@@ -1,7 +1,9 @@
+import type { WorktreeSummary } from "@trevor/session";
 import { sessionSummary } from "@trevor/test-kit";
 import { describe, expect, test } from "vitest";
 import {
   buildProjectSidebar,
+  buildWorktreeSessionMap,
   filterProjectSidebar,
   type ProjectSidebarRecord,
   SESSION_CAP,
@@ -50,7 +52,7 @@ describe("buildProjectSidebar", () => {
     );
     const group = sole(groups);
     expect(group.key).toBe("/dev/trevor");
-    expect(group.sessions.map((s) => s.sessionId)).toEqual(["s1", "s2"]);
+    expect(group.sessions.map((s) => s.summary.sessionId)).toEqual(["s1", "s2"]);
     expect(group.isTransient).toBe(false);
     expect(group.activeCount).toBe(2);
   });
@@ -67,7 +69,7 @@ describe("buildProjectSidebar", () => {
     expect(keys).toContain("/dev/ws");
     expect(keys).toContain("/dev/cwd");
     const wsGroup = groups.find((g) => g.key === "/dev/ws");
-    expect(wsGroup?.sessions.map((s) => s.sessionId)).toEqual(["ws"]);
+    expect(wsGroup?.sessions.map((s) => s.summary.sessionId)).toEqual(["ws"]);
   });
 
   test("transient project appears when a session has a projectPath but no registry record", () => {
@@ -100,7 +102,7 @@ describe("buildProjectSidebar", () => {
       ],
     );
     const group = sole(groups);
-    expect(group.sessions.map((s) => s.sessionId)).toEqual(["live"]);
+    expect(group.sessions.map((s) => s.summary.sessionId)).toEqual(["live"]);
   });
 
   test("a project with only archived sessions shows as an empty project", () => {
@@ -128,7 +130,7 @@ describe("buildProjectSidebar", () => {
       ],
     );
     const group = sole(groups);
-    expect(group.sessions.map((s) => s.sessionId)).toEqual(["normal"]);
+    expect(group.sessions.map((s) => s.summary.sessionId)).toEqual(["normal"]);
   });
 
   test("projects ordered by creation order (oldest first), NOT activity", () => {
@@ -187,7 +189,7 @@ describe("buildProjectSidebar", () => {
       ],
     );
     const group = sole(groups);
-    expect(group.sessions.map((s) => s.sessionId)).toEqual(["new", "mid", "old"]);
+    expect(group.sessions.map((s) => s.summary.sessionId)).toEqual(["new", "mid", "old"]);
   });
 
   test("updatedAt is the max of registry updatedAt and session updatedAt", () => {
@@ -270,7 +272,7 @@ describe("filterProjectSidebar", () => {
     const filtered = filterProjectSidebar(baseGroups, "lease");
     expect(filtered).toHaveLength(1);
     expect(filtered[0]?.key).toBe("/dev/trevor");
-    expect(filtered[0]?.sessions.map((s) => s.sessionId)).toEqual(["s1"]);
+    expect(filtered[0]?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1"]);
   });
 
   test("auto-expands matching projects (sets collapsed false without mutating source)", () => {
@@ -293,7 +295,7 @@ describe("filterProjectSidebar", () => {
   test("returns only groups with a matching session OR a matching project name/path", () => {
     const filtered = filterProjectSidebar(baseGroups, "trevor");
     // /dev/trevor matches by name; its sessions are not filtered out because the project matched
-    expect(filtered[0]?.sessions.map((s) => s.sessionId)).toEqual(["s1", "s2"]);
+    expect(filtered[0]?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1", "s2"]);
   });
 
   test("a project whose name matches but no session matches keeps all its sessions", () => {
@@ -305,11 +307,103 @@ describe("filterProjectSidebar", () => {
       ],
     );
     const filtered = filterProjectSidebar(groups, "matchme");
-    expect(filtered[0]?.sessions.map((s) => s.sessionId)).toEqual(["s1", "s2"]);
+    expect(filtered[0]?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1", "s2"]);
   });
 
   test("query matching nothing returns an empty array", () => {
     const filtered = filterProjectSidebar(baseGroups, "zzzznomatch");
     expect(filtered).toEqual([]);
+  });
+});
+
+/** WorktreeSummary fixture for the scoped sessionId join (plan 58.2). */
+function wt(over: Partial<WorktreeSummary> & { sessionId: string }): WorktreeSummary {
+  return {
+    id: over.id ?? over.sessionId,
+    baseRepo: "/dev/trevor",
+    baseRepoName: "trevor",
+    branch: "feat/x",
+    path: "~/dev/.worktrees/trevor/feat-x",
+    dirty: false,
+    ahead: 0,
+    behind: 0,
+    conflict: false,
+    detached: false,
+    current: false,
+    baseline: false,
+    missing: false,
+    ...over,
+  };
+}
+
+describe("plan 58.2 worktree session join", () => {
+  test("a worktree session with projectPath equal to the base repo groups under the base project offline", () => {
+    // No host online = no worktrees snapshot. Grouping still uses the durable projectPath.
+    const groups = buildProjectSidebar(
+      [project({ path: "/dev/trevor" })],
+      [
+        sessionSummary({
+          sessionId: "wt-s1",
+          projectPath: "/dev/trevor",
+          workspace: "/Users/kevin/dev/.worktrees/trevor/feat-x",
+          cwd: "/Users/kevin/dev/.worktrees/trevor/feat-x",
+        }),
+      ],
+    );
+    const group = sole(groups);
+    expect(group.key).toBe("/dev/trevor");
+    expect(group.sessions.map((s) => s.summary.sessionId)).toEqual(["wt-s1"]);
+    expect(group.sessions[0]?.worktree).toBeNull();
+  });
+
+  test("buildWorktreeSessionMap keys on sessionId and excludes baseline === true", () => {
+    const map = buildWorktreeSessionMap([
+      wt({ sessionId: "baseline", baseline: true, branch: "main", path: "/dev/trevor" }),
+      wt({ sessionId: "wt-s1", baseline: false }),
+    ]);
+    expect(map.has("baseline")).toBe(false);
+    expect(map.get("wt-s1")?.sessionId).toBe("wt-s1");
+    expect(map.size).toBe(1);
+  });
+
+  test("no path inference: worktree-looking paths get no badge when sessionId is absent from the snapshot", () => {
+    const groups = buildProjectSidebar(
+      [project({ path: "/dev/trevor" })],
+      [
+        sessionSummary({
+          sessionId: "orphan-looking",
+          projectPath: "/dev/trevor",
+          workspace: "/Users/kevin/dev/.worktrees/trevor/orphan",
+          cwd: "/Users/kevin/dev/.worktrees/trevor/orphan",
+        }),
+        sessionSummary({ sessionId: "wt-s1", projectPath: "/dev/trevor" }),
+      ],
+      [
+        // Snapshot only knows about wt-s1; orphan-looking is not in it.
+        wt({ sessionId: "wt-s1" }),
+        // Baseline never badges, even if its sessionId matched a base-checkout session.
+        wt({ sessionId: "main-checkout", baseline: true }),
+      ],
+    );
+    const group = sole(groups);
+    const byId = new Map(group.sessions.map((r) => [r.summary.sessionId, r]));
+    expect(byId.get("orphan-looking")?.worktree).toBeNull();
+    expect(byId.get("wt-s1")?.worktree?.sessionId).toBe("wt-s1");
+  });
+
+  test("current-host-scoped snapshot badges only listed sessionIds, not an all-project index", () => {
+    const groups = buildProjectSidebar(
+      [project({ path: "/dev/trevor" }), project({ path: "/dev/other" })],
+      [
+        sessionSummary({ sessionId: "trevor-wt", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "other-wt", projectPath: "/dev/other" }),
+      ],
+      // Only the currently viewed host (trevor) announced a worktree.
+      [wt({ sessionId: "trevor-wt" })],
+    );
+    const trevor = groups.find((g) => g.key === "/dev/trevor");
+    const other = groups.find((g) => g.key === "/dev/other");
+    expect(trevor?.sessions[0]?.worktree?.sessionId).toBe("trevor-wt");
+    expect(other?.sessions[0]?.worktree).toBeNull();
   });
 });

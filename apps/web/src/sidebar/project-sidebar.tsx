@@ -1,4 +1,9 @@
-import { relativeTime, type SessionActivity, type SessionSummary } from "@trevor/session";
+import {
+  relativeTime,
+  type SessionActivity,
+  type SessionSummary,
+  type WorktreeSummary,
+} from "@trevor/session";
 import {
   Archive,
   Folder,
@@ -14,15 +19,18 @@ import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState }
 import { cn } from "@/lib/utils";
 import { ProjectLabel } from "./project-label";
 import { type ProjectGroup, SESSION_CAP } from "./project-sidebar-model";
+import { WorktreeBadge } from "./worktree-badge";
 
 /**
- * The project sidebar (plan 58 M5): the project-first left-hand navigation surface. Renders the
- * grouped read model ({@link ProjectGroup}[]) - project rows that expand/collapse, session rows
- * nested under expanded projects, "Show more" past {@link SESSION_CAP}, and an archive-only empty
+ * The project sidebar (plan 58 M5 + 58.2): the project-first left-hand navigation surface. Renders
+ * the grouped read model ({@link ProjectGroup}[]) - project rows that expand/collapse, session rows
+ * nested under expanded projects (with an optional worktree badge beside the title when a joined
+ * `WorktreeSummary` is present), "Show more" past {@link SESSION_CAP}, and an archive-only empty
  * state. Built Storybook-first: presentational over the injected groups + callbacks, with NO live
  * wiring (that's M6). The live owner passes the already-grouped, already-filtered model in.
  *
- * Row heights and icon slots are fixed so activity transitions never resize the sidebar.
+ * Row heights and icon slots are fixed so activity transitions never resize the sidebar. The
+ * worktree badge lives in the left title cluster, never in the absolute right action/timestamp slot.
  */
 
 export interface ProjectSidebarProps {
@@ -85,6 +93,7 @@ function effectiveActivity(
  *  show animated dots instead of a timestamp, regardless of hover. */
 function SessionRow({
   summary,
+  worktree,
   activity,
   selected,
   nowMs,
@@ -96,6 +105,7 @@ function SessionRow({
   onRenameCancel,
 }: {
   summary: SessionSummary;
+  worktree?: WorktreeSummary | null;
   activity: SessionActivity;
   selected: boolean;
   nowMs: number;
@@ -130,9 +140,10 @@ function SessionRow({
         <button
           type="button"
           onClick={() => onSelect(summary.sessionId)}
-          className="min-w-0 flex-1 truncate pr-16 text-left"
+          className="flex min-w-0 flex-1 items-center gap-1 pr-16 text-left"
         >
-          {summary.title}
+          <span className="min-w-0 flex-1 truncate">{summary.title}</span>
+          {worktree ? <WorktreeBadge worktree={worktree} /> : null}
         </button>
       )}
       {/* Right slot: absolutely positioned so long titles never push it off-screen. The title
@@ -386,7 +397,9 @@ function ProjectRow({
   onRenameSave: (name: string) => void;
   onRenameCancel: () => void;
 }) {
-  const hasActive = group.sessions.some((s) => s.activity === "running" || s.activity === "queued");
+  const hasActive = group.sessions.some(
+    (s) => s.summary.activity === "running" || s.summary.activity === "queued",
+  );
   const [menuOpen, setMenuOpen] = useState(false);
   const rowRef = useRef<HTMLDivElement>(null);
 
@@ -638,24 +651,25 @@ export function ProjectSidebar({
                       {group.sessions.length === 0 ? (
                         <EmptyProjectState projectKey={group.key} onNewSession={onNewSession} />
                       ) : (
-                        visible.map((summary) => (
+                        visible.map((row) => (
                           <SessionRow
-                            key={summary.sessionId}
-                            summary={summary}
-                            activity={effectiveActivity(summary, liveActivity)}
-                            selected={summary.sessionId === currentSessionId}
+                            key={row.summary.sessionId}
+                            summary={row.summary}
+                            worktree={row.worktree}
+                            activity={effectiveActivity(row.summary, liveActivity)}
+                            selected={row.summary.sessionId === currentSessionId}
                             nowMs={nowMs}
                             onSelect={onSelectSession}
                             onArchiveSession={onArchiveSession}
-                            renaming={renamingSessionId === summary.sessionId}
+                            renaming={renamingSessionId === row.summary.sessionId}
                             onStartRename={
                               onRenameSession
-                                ? () => setRenamingSessionId(summary.sessionId)
+                                ? () => setRenamingSessionId(row.summary.sessionId)
                                 : undefined
                             }
                             onRenameSave={
                               onRenameSession
-                                ? handleSessionRenameSave(summary.sessionId)
+                                ? handleSessionRenameSave(row.summary.sessionId)
                                 : undefined
                             }
                             onRenameCancel={handleSessionRenameCancel}

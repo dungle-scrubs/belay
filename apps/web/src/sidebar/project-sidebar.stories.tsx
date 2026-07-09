@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary, WorktreeSummary } from "@trevor/session";
 import { sessionSummary } from "@trevor/test-kit";
 import { useState } from "react";
 import { ProjectSidebar } from "./project-sidebar";
@@ -10,10 +10,11 @@ import {
 } from "./project-sidebar-model";
 
 /**
- * Plan 58 M5: the project sidebar, Storybook-first. Covers empty project, active project with
+ * Plan 58 M5 + 58.2: the project sidebar, Storybook-first. Covers empty project, active project with
  * sessions, duplicate basenames, a running collapsed project, an archive-only project, more than
- * seven sessions (Show more), and a search-filtered view. The component is presentational: it takes
- * the grouped read model + callbacks, with no live data.
+ * seven sessions (Show more), search-filtered view, and worktree badge rows (joined non-baseline
+ * WorktreeSummary only). The component is presentational: it takes the grouped read model +
+ * callbacks, with no live data.
  */
 
 const meta: Meta<typeof ProjectSidebar> = {
@@ -62,11 +63,13 @@ function Frame({ children }: { children: React.ReactNode }) {
 function InteractiveSidebar({
   projects,
   sessions,
+  worktrees,
   initialQuery = "",
   currentSessionId,
 }: {
   projects: readonly ProjectSidebarRecord[];
   sessions: readonly SessionSummary[];
+  worktrees?: readonly WorktreeSummary[];
   initialQuery?: string;
   currentSessionId?: string;
 }) {
@@ -79,6 +82,7 @@ function InteractiveSidebar({
   const groups = buildProjectSidebar(
     projects.map((p) => ({ ...p, collapsed: collapsed.has(p.path) })),
     sessions,
+    worktrees,
   );
   // Show more: when a project is expanded past SESSION_CAP, reveal all its sessions.
   const expanded = groups.map((g) => (showAll.has(g.key) ? { ...g, sessions: g.sessions } : g));
@@ -240,6 +244,120 @@ export const AllCollapsed: Story = {
           projectPath: "/dev/trevor",
         }),
         summary({ sessionId: "s2", title: "idle session", projectPath: "/dev/other" }),
+      ]}
+    />
+  ),
+};
+
+function wt(over: Partial<WorktreeSummary> & { sessionId: string }): WorktreeSummary {
+  return {
+    id: over.id ?? over.sessionId,
+    baseRepo: "/dev/trevor",
+    baseRepoName: "trevor",
+    branch: "feat/x",
+    path: "~/.worktrees/trevor/feat-x",
+    dirty: false,
+    ahead: 0,
+    behind: 0,
+    conflict: false,
+    detached: false,
+    current: false,
+    baseline: false,
+    missing: false,
+    ...over,
+  };
+}
+
+/** Normal non-worktree rows under a project (no badge). */
+export const NormalRows: Story = {
+  render: () => (
+    <InteractiveSidebar
+      projects={[project({ path: "/dev/trevor" })]}
+      sessions={[
+        summary({ sessionId: "s1", title: "ordinary session one", projectPath: "/dev/trevor" }),
+        summary({ sessionId: "s2", title: "ordinary session two", projectPath: "/dev/trevor" }),
+      ]}
+    />
+  ),
+};
+
+/** A worktree session badged via the current-host worktree snapshot join. */
+export const WorktreeRow: Story = {
+  render: () => (
+    <InteractiveSidebar
+      projects={[project({ path: "/dev/trevor" })]}
+      sessions={[
+        summary({
+          sessionId: "wt-s1",
+          title: "implement worktree badge",
+          projectPath: "/dev/trevor",
+          workspace: "/Users/kevin/dev/.worktrees/trevor/feat-badge",
+        }),
+        summary({ sessionId: "plain", title: "main checkout session", projectPath: "/dev/trevor" }),
+      ]}
+      worktrees={[
+        wt({
+          sessionId: "wt-s1",
+          branch: "feat/badge",
+          path: "~/.worktrees/trevor/feat-badge",
+          dirty: true,
+          ahead: 2,
+        }),
+        wt({
+          sessionId: "plain",
+          baseline: true,
+          branch: "main",
+          path: "/dev/trevor",
+        }),
+      ]}
+    />
+  ),
+};
+
+/** Long-title worktree row: badge stays beside the title; right slot remains absolute. */
+export const LongTitleWorktree: Story = {
+  render: () => (
+    <InteractiveSidebar
+      projects={[project({ path: "/dev/trevor" })]}
+      sessions={[
+        summary({
+          sessionId: "wt-long",
+          title:
+            "an extremely long session title that must truncate cleanly before the right action slot while still leaving room for the worktree badge",
+          projectPath: "/dev/trevor",
+        }),
+      ]}
+      worktrees={[
+        wt({
+          sessionId: "wt-long",
+          branch: "feat/long-title",
+          path: "~/.worktrees/trevor/feat-long-title-that-also-abbreviates",
+          behind: 1,
+        }),
+      ]}
+    />
+  ),
+};
+
+/** Baseline checkout is present in the snapshot but never badged. */
+export const BaselineNoBadge: Story = {
+  render: () => (
+    <InteractiveSidebar
+      projects={[project({ path: "/dev/trevor" })]}
+      sessions={[
+        summary({
+          sessionId: "main-checkout",
+          title: "main checkout (baseline)",
+          projectPath: "/dev/trevor",
+        }),
+      ]}
+      worktrees={[
+        wt({
+          sessionId: "main-checkout",
+          baseline: true,
+          branch: "main",
+          path: "/dev/trevor",
+        }),
       ]}
     />
   ),

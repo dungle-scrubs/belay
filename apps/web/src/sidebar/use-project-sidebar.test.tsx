@@ -60,7 +60,7 @@ describe("useProjectSidebar", () => {
     expect(result.current.groups).toHaveLength(1);
     const group = result.current.groups[0];
     expect(group?.key).toBe("/dev/trevor");
-    expect(group?.sessions.map((s) => s.sessionId)).toEqual(["s1", "s2"]);
+    expect(group?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1", "s2"]);
   });
 
   test("toggling a project updates local collapsed state and dispatches a persist", () => {
@@ -116,7 +116,7 @@ describe("useProjectSidebar", () => {
     const group = result.current.groups[0];
     expect(group?.key).toBe("/dev/trevor");
     expect(group?.collapsed).toBe(false);
-    expect(group?.sessions.map((s) => s.sessionId)).toEqual(["s1"]);
+    expect(group?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1"]);
   });
 
   test("search matching a project name keeps all its sessions and forces expand", () => {
@@ -131,7 +131,7 @@ describe("useProjectSidebar", () => {
     const group = result.current.groups[0];
     expect(group?.collapsed).toBe(false);
     // Project-name match keeps ALL sessions.
-    expect(group?.sessions.map((s) => s.sessionId)).toEqual(["s1", "s2"]);
+    expect(group?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1", "s2"]);
   });
 
   test("Show more expands the session list for a project beyond the cap", () => {
