@@ -71,6 +71,21 @@ test("launch publishes session.launch.requested { root } and enters starting", a
   assert.equal(req.payload.root, "~/dev/new-thing", "carries the chosen root");
 });
 
+test("launch can request an exact existing session id for session-view restart", async () => {
+  const { rec, result } = renderLaunch();
+  await act(async () => {});
+
+  act(() => result.current.launch("~/dev/trevor", { sessionId: "stale-session" }));
+  const req = launchesOf(rec.publishedBy(SUPERVISOR_SESSION_ID)).at(-1);
+  assert.ok(req, "publishes a launch request");
+  assert.equal(req.payload.root, "~/dev/trevor", "still carries the resolved root");
+  assert.equal(
+    req.payload.sessionId,
+    "stale-session",
+    "the supervisor must launch the viewed session, not derive the project session",
+  );
+});
+
 test("a reused host navigates immediately without a host.online wait", async () => {
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});

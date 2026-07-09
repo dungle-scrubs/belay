@@ -437,8 +437,8 @@ export function App() {
       return;
     }
     setStartRequested(true);
-    sessionLaunch.launch(knownRoot);
-  }, [knownRoot, sessionLaunch.launch]);
+    sessionLaunch.launch(knownRoot, { sessionId: target });
+  }, [knownRoot, sessionLaunch.launch, target]);
   // `/new <path>` and `/cd <path>` (plan 58 M4): mint a FRESH session id (not the deterministic
   // projectSessionId) and launch a project-scoped session with a session.project marker. The
   // supervisor stamps the marker + touches the registry before spawning the host. Reuses the same
