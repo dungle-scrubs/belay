@@ -103,6 +103,7 @@ export async function launch(
   platform: LaunchPlatform,
   options: {
     readonly debug?: boolean;
+    readonly noBrowser?: boolean;
     readonly session?: { readonly sessionId: string; readonly root: string };
   } = {},
 ): Promise<LaunchOutcome> {
@@ -145,6 +146,8 @@ async function launchInner(
   platform: LaunchPlatform,
   options: {
     readonly debug?: boolean;
+    /** True for headless callers that need services + host readiness without opening the web UI. */
+    readonly noBrowser?: boolean;
     /** `trevor open <session>` (D-094 M3): launch this exact session at its root, instead of
      *  resolving the session from the current project directory. */
     readonly session?: { readonly sessionId: string; readonly root: string };
@@ -213,7 +216,9 @@ async function launchInner(
     const online = await platform.waitForHostOnline(sessionId);
     platform.reporter.step("waiting for web UI…");
     const webReady = await platform.waitForWeb();
-    await platform.openBrowser(url);
+    if (!options.noBrowser) {
+      await platform.openBrowser(url);
+    }
     return {
       root,
       sessionId,
@@ -267,7 +272,9 @@ async function launchInner(
   // server (a few seconds to boot) doesn't greet the user with ERR_CONNECTION_REFUSED.
   platform.reporter.step("waiting for web UI…");
   const webReady = await platform.waitForWeb();
-  await platform.openBrowser(url);
+  if (!options.noBrowser) {
+    await platform.openBrowser(url);
+  }
   return {
     root,
     sessionId,

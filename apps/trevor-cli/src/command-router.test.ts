@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { TrevorClient } from "@trevor/sdk";
+import type { CatalogSnapshot, TrevorClient } from "@trevor/sdk";
 import type { ArtifactRef, SessionSummary } from "@trevor/session";
 import { test } from "vitest";
 import {
@@ -19,6 +19,27 @@ const REF: ArtifactRef = {
   hash: "a".repeat(64),
 };
 
+const CATALOG: CatalogSnapshot = {
+  sources: [],
+  catalogBySource: {
+    openai: [
+      {
+        sourceId: "openai",
+        modelId: "gpt-5",
+        displayName: "GPT-5",
+        kind: "cloud",
+        capabilities: ["reasoning"],
+        contextLength: null,
+        costTier: null,
+        aliases: [],
+        freshness: { refreshedAt: null, stale: false },
+        reasoningLevels: ["off", "low", "high"],
+        defaultReasoning: "low",
+      },
+    ],
+  },
+};
+
 function makeDeps(overrides: Partial<CommandRouterDeps> = {}): CommandRouterDeps {
   const uploads: Array<{
     readonly bytes: Uint8Array;
@@ -30,6 +51,7 @@ function makeDeps(overrides: Partial<CommandRouterDeps> = {}): CommandRouterDeps
   const stdoutBytes: Uint8Array[] = [];
   const sessions: readonly SessionSummary[] = [];
   const client = {
+    listCatalog: async () => CATALOG,
     uploadArtifact: async (
       bytes: Uint8Array,
       mimeType: string,
@@ -58,6 +80,7 @@ function makeDeps(overrides: Partial<CommandRouterDeps> = {}): CommandRouterDeps
       removeHost: () => {},
     },
     projectName: () => "trevor",
+    ensureHostOnline: async () => ({ sessionId: "s1" }),
     readFile: () => new Uint8Array([1, 2, 3, 4]),
     writeFile: (path, bytes) => {
       writtenFiles.push({ path, bytes });
@@ -98,7 +121,7 @@ test("router returns null for no subcommand and usage for invalid command branch
   assert.equal(await router.runSubcommand(["not-real"]), null);
   assert.equal(
     await router.runSubcommand(["prompt", "s1"]),
-    "usage: trevor prompt <session> <text> [--provider p] [--json] [--timeout ms]",
+    "usage: trevor prompt <session> <text> [--model source/model] [--reasoning level] [--json] [--timeout ms]",
   );
   assert.equal(
     await router.runSubcommand(["artifact"]),
@@ -146,4 +169,40 @@ test("router handles artifact put/get with injected file and byte IO", async () 
 
   assert.equal(await router.runSubcommand(["artifact", "get", "a".repeat(64)]), "");
   assert.deepEqual(stdout, [new Uint8Array([9, 8, 7])]);
+});
+
+test("router lists models after ensuring the host is online", async () => {
+  let ensured = false;
+  const router = createCommandRouter(
+    makeDeps({
+      ensureHostOnline: async () => {
+        ensured = true;
+        return { sessionId: "s1" };
+      },
+    }),
+  );
+
+  const output = await router.runSubcommand(["models"]);
+
+  assert.equal(ensured, true);
+  assert.match(output ?? "", /openai\/gpt-5/);
+  assert.match(output ?? "", /reasoning: off, low, high/);
+});
+
+test("router maps model catalog read failures to a CLI stage", async () => {
+  const router = createCommandRouter(
+    makeDeps({
+      client: {
+        listCatalog: async () => {
+          throw new Error("store offline");
+        },
+      } as unknown as TrevorClient,
+    }),
+  );
+
+  await assert.rejects(() => router.runSubcommand(["models"]), {
+    name: "CliStageError",
+    stage: "catalog-read",
+    message: "store offline",
+  });
 });

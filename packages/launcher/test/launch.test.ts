@@ -167,6 +167,43 @@ test("a fresh launch starts missing services, spawns the host, and opens the ses
   assert.equal(outcome.online, true);
 });
 
+test("noBrowser launches services and host without opening a browser", async () => {
+  const spy = makePlatform({
+    gitRoot: "/work/app",
+    cwd: "/work/app/src/deep",
+    probes: {
+      web: { reachable: true, ours: true },
+      blob: { reachable: false, ours: false },
+      store: { reachable: false, ours: false },
+    },
+  });
+  const outcome = await launch(spy.platform, { noBrowser: true });
+
+  assert.equal(outcome.root, "/work/app");
+  assert.equal(outcome.hostAction, "spawn");
+  assert.deepEqual(spy.spawned, [{ sessionId: outcome.sessionId, root: "/work/app" }]);
+  assert.deepEqual(spy.opened, []);
+});
+
+test("noBrowser also suppresses browser open while waiting on a concurrent launcher", async () => {
+  const spy = makePlatform({
+    gitRoot: "/work/app",
+    cwd: "/work/app",
+    probes: {
+      web: { reachable: true, ours: true },
+      blob: { reachable: true, ours: true },
+      store: { reachable: true, ours: true },
+    },
+    lockHeldByLive: 777,
+    processAlive: (pid) => pid === 777,
+  });
+  const outcome = await launch(spy.platform, { noBrowser: true });
+
+  assert.equal(outcome.hostAction, "reused-concurrent");
+  assert.deepEqual(spy.spawned, []);
+  assert.deepEqual(spy.opened, []);
+});
+
 test("--debug threads the debug flag through to the spawned host", async () => {
   const spy = makePlatform({ gitRoot: "/work/app" });
   const outcome = await launch(spy.platform, { debug: true });

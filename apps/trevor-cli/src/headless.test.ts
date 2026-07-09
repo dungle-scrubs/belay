@@ -89,6 +89,34 @@ describe("runPrompt (M8)", () => {
     const result = await pending;
     expect(JSON.parse(result.stdout)).toMatchObject({ text: "json answer", timedOut: false });
   });
+
+  it("publishes a ModelRef when one is supplied", async () => {
+    const { client, rec } = makeClient();
+    rec.seed("s1", []);
+    const pending = runPrompt(client, {
+      sessionId: "s1",
+      text: "hello",
+      provider: "openai",
+      model: { sourceId: "openai", modelId: "gpt-5", reasoning: "high" },
+      json: true,
+      timeoutMs: 1_000,
+    });
+    await replyOnTail(
+      rec,
+      "s1",
+      (t) => t === "user.message",
+      events.assistantCompleted({ runId: "r9", text: "json answer" }),
+    );
+
+    expect(rec.publishedBy("s1")[0]).toMatchObject({
+      type: "user.message",
+      payload: {
+        provider: "openai",
+        model: { sourceId: "openai", modelId: "gpt-5", reasoning: "high" },
+      },
+    });
+    await pending;
+  });
 });
 
 describe("runCancel (M8)", () => {

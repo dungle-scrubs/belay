@@ -10,6 +10,7 @@
     "./node-paths": "./src/node-paths.ts",
     "./legacy-migration": "./src/legacy-migration.ts",
     "./async": "./src/async.ts",
+    "./node-config": "./src/node-config.ts",
     "./telemetry": "./src/telemetry.ts",
     "./telemetry-file-sink": "./src/telemetry-file-sink.ts",
     "./telemetry-provider-trace": "./src/telemetry-provider-trace.ts",
@@ -22,7 +23,8 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "effect": "^3.21.4"
+    "effect": "^3.21.4",
+    "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

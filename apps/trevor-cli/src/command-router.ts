@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, extname } from "node:path";
 import type { TrevorClient } from "@trevor/sdk";
+import { resolveModelConfig } from "./config";
 import {
   runArtifactGet,
   runArtifactPut,
@@ -11,6 +12,8 @@ import {
   runTranscript,
 } from "./headless";
 import { type HostControlIo, type LifecycleIo, runArchive, runList, runStop } from "./lifecycle";
+import { formatCatalog, resolveModelRef } from "./model-flags";
+import { withCliStage } from "./stage-error";
 
 /**
  * Table-driven CLI command router.
@@ -47,7 +50,12 @@ export const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "prompt",
     usage: "trevor prompt <session> <text>",
-    summary: "Submit a prompt and stream the turn (--json, --provider, --timeout).",
+    summary: "Submit a prompt and stream the turn (--json, --model, --reasoning, --timeout).",
+  },
+  {
+    name: "models",
+    usage: "trevor models",
+    summary: "List host-announced model ids and reasoning levels (--json).",
   },
   {
     name: "cancel",
@@ -78,6 +86,7 @@ export function commandUsageText(): string {
 
 Usage:
   trevor                               Resolve the project, ready services, spawn or reuse host, and open.
+  trevor -p "prompt"                   Run one prompt headlessly; add --json, --model, --reasoning, --ephemeral.
   trevor open <session>                Open/resume a session by id in the browser.
 ${commandLines.join("\n")}
   trevor --debug                       Start the host in debug mode (extra commands like /restart).
@@ -134,6 +143,7 @@ export interface CommandRouterDeps {
   readonly writeFile?: (path: string, bytes: Uint8Array) => void;
   readonly writeStdoutBytes?: (bytes: Uint8Array) => void;
   readonly writeStderrText?: (text: string) => void;
+  readonly ensureHostOnline?: () => Promise<{ readonly sessionId: string }>;
 }
 
 export interface CommandRouter {
@@ -150,23 +160,58 @@ export function createCommandRouter(deps: CommandRouterDeps): CommandRouter {
     const json = rest.includes("--json");
     const timeout = flagValue(rest, "--timeout");
     const timeoutMs = timeout ? Number(timeout) : undefined;
-    const pos = positionals(rest, ["--provider", "--timeout", "--section", "--name", "--mime"]);
+    const pos = positionals(rest, [
+      "--provider",
+      "--timeout",
+      "--section",
+      "--name",
+      "--mime",
+      "--model",
+      "--reasoning",
+    ]);
 
     if (cmd === "prompt") {
       const [sessionId, ...textParts] = pos;
       const text = textParts.join(" ");
       if (!sessionId || !text) {
-        return "usage: trevor prompt <session> <text> [--provider p] [--json] [--timeout ms]";
+        return "usage: trevor prompt <session> <text> [--model source/model] [--reasoning level] [--json] [--timeout ms]";
       }
-      const result = await runPrompt(deps.client, {
-        sessionId,
-        text,
-        provider: flagValue(rest, "--provider") ?? "",
-        json,
-        ...(timeoutMs ? { timeoutMs } : {}),
-        ...(json ? {} : { onDelta: writeStderrText }),
+      const modelConfig = resolveModelConfig({
+        flagModel: flagValue(rest, "--model"),
+        flagReasoning: flagValue(rest, "--reasoning"),
       });
+      if (modelConfig.warning) {
+        writeStderrText(`${modelConfig.warning}\n`);
+      }
+      const model =
+        modelConfig.model || modelConfig.reasoning
+          ? resolveModelRef(
+              await withCliStage("catalog-read", () => deps.client.listCatalog(sessionId)),
+              modelConfig,
+            )
+          : undefined;
+      const result = await withCliStage("turn", () =>
+        runPrompt(deps.client, {
+          sessionId,
+          text,
+          provider: model?.sourceId ?? flagValue(rest, "--provider") ?? "",
+          json,
+          ...(model ? { model } : {}),
+          ...(timeoutMs ? { timeoutMs } : {}),
+          ...(json ? {} : { onDelta: writeStderrText }),
+        }),
+      );
       return result.stdout;
+    }
+    if (cmd === "models") {
+      if (!deps.ensureHostOnline) {
+        return "trevor models requires launcher wiring";
+      }
+      const { sessionId } = await deps.ensureHostOnline();
+      return formatCatalog(
+        await withCliStage("catalog-read", () => deps.client.listCatalog(sessionId)),
+        json,
+      );
     }
     if (cmd === "cancel") {
       return (await runCancel(deps.client, pos[0] ?? "", pos[1] ?? "")).stdout;
