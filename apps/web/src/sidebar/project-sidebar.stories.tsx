@@ -108,6 +108,7 @@ function InteractiveSidebar({
         searchQuery={query}
         onSearchChange={setQuery}
         currentSessionId={currentSessionId}
+        onViewArchived={noop}
         nowMs={NOW}
         className="h-full"
       />

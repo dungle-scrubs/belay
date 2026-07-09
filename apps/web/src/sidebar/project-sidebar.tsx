@@ -52,6 +52,8 @@ export interface ProjectSidebarProps {
    * filtered to that project's path. Absent => the empty state is non-interactive.
    */
   readonly onViewArchive?: (projectKey: string) => void;
+  /** Open the global archived-session browser from the pinned sidebar footer. */
+  readonly onViewArchived?: () => void;
   /** Add a new project via the OS folder picker. */
   readonly onAddProject?: () => void;
   /** Create a fresh session for a project. */
@@ -551,6 +553,7 @@ export function ProjectSidebar({
   searchQuery,
   onSearchChange,
   onViewArchive,
+  onViewArchived,
   onAddProject,
   onNewSession,
   onArchiveSession,
@@ -693,6 +696,21 @@ export function ProjectSidebar({
           </div>
         )}
       </div>
+
+      {onViewArchived ? (
+        <footer className="shrink-0 border-t border-border px-2.5 py-1.5">
+          <button
+            type="button"
+            onClick={onViewArchived}
+            className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-label tracking-wider text-muted-foreground hover:text-foreground"
+            title="Manage archived sessions"
+            aria-label="Manage archived sessions"
+          >
+            <Archive className="size-3" />
+            <span>archived</span>
+          </button>
+        </footer>
+      ) : null}
     </div>
   );
 }

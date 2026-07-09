@@ -70,7 +70,7 @@ export interface SidePanelBreakdownProps {
 export interface SidePanelProps {
   /** Model / reasoning controls, injected by the host so the panel stays presentational. */
   readonly controls?: ReactNode;
-  /** Session affordances (resume / worktree / session id) pinned inline at the panel's bottom. */
+  /** Session debug affordances pinned inline at the panel's bottom. */
   readonly footer?: ReactNode;
   /**
    * Whether the session has finished its initial replay. Transitions stay off until

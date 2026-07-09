@@ -242,6 +242,8 @@ export interface SidebarBinding {
   readonly onRemoveProject: (key: string) => void;
   /** View an archive-only project's archived sessions, filtered to that project (plan 58 M7). */
   readonly onViewArchive?: (projectKey: string) => void;
+  /** Open the global archived-session browser from the pinned project sidebar footer. */
+  readonly onViewArchived?: () => void;
   /** The currently selected session id (for row highlight). */
   readonly currentSessionId: string;
   /** Live run state per session, layered over each row's durable activity. */
@@ -368,6 +370,7 @@ export function PanelHost(props: {
             onRenameProject={sidebar.onRenameProject}
             onRemoveProject={sidebar.onRemoveProject}
             onViewArchive={sidebar.onViewArchive}
+            onViewArchived={sidebar.onViewArchived}
             liveActivity={sidebar.liveActivity}
             currentSessionId={sidebar.currentSessionId}
             nowMs={sidebar.nowMs}

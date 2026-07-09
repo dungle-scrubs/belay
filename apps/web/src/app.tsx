@@ -9,7 +9,7 @@ import {
   tangentsOf,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState } from "ahooks";
-import { Archive, GitBranch, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -1473,11 +1473,6 @@ export function App() {
     setTangentDiscoveryOpen(false);
     tangent.open(selection, target);
   };
-  const openTangentDiscovery = () => {
-    closeOtherTakeovers();
-    tangent.close();
-    setTangentDiscoveryOpen(true);
-  };
   // Explicit fold-back (M8): place the chosen tangent content into THIS (parent) composer for review via
   // the same quote-into-composer path, and record the durable marker on the tangent. It never auto-submits
   // and never injects hidden parent context - the folded text is plainly visible, editable composer text.
@@ -1520,8 +1515,8 @@ export function App() {
     />
   ) : undefined;
 
-  // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the archived +
-  // worktree affordances and the session id for orientation. `restart` is a temporary debug surface.
+  // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the session id
+  // for orientation. `restart` is a temporary debug surface.
   const panelFooter = (
     <>
       {/* TEMP dev affordance (remove later): restart the host to pick up code changes. The typed
@@ -1532,46 +1527,10 @@ export function App() {
         onClick={() => void command("/restart", "force")}
         title="Restart the host with fresh code"
         aria-label="Restart the host"
-        className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+        className="flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
       >
         <RotateCcw className="size-3" />
         restart
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          setChooserOpen(false); // only one takeover at a time
-          setArchiveProjectFilter(null); // the footer entry shows ALL archived sessions
-          modal.setArchiveOpen(true);
-        }}
-        title="Manage archived sessions"
-        aria-label="Manage archived sessions"
-        className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
-      >
-        <Archive className="size-3" />
-        archived
-      </button>
-      {modal.worktrees.length > 0 ? (
-        <button
-          type="button"
-          onClick={() => modal.setWorktreeOpen(true)}
-          title="Switch worktree (/worktree)"
-          aria-label="Switch worktree"
-          className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
-        >
-          <GitBranch className="size-3" />
-          worktree
-        </button>
-      ) : null}
-      <button
-        type="button"
-        onClick={openTangentDiscovery}
-        title="Tangents branched from this session"
-        aria-label="Tangents from this session"
-        className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
-      >
-        <GitBranch className="size-3" />
-        tangents
       </button>
       <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
         {target}
@@ -1766,6 +1725,11 @@ export function App() {
           onRemoveProject: projectSidebar.onRemoveProject,
           onViewArchive: (projectKey) => {
             setArchiveProjectFilter(projectKey);
+            modal.setArchiveOpen(true);
+          },
+          onViewArchived: () => {
+            setChooserOpen(false);
+            setArchiveProjectFilter(null);
             modal.setArchiveOpen(true);
           },
           currentSessionId: target,

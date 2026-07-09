@@ -12,8 +12,8 @@ function renderWithTooltip(ui: ReactElement) {
 
 /**
  * Plan 58 M7: the project sidebar's presentational behavior for archive access and the
- * Delete-absence guarantee. "View archive" is available ONLY from the project context menu,
- * never inline. An empty project (no active sessions) shows a "New session" button instead.
+ * Delete-absence guarantee. Project-filtered "View archive" is available from the project context
+ * menu; the global archive browser is pinned at the bottom of the sidebar.
  */
 
 function project(over: Partial<ProjectSidebarRecord> & { path: string }): ProjectSidebarRecord {
@@ -88,6 +88,27 @@ describe("ProjectSidebar archive access (M7)", () => {
     const link = getByText("View archive");
     fireEvent.click(link);
     expect(onViewArchive).toHaveBeenCalledWith("/dev/trevor");
+  });
+
+  test("the global archived sessions entry is pinned at the bottom of the sidebar", () => {
+    const groups = buildProjectSidebar(
+      [project({ path: "/dev/trevor" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+    );
+    const onViewArchived = vi.fn<() => void>();
+    const { getByRole } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groups}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onViewArchived={onViewArchived}
+      />,
+    );
+    const button = getByRole("button", { name: "Manage archived sessions" });
+    fireEvent.click(button);
+    expect(onViewArchived).toHaveBeenCalledOnce();
   });
 
   test("the normal sidebar renders NO Delete button on session rows (Delete is archive-only)", () => {
