@@ -1,6 +1,5 @@
 import { ChevronRight, X } from "lucide-react";
 import { ArtifactThumb } from "@/artifact-thumb";
-import { MarkdownBody } from "@/components/chat/markdown-body";
 import type { QueuedPrompt } from "@/send-queue";
 
 /**
@@ -21,12 +20,19 @@ export function QueuedPrompts({
   }
 
   return (
-    <div className="flex max-h-40 flex-col gap-1 overflow-y-auto px-3 pt-1 pb-2 [scrollbar-width:none] opacity-75 [&::-webkit-scrollbar]:hidden">
+    <div className="flex max-h-40 flex-col gap-0.5 overflow-y-auto pt-1 pr-3 pb-0 pl-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {queue.map((q) => (
-        <div key={q.id} className="group flex items-baseline gap-1.5 text-muted-foreground">
-          <ChevronRight aria-hidden className="size-3 shrink-0 translate-y-0.5" />
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            {q.text ? <MarkdownBody text={q.text} muted className="text-[11px] leading-5" /> : null}
+        <div
+          key={q.id}
+          className="group flex items-start gap-1.5 rounded-sm pr-1 pl-0 text-muted-foreground transition-colors hover:bg-muted/25"
+        >
+          <ChevronRight aria-hidden className="mt-px size-3 shrink-0 text-muted-foreground/70" />
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            {q.text ? (
+              <div className="whitespace-pre-wrap text-[12px] leading-[14px] text-muted-foreground/80">
+                {q.text}
+              </div>
+            ) : null}
             {q.artifacts?.length ? (
               <div className="flex gap-1.5">
                 {q.artifacts.map((ref) => (
@@ -40,7 +46,7 @@ export function QueuedPrompts({
             aria-label="Unqueue prompt"
             title="Unqueue"
             onClick={() => onUnqueue(q.id)}
-            className="shrink-0 self-start rounded p-0.5 text-muted-foreground/60 opacity-0 transition hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+            className="shrink-0 self-start rounded p-0.5 text-muted-foreground/70 opacity-0 transition hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100 group-hover:text-muted-foreground"
           >
             <X aria-hidden className="size-3" />
           </button>

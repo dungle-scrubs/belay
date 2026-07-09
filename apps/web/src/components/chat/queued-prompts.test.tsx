@@ -17,6 +17,10 @@ test("renders queued prompt text in a compact bottom stack", () => {
   assert.ok(screen.getByText("queued first"));
   assert.ok(screen.getByText("queued second"));
   assert.ok(container.firstElementChild?.className.includes("max-h-40"));
+  assert.ok(container.firstElementChild?.className.includes("pl-0"));
+  assert.ok(container.firstElementChild?.className.includes("pb-0"));
+  assert.ok(screen.getByText("queued first").closest(".text-\\[12px\\]"));
+  assert.ok(screen.getByText("queued first").closest(".leading-\\[14px\\]"));
 });
 
 test("the unqueue control supersedes the durable prompt by its eventId (plan 47)", () => {
