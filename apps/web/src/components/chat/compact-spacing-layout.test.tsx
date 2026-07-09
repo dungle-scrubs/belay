@@ -56,7 +56,7 @@ function Harness({ rows }: { rows: readonly TranscriptRow[] }) {
 }
 
 function padOf(container: HTMLElement, index: number): "gap" | "flush" | "other" {
-  const el = container.querySelector(`[data-index="${index}"]`);
+  const el = container.querySelector(`[data-transcript-virtual-row][data-index="${index}"]`);
   assert.ok(el, `row ${index} should be mounted`);
   if (el.classList.contains("pb-6")) {
     return "gap";

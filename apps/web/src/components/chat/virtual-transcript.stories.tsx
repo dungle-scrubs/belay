@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { createScrollFollowController } from "@/scroll-follow";
 import type { Message } from "../../transcript";
 import type { TranscriptRow } from "../../transcript-rows";
@@ -92,10 +92,78 @@ const RUNNING_ROWS: readonly TranscriptRow[] = [
   // The live-turn indicator is the pinned TurnStatusHeader (plan 50), not a transcript row.
 ];
 
-function Frame({ rows, compact }: { rows: readonly TranscriptRow[]; compact: boolean }) {
+function longAnswer(index: number): string {
+  return Array.from(
+    { length: (index % 4) + 2 },
+    (_, line) =>
+      `resize stress answer ${index}.${line}: this paragraph is intentionally long enough to wrap when the project sidebar changes width, so the virtualizer has to preserve the reader anchor.`,
+  ).join("\n\n");
+}
+
+const LONG_ROWS: readonly TranscriptRow[] = Array.from({ length: 90 }, (_, index) => [
+  row({
+    kind: "user",
+    id: `long-u-${index}`,
+    text: `Review transcript virtualization behavior for section ${index}.`,
+    artifacts: [],
+    pastes: [],
+  }),
+  row({
+    kind: "assistant",
+    id: `long-a-${index}`,
+    runId: `long-${index}`,
+    text: longAnswer(index),
+    thinking: index % 5 === 0 ? "checking scroll measurements before responding" : "",
+    done: true,
+    warm: false,
+    model: "glm",
+  }),
+  ...(index % 6 === 0
+    ? [
+        row(
+          toolMessage(
+            `long-tool-${index}`,
+            "grep",
+            { pattern: "scroll", path: "apps/web/src" },
+            longAnswer(index),
+          ),
+        ),
+      ]
+    : []),
+]).flat();
+
+const STREAMING_ROWS: readonly TranscriptRow[] = [
+  ...LONG_ROWS.slice(0, 36),
+  row({
+    kind: "user",
+    id: "stream-u",
+    text: "Keep following while this answer streams.",
+    artifacts: [],
+    pastes: [],
+  }),
+  row({
+    kind: "assistant",
+    id: "stream-a",
+    runId: "stream",
+    text: Array.from({ length: 18 }, (_, index) => `streaming pinned line ${index}`).join("\n"),
+    thinking: "building the answer incrementally",
+    done: false,
+    warm: false,
+    model: "glm",
+  }),
+];
+
+function Frame({
+  rows,
+  compact,
+  pinned = false,
+}: {
+  rows: readonly TranscriptRow[];
+  compact: boolean;
+  pinned?: boolean;
+}) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  // Unpinned from the start: the catalog shows the transcript top-anchored, not snapped to the edge.
-  const controllerRef = useRef(createScrollFollowController({ initialPinned: false }));
+  const controllerRef = useRef(createScrollFollowController({ initialPinned: pinned }));
   return (
     <div
       ref={scrollRef}
@@ -113,6 +181,45 @@ function Frame({ rows, compact }: { rows: readonly TranscriptRow[]; compact: boo
   );
 }
 
+function SidebarResizeFrame() {
+  const [width, setWidth] = useState(320);
+  const startRef = useRef<{ readonly x: number; readonly width: number } | null>(null);
+  return (
+    <div className="flex h-screen bg-smui-surface-sunken">
+      <aside className="relative shrink-0 border-r border-border bg-sidebar" style={{ width }}>
+        <div className="p-4 font-mono text-xs tracking-wider text-muted-foreground">
+          project sidebar
+        </div>
+        <button
+          type="button"
+          aria-label="Resize sidebar"
+          className="absolute top-0 right-0 h-full w-2 bg-foreground/10 hover:bg-foreground/20"
+          onMouseDown={(event) => {
+            startRef.current = { x: event.clientX, width };
+            const onMove = (move: MouseEvent) => {
+              const start = startRef.current;
+              if (!start) {
+                return;
+              }
+              setWidth(Math.max(180, Math.min(480, start.width + move.clientX - start.x)));
+            };
+            const onUp = () => {
+              startRef.current = null;
+              document.removeEventListener("mousemove", onMove);
+              document.removeEventListener("mouseup", onUp);
+            };
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp);
+          }}
+        />
+      </aside>
+      <main className="min-w-0 flex-1 p-4">
+        <Frame rows={LONG_ROWS} compact={false} />
+      </main>
+    </div>
+  );
+}
+
 export const Regular: Story = {
   render: () => <Frame rows={ROWS} compact={false} />,
 };
@@ -123,4 +230,24 @@ export const Compact: Story = {
 
 export const LiveRunningCompact: Story = {
   render: () => <Frame rows={RUNNING_ROWS} compact />,
+};
+
+export const LongTranscript: Story = {
+  render: () => <Frame rows={LONG_ROWS} compact={false} />,
+};
+
+export const CompactLongTranscript: Story = {
+  render: () => <Frame rows={LONG_ROWS} compact />,
+};
+
+export const StreamingBottomPinned: Story = {
+  render: () => <Frame rows={STREAMING_ROWS} compact={false} pinned />,
+};
+
+export const UnpinnedReadingState: Story = {
+  render: () => <Frame rows={LONG_ROWS} compact={false} />,
+};
+
+export const SidebarResizeStress: Story = {
+  render: () => <SidebarResizeFrame />,
 };

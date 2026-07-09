@@ -50,8 +50,13 @@ function PanelHostHarness(props: {
     readonly state?: string;
   };
   readonly tasks?: readonly TaskSnapshot[];
+  readonly sidebar?: {
+    readonly open?: boolean;
+    readonly width?: number;
+    readonly onResize?: (width: number) => void;
+  };
 }) {
-  const { onLoopControl, fileMenu, turnStatusHeader, tasks } = props;
+  const { onLoopControl, fileMenu, turnStatusHeader, tasks, sidebar } = props;
   const composer = useComposer();
   const transcriptRef = useRef<HTMLDivElement>(null);
 
@@ -153,9 +158,9 @@ function PanelHostHarness(props: {
       }}
       sessionName="session"
       sidebar={{
-        open: false,
-        width: 352,
-        onResize: vi.fn(),
+        open: sidebar?.open ?? false,
+        width: sidebar?.width ?? 352,
+        onResize: sidebar?.onResize ?? vi.fn(),
         groups: [],
         searchQuery: "",
         onSearch: vi.fn(),
@@ -282,4 +287,29 @@ test("the transcript well keeps its scroll identity and shows the themed (not hi
   expect(cls).toContain("overflow-y-auto");
   expect(cls).not.toContain("scrollbar-width:none");
   expect(cls).not.toContain("scrollbar]:hidden");
+});
+
+test("sidebar drag previews width locally and persists once on release", () => {
+  const onResize = vi.fn();
+  const { container } = renderWithTooltip(
+    <PanelHostHarness onLoopControl={vi.fn()} sidebar={{ open: true, width: 352, onResize }} />,
+  );
+
+  const sidebarShell = screen.getByRole("button", { name: "Resize sidebar" }).parentElement;
+  expect(sidebarShell).toBeTruthy();
+  expect(sidebarShell?.getAttribute("style")).toContain("width: 352px");
+
+  const handle = screen.getByRole("button", { name: "Resize sidebar" });
+  fireEvent.mouseDown(handle, { clientX: 300 });
+  fireEvent.mouseMove(document, { clientX: 340 });
+  fireEvent.mouseMove(document, { clientX: 390 });
+
+  expect(onResize).not.toHaveBeenCalled();
+  expect(sidebarShell?.getAttribute("style")).toContain("width: 442px");
+
+  fireEvent.mouseUp(handle);
+
+  expect(onResize).toHaveBeenCalledTimes(1);
+  expect(onResize).toHaveBeenCalledWith(442);
+  expect(container.querySelector("[data-transcript-scroll]")).toBeTruthy();
 });

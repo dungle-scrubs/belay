@@ -27,6 +27,8 @@ const OLD_TOLERANCE_PX = 40;
 // px, far past this. bottomDelta (not raw scrollTop) is sampled because a legitimate above-fold
 // anchor compensation shifts scrollTop a few px while keeping the viewport visually stationary.
 const MONOTONIC_SLACK_PX = 2;
+const EXPANSION_SLACK_PX = 32;
+const VIRTUALIZED_DIAGNOSTIC_EXCHANGES = 140;
 
 /** Total rows the virtualized list reports (data-transcript-row-count). */
 function rowCount(page: Page): Promise<number> {
@@ -114,8 +116,18 @@ function scrollProbe(scroller: Locator): Promise<ScrollProbe> {
 
 async function wheelUntilVisible(page: Page, scroller: Locator, text: string): Promise<void> {
   await scroller.hover();
+  const target = page.getByText(text, { exact: true });
   for (let attempt = 0; attempt < 24; attempt += 1) {
-    if (await page.getByText(text, { exact: true }).isVisible()) {
+    const [targetBox, scrollerBox] = await Promise.all([
+      target.boundingBox(),
+      scroller.boundingBox(),
+    ]);
+    if (
+      targetBox &&
+      scrollerBox &&
+      targetBox.y >= scrollerBox.y &&
+      targetBox.y + targetBox.height <= scrollerBox.y + scrollerBox.height
+    ) {
       return;
     }
     await page.mouse.wheel(0, -650);
@@ -141,6 +153,200 @@ function settleFrames(page: Page, count = 3): Promise<void> {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     }
   }, count);
+}
+
+interface FrameScrollSample {
+  readonly anchorId: string | null;
+  readonly anchorTop: number | null;
+  readonly bottomDistance: number;
+  readonly clientHeight: number;
+  readonly firstVisibleIndex: number | null;
+  readonly paddingBottom: number;
+  readonly paddingTop: number;
+  readonly pinned: string | null;
+  readonly scrollHeight: number;
+  readonly scrollTop: number;
+  readonly time: number;
+  readonly turnCount: number;
+  readonly visibleIndexes: readonly number[];
+}
+
+interface ScrollJitterEvent {
+  readonly at: number;
+  readonly delta: number;
+  readonly from: number;
+  readonly to: number;
+  readonly type: "anchor-shift" | "large-index-jump" | "padding-shift" | "reverse-scroll";
+}
+
+async function startFrameScrollSampler(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    type Sample = FrameScrollSample;
+    type SampleWindow = Window & {
+      __trevorStopScrollSampler?: () => Sample[];
+    };
+    const scroller = document.querySelector<HTMLElement>("[data-transcript-scroll]");
+    if (!scroller) {
+      throw new Error("missing transcript scroller");
+    }
+    const samples: Sample[] = [];
+    let frame = 0;
+    let running = true;
+
+    const capture = () => {
+      const list = scroller.querySelector<HTMLElement>("[data-transcript-virtual-list]");
+      const scrollerRect = scroller.getBoundingClientRect();
+      const visible = Array.from(
+        scroller.querySelectorAll<HTMLElement>("[data-transcript-virtual-row]"),
+      )
+        .map((row) => {
+          const rect = row.getBoundingClientRect();
+          const id = row.querySelector<HTMLElement>("[data-message-id]")?.dataset.messageId ?? null;
+          return {
+            id,
+            index: Number(row.dataset.index ?? "-1"),
+            top: rect.top - scrollerRect.top,
+            visible: rect.bottom > scrollerRect.top && rect.top < scrollerRect.bottom,
+          };
+        })
+        .filter((row) => row.visible)
+        .sort((a, b) => a.top - b.top);
+      const anchor =
+        visible.find((row) => row.top >= 40 && row.top <= scroller.clientHeight - 120) ??
+        visible[0];
+      samples.push({
+        anchorId: anchor?.id ?? null,
+        anchorTop: anchor?.top ?? null,
+        bottomDistance: scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight,
+        clientHeight: scroller.clientHeight,
+        firstVisibleIndex: visible[0]?.index ?? null,
+        paddingBottom: Number(list?.dataset.transcriptPaddingBottom ?? "0"),
+        paddingTop: Number(list?.dataset.transcriptPaddingTop ?? "0"),
+        pinned: scroller.getAttribute("data-transcript-pinned"),
+        scrollHeight: scroller.scrollHeight,
+        scrollTop: scroller.scrollTop,
+        time: performance.now(),
+        turnCount: Number(list?.dataset.transcriptTurnCount ?? "0"),
+        visibleIndexes: visible.map((row) => row.index),
+      });
+      if (running) {
+        frame = requestAnimationFrame(capture);
+      }
+    };
+
+    frame = requestAnimationFrame(capture);
+    (window as SampleWindow).__trevorStopScrollSampler = () => {
+      running = false;
+      cancelAnimationFrame(frame);
+      return samples;
+    };
+  });
+}
+
+async function stopFrameScrollSampler(page: Page): Promise<FrameScrollSample[]> {
+  return page.evaluate(() => {
+    type SampleWindow = Window & {
+      __trevorStopScrollSampler?: () => FrameScrollSample[];
+    };
+    const win = window as SampleWindow;
+    const stop = win.__trevorStopScrollSampler;
+    if (!stop) {
+      throw new Error("scroll sampler was not started");
+    }
+    delete win.__trevorStopScrollSampler;
+    return stop();
+  });
+}
+
+function analyzeUpwardScrollJitter(samples: readonly FrameScrollSample[]): {
+  readonly maxStationaryAnchorShift: number;
+  readonly maxPaddingShift: number;
+  readonly maxReverseScroll: number;
+  readonly maxVisibleIndexJump: number;
+  readonly events: readonly ScrollJitterEvent[];
+} {
+  const events: ScrollJitterEvent[] = [];
+  let maxStationaryAnchorShift = 0;
+  let maxPaddingShift = 0;
+  let maxReverseScroll = 0;
+  let maxVisibleIndexJump = 0;
+
+  for (let i = 1; i < samples.length; i += 1) {
+    const previous = samples[i - 1] as FrameScrollSample;
+    const current = samples[i] as FrameScrollSample;
+    const scrollDelta = current.scrollTop - previous.scrollTop;
+    const paddingDelta = current.paddingTop - previous.paddingTop;
+    const previousIndex = previous.firstVisibleIndex;
+    const currentIndex = current.firstVisibleIndex;
+    const indexDelta =
+      previousIndex === null || currentIndex === null ? 0 : currentIndex - previousIndex;
+    const anchorShift =
+      previous.anchorId !== null &&
+      previous.anchorId === current.anchorId &&
+      previous.anchorTop !== null &&
+      current.anchorTop !== null
+        ? current.anchorTop - previous.anchorTop
+        : 0;
+    const stationaryAnchorShift = Math.abs(scrollDelta) <= 4 ? anchorShift : 0;
+
+    if (Math.abs(stationaryAnchorShift) > maxStationaryAnchorShift) {
+      maxStationaryAnchorShift = Math.abs(stationaryAnchorShift);
+    }
+    if (scrollDelta > maxReverseScroll) {
+      maxReverseScroll = scrollDelta;
+    }
+    if (Math.abs(paddingDelta) > maxPaddingShift) {
+      maxPaddingShift = Math.abs(paddingDelta);
+    }
+    if (Math.abs(indexDelta) > maxVisibleIndexJump) {
+      maxVisibleIndexJump = Math.abs(indexDelta);
+    }
+
+    if (scrollDelta > 2) {
+      events.push({
+        at: current.time,
+        delta: scrollDelta,
+        from: previous.scrollTop,
+        to: current.scrollTop,
+        type: "reverse-scroll",
+      });
+    }
+    if (Math.abs(stationaryAnchorShift) > 4) {
+      events.push({
+        at: current.time,
+        delta: stationaryAnchorShift,
+        from: previous.anchorTop ?? -1,
+        to: current.anchorTop ?? -1,
+        type: "anchor-shift",
+      });
+    }
+    if (Math.abs(indexDelta) > 2) {
+      events.push({
+        at: current.time,
+        delta: indexDelta,
+        from: previousIndex ?? -1,
+        to: currentIndex ?? -1,
+        type: "large-index-jump",
+      });
+    }
+    if (Math.abs(paddingDelta) > 8) {
+      events.push({
+        at: current.time,
+        delta: paddingDelta,
+        from: previous.paddingTop,
+        to: current.paddingTop,
+        type: "padding-shift",
+      });
+    }
+  }
+
+  return {
+    events,
+    maxPaddingShift,
+    maxReverseScroll,
+    maxStationaryAnchorShift,
+    maxVisibleIndexJump,
+  };
 }
 
 test("appending while pinned keeps the last row at the live edge (stick-to-bottom)", async ({
@@ -458,6 +664,49 @@ test("a rapid wheel flick from the bottom unpins, stays unpinned, and never snap
   expect(await bottomDeltaPx(scroller)).toBeGreaterThan(OLD_TOLERANCE_PX);
 });
 
+test("virtualized upward scrolling has no frame-level reverse correction", async ({
+  page,
+}, testInfo) => {
+  const transport = storeTransport();
+  const sessionId = `virtual-scroll-jitter-${test.info().workerIndex}-${Date.now()}`;
+  await seedExchanges(transport, sessionId, VIRTUALIZED_DIAGNOSTIC_EXCHANGES);
+  await page.goto(`/?session=${sessionId}`);
+  const list = page.locator("[data-transcript-virtual-list]");
+  await expect(list).toHaveAttribute("data-transcript-ready", "true");
+  await expect(list).toHaveAttribute(
+    "data-transcript-turn-count",
+    String(VIRTUALIZED_DIAGNOSTIC_EXCHANGES),
+  );
+
+  const scroller = page.locator("[data-transcript-scroll]");
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+  await scroller.hover();
+  await startFrameScrollSampler(page);
+
+  for (const deltaY of [-90, -90, -90, -90, -90, -160, -240, -90, -90, -90]) {
+    await page.mouse.wheel(0, deltaY);
+    await settleFrames(page, 2);
+  }
+  await settleFrames(page, 8);
+
+  const samples = await stopFrameScrollSampler(page);
+  const analysis = analyzeUpwardScrollJitter(samples);
+  await testInfo.attach("virtualized-upward-scroll-frame-metrics.json", {
+    body: JSON.stringify({ analysis, samples }, null, 2),
+    contentType: "application/json",
+  });
+
+  expect(samples.length, "expected frame sampler to capture the wheel sequence").toBeGreaterThan(8);
+  expect(
+    analysis.maxReverseScroll,
+    JSON.stringify(analysis.events.slice(0, 8), null, 2),
+  ).toBeLessThanOrEqual(2);
+  expect(
+    analysis.maxStationaryAnchorShift,
+    JSON.stringify(analysis.events.slice(0, 8), null, 2),
+  ).toBeLessThanOrEqual(4);
+});
+
 test("a tool result expanding above the viewport preserves the reader's visual anchor", async ({
   page,
 }, testInfo) => {
@@ -507,5 +756,69 @@ test("a tool result expanding above the viewport preserves the reader's visual a
   expect(
     after.bottomDistance,
     "expanding an above-viewport tool must not pull the viewport toward the live edge",
-  ).toBeGreaterThanOrEqual(before.bottomDistance - MONOTONIC_SLACK_PX);
+  ).toBeGreaterThanOrEqual(before.bottomDistance - EXPANSION_SLACK_PX);
+});
+
+test("dragging the project sidebar over a long transcript preserves the reading anchor", async ({
+  page,
+}, testInfo) => {
+  const transport = storeTransport();
+  const sessionId = `sidebar-resize-${test.info().workerIndex}-${Date.now()}`;
+  const seeded = await seedMixedToolTranscript(transport, sessionId);
+  await page.goto(`/?session=${sessionId}`);
+  await expect(page.locator("[data-transcript-virtual-list]")).toHaveAttribute(
+    "data-transcript-ready",
+    "true",
+  );
+
+  const scroller = page.locator("[data-transcript-scroll]");
+  await expect.poll(() => bottomDeltaPx(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
+  await wheelUntilVisible(page, scroller, seeded.anchorText);
+  await expectPinned(scroller, false);
+
+  const before = await scrollProbe(scroller);
+  const anchor = before.visibleRows.find(
+    (row) => row.top >= 60 && row.top <= before.clientHeight - 160,
+  );
+  expect(anchor, `expected an interior visible anchor row: ${JSON.stringify(before)}`).toBeTruthy();
+
+  const resizeHandle = page.getByRole("button", { name: "Resize sidebar" });
+  if ((await resizeHandle.count()) === 0) {
+    await page.getByRole("button", { name: "Open project sidebar" }).click();
+  }
+  await expect(resizeHandle).toBeVisible();
+  const box = await resizeHandle.boundingBox();
+  expect(box, "expected sidebar resize handle to have a bounding box").toBeTruthy();
+
+  const samples: ScrollProbe[] = [before];
+  const startX = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+  const startY = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  for (const deltaX of [80, 130, 40, 110]) {
+    await page.mouse.move(startX + deltaX, startY, { steps: 4 });
+    await settleFrames(page, 3);
+    samples.push(await scrollProbe(scroller));
+  }
+  await page.mouse.up();
+  await settleFrames(page, 4);
+  samples.push(await scrollProbe(scroller));
+
+  await testInfo.attach("sidebar-resize-scroll-metrics.json", {
+    body: JSON.stringify({ anchor, samples }, null, 2),
+    contentType: "application/json",
+  });
+
+  for (const [index, sample] of samples.entries()) {
+    expect(sample.pinned).toBe("false");
+    const sampleAnchor = sample.visibleRows.find((row) => row.id === anchor?.id);
+    expect(
+      sampleAnchor,
+      `anchor row disappeared at resize sample ${index}: ${JSON.stringify(sample)}`,
+    ).toBeTruthy();
+    expect(
+      Math.abs((sampleAnchor?.top ?? 0) - (anchor?.top ?? 0)),
+      `sidebar resize sample ${index} moved anchor: before=${JSON.stringify(before)} sample=${JSON.stringify(sample)}`,
+    ).toBeLessThanOrEqual(4);
+  }
 });

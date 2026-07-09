@@ -18,6 +18,7 @@ import {
   type RefObject,
   type SubmitEvent,
   useMemo,
+  useState,
 } from "react";
 import { ArtifactPanel } from "@/artifact-panel/artifact-panel";
 import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state";
@@ -334,6 +335,8 @@ export function PanelHost(props: {
     () => buildTranscriptRows({ toolBatches, transcript }),
     [toolBatches, transcript],
   );
+  const [sidebarPreviewWidth, setSidebarPreviewWidth] = useState<number | null>(null);
+  const sidebarWidth = sidebarPreviewWidth ?? sidebar.width;
   // Every scroll event reaches the controller, even before the list reveals (`data-transcript-ready`
   // false). The controller recognizes its own settle-loop writes as self-writes, so they no longer need
   // to be dropped here to avoid a false unpin (plan 12.2); dropping them was one of the flick-reset causes.
@@ -346,7 +349,7 @@ export function PanelHost(props: {
       {/* The project sidebar (plan 58 M6): a collapsible left rail listing all projects and
         their sessions. Switching routes through the same safe path as `/resume`. */}
       {sidebar.open ? (
-        <div className="relative flex shrink-0 overflow-hidden" style={{ width: sidebar.width }}>
+        <div className="relative flex shrink-0 overflow-hidden" style={{ width: sidebarWidth }}>
           <ProjectSidebar
             groups={sidebar.groups}
             searchQuery={sidebar.searchQuery}
@@ -367,7 +370,7 @@ export function PanelHost(props: {
             className="h-full min-w-0 flex-1"
           />
           {/* Drag-to-resize handle: a thin strip on the sidebar's right edge. Pointer events
-              drive the width directly (no HTML5 drag ghost); clamped to [180, 480]. */}
+              preview the width locally and persist it once on release; clamped to [180, 480]. */}
           <button
             type="button"
             aria-label="Resize sidebar"
@@ -376,11 +379,12 @@ export function PanelHost(props: {
               const handle = e.currentTarget;
               handle.style.backgroundColor = "rgb(255 255 255 / 0.2)";
               const startX = e.clientX;
-              const startWidth = sidebar.width;
+              const startWidth = sidebarWidth;
+              let latestWidth = startWidth;
               const onMove = (ev: MouseEvent) => {
                 const delta = ev.clientX - startX;
-                const next = Math.max(180, Math.min(480, startWidth + delta));
-                sidebar.onResize(next);
+                latestWidth = Math.max(180, Math.min(480, startWidth + delta));
+                setSidebarPreviewWidth(latestWidth);
               };
               const onUp = () => {
                 document.removeEventListener("mousemove", onMove);
@@ -388,6 +392,8 @@ export function PanelHost(props: {
                 document.body.style.cursor = "";
                 document.body.style.userSelect = "";
                 handle.style.backgroundColor = "";
+                setSidebarPreviewWidth(null);
+                sidebar.onResize(latestWidth);
               };
               document.body.style.cursor = "col-resize";
               document.body.style.userSelect = "none";
@@ -446,6 +452,7 @@ export function PanelHost(props: {
             }}
             data-transcript-scroll
             data-transcript-pinned={scroll.atBottom ? "true" : "false"}
+            style={{ overflowAnchor: "none" }}
             className="flex flex-1 flex-col overflow-y-auto py-4"
           >
             {/* Three states, so the page never looks broken while things come up:

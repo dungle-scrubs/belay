@@ -266,6 +266,46 @@ describe("VirtualTranscript", () => {
     assert.ok(mounted.length < 80, `expected fewer than 80 mounted rows, saw ${mounted.length}`);
   });
 
+  test("renders large virtualized transcripts as fixed-height absolute turn items", async () => {
+    const rows = Array.from({ length: 120 }, (_, index) => [
+      userRow(index),
+      assistantRow(`a-${index}`, `response ${index} `.repeat(12)),
+      toolRow(index),
+    ]).flat();
+    const { container } = render(<Harness rows={rows} />);
+
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-turn]").length > 0);
+    });
+
+    const list = container.querySelector<HTMLElement>("[data-transcript-virtual-list]");
+    assert.ok(list);
+    assert.equal(list.getAttribute("data-transcript-row-count"), String(rows.length));
+    assert.equal(list.getAttribute("data-transcript-turn-count"), "120");
+    assert.ok(Number.parseFloat(list.style.height) > 0, "virtualized layout owns total height");
+    assert.equal(list.style.paddingTop, "", "range offsets are diagnostic data, not CSS spacers");
+    await waitFor(() => {
+      assert.ok(
+        Number(list.getAttribute("data-transcript-padding-top")) > 0 ||
+          Number(list.getAttribute("data-transcript-padding-bottom")) > 0,
+        "spacer padding should represent an unmounted transcript region",
+      );
+    });
+
+    const turns = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-transcript-virtual-turn]"),
+    );
+    assert.ok(turns.length < 80, `expected fewer than 80 mounted turns, saw ${turns.length}`);
+    for (const turn of turns) {
+      assert.notEqual(turn.style.transform, "");
+      assert.equal(turn.classList.contains("absolute"), true);
+    }
+    for (const row of container.querySelectorAll<HTMLElement>("[data-transcript-virtual-row]")) {
+      assert.equal(row.style.transform, "");
+      assert.equal(row.classList.contains("absolute"), false);
+    }
+  });
+
   test("reveals only after the initial live-edge range is mounted", async () => {
     const rows = Array.from({ length: 1000 }, (_, index) => userRow(index));
     const { container } = render(<Harness rows={rows} />);
@@ -460,12 +500,10 @@ describe("VirtualTranscript", () => {
     );
   });
 
-  test("while unpinned, a re-measure's anchor-compensation write is accepted (not swallowed)", async () => {
-    // Old code swallowed EVERY programmatic scroll while unpinned, so an above-viewport re-measure shifted
-    // the reader's view. Now tanstack's start-anchored correction flows through scrollToFn as an
-    // anchor-compensation write and is ACCEPTED, keeping the viewport visually stationary. In jsdom we
-    // cannot measure the net-zero pixel movement (no layout), so we assert the compensation path is wired:
-    // the controller approves anchor-compensation while denying follow.
+  test("while unpinned, a virtualizer re-measure may compensate but never follows", async () => {
+    // Browser verification covers real visual anchor compensation. In jsdom the important ownership
+    // boundary is that TanStack's measurement correction is classified as anchor compensation, never
+    // bottom-follow. Transcript row changes are covered separately by the visual-anchor browser specs.
     const controller = createScrollFollowController();
     controller.gesture("up");
     const writes = trackApprovedWrites(controller);
@@ -485,17 +523,14 @@ describe("VirtualTranscript", () => {
       },
     });
     await act(async () => {
-      rerender(<Harness rows={[...rows]} controller={controller} />);
+      rerender(<Harness rows={rows} controller={controller} />);
       for (let i = 0; i < 4; i += 1) {
         await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       }
     });
 
     assert.equal(writes.follow, 0, "a re-measure while unpinned must not be a follow write");
-    assert.ok(
-      writes.anchor > 0,
-      "the anchor-compensation write must be accepted (the viewport stays put), not swallowed",
-    );
+    assert.ok(writes.anchor > 0, "TanStack virtualizer re-measures stay in anchor compensation");
   });
 
   test("does not mount read-only batch continuations as placeholder rows", async () => {
@@ -548,13 +583,32 @@ describe("VirtualTranscript", () => {
     const { container } = render(<Harness rows={rows} compact={false} />);
 
     await waitFor(() => {
-      assert.ok(container.querySelector('[data-index="4"]'), "all rows mounted");
+      assert.ok(
+        container.querySelector('[data-transcript-virtual-row][data-index="4"]'),
+        "all rows mounted",
+      );
     });
 
-    assert.ok(container.querySelector('[data-index="0"]')?.classList.contains("pb-2"));
-    assert.ok(container.querySelector('[data-index="1"]')?.classList.contains("pb-8"));
-    assert.ok(container.querySelector('[data-index="2"]')?.classList.contains("pb-8"));
-    assert.ok(container.querySelector('[data-index="3"]')?.classList.contains("pb-2"));
+    assert.ok(
+      container
+        .querySelector('[data-transcript-virtual-row][data-index="0"]')
+        ?.classList.contains("pb-2"),
+    );
+    assert.ok(
+      container
+        .querySelector('[data-transcript-virtual-row][data-index="1"]')
+        ?.classList.contains("pb-8"),
+    );
+    assert.ok(
+      container
+        .querySelector('[data-transcript-virtual-row][data-index="2"]')
+        ?.classList.contains("pb-8"),
+    );
+    assert.ok(
+      container
+        .querySelector('[data-transcript-virtual-row][data-index="3"]')
+        ?.classList.contains("pb-2"),
+    );
   });
 
   test("toggling compact mode mid-stream (streaming + running rows) keeps every row mounted", async () => {
@@ -639,46 +693,55 @@ graph TD
 
   test("toggling compact while scrolled up does not yank the viewport to the bottom", async () => {
     const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const scrollCalls = () => vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length;
+    const controller = createScrollFollowController({ initialPinned: false });
+    const writes = trackApprovedWrites(controller);
     // Tool rows are compact-eligible, so toggling compact really changes their heights.
     const rows = Array.from({ length: 100 }, (_, index) => toolRow(index, false));
-    const { container, rerender } = render(<Harness rows={rows} pinned={false} compact={false} />);
+    const { container, rerender } = render(
+      <Harness rows={rows} controller={controller} compact={false} />,
+    );
     await waitFor(() => {
       assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
     });
-    const before = scrollCalls();
+    writes.follow = 0;
 
     await act(async () => {
-      rerender(<Harness rows={rows} pinned={false} compact={true} />);
+      rerender(<Harness rows={rows} controller={controller} compact={true} />);
       await raf();
       await raf();
     });
 
     assert.equal(
-      scrollCalls(),
-      before,
-      "a compact toggle while unpinned must not force the viewport to the bottom",
+      writes.follow,
+      0,
+      "a compact toggle while unpinned may compensate an anchor but must not follow the bottom",
     );
   });
 
   test("toggling compact while pinned keeps the view anchored to the live edge", async () => {
     const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    const scrollCalls = () => vi.mocked(HTMLElement.prototype.scrollTo).mock.calls.length;
-    const rows = Array.from({ length: 100 }, (_, index) => toolRow(index, false));
-    const { container, rerender } = render(<Harness rows={rows} pinned={true} compact={false} />);
+    const controller = createScrollFollowController();
+    const writes = trackApprovedWrites(controller);
+    const rows = Array.from({ length: 80 }, (_, index) => [
+      userRow(index),
+      toolRow(index, false),
+    ]).flat();
+    const { container, rerender } = render(
+      <Harness rows={rows} controller={controller} compact={false} />,
+    );
     await waitFor(() => {
       assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
     });
-    const before = scrollCalls();
+    writes.follow = 0;
 
     await act(async () => {
-      rerender(<Harness rows={rows} pinned={true} compact={true} />);
+      rerender(<Harness rows={rows} controller={controller} compact={true} />);
       await raf();
       await raf();
     });
 
     assert.ok(
-      scrollCalls() > before,
+      writes.follow > 0,
       "a compact toggle while pinned re-anchors to the live edge as heights change",
     );
   });
