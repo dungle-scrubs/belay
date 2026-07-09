@@ -413,6 +413,43 @@ test("scrolling keeps the active selection and repositions the toolbar", async (
   assert.equal(selection.removeAllRanges.mock.calls.length, 0);
 });
 
+test("scroll during an unfinished mouse drag does not replace the captured selection", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  const { container } = render(
+    <div>
+      <div data-message-id="m1">
+        <span>original captured passage</span>
+      </div>
+      <div data-message-id="m2">
+        <span>premature drag selection that starts above the intended text</span>
+      </div>
+      <QuoteSelectionToolbar onQuote={vi.fn()} />
+    </div>,
+  );
+
+  const m1 = container.querySelector('[data-message-id="m1"]') as Node;
+  selectText("original captured passage", m1);
+  await act(async () => {
+    fireEvent.mouseUp(m1 as Element, { clientX: 30, clientY: 30 });
+    await flushRaf();
+    await flushRaf();
+  });
+  assert.ok(screen.getByText("Copy"));
+
+  const m2 = container.querySelector('[data-message-id="m2"]') as Node;
+  await act(async () => {
+    fireEvent.mouseDown(m2 as Element);
+    selectText("premature drag selection that starts above the intended text", m2);
+    fireEvent.scroll(document);
+    await flushRaf();
+    await flushRaf();
+  });
+
+  fireEvent.click(screen.getByText("Copy"));
+  assert.equal(writeText.mock.calls[0]?.[0], "original captured passage");
+});
+
 test("survives a virtual-list unmount/remount of the source message", async () => {
   // Regression guard: the transcript is virtualized, so the message node is unmounted and
   // remounted constantly while it is still logically present. The toolbar must NOT dismiss
