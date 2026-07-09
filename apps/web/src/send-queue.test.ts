@@ -259,6 +259,17 @@ test("queuedPromptsFrom excludes a superseded prompt (folded/unqueued)", () => {
   );
 });
 
+test("queuedPromptsFrom does not show the current awaiting prompt as queued when no host has claimed it", () => {
+  const log = [
+    logEv(events.userMessage({ text: "awaiting", provider: "qwen" }), "ev-awaiting"),
+    logEv(events.userMessage({ text: "queued", provider: "qwen" }), "ev-queued"),
+  ];
+  assert.deepEqual(
+    queuedPromptsFrom(log, PRODUCER_IDS.host).map((q) => ({ id: q.id, text: q.text })),
+    [{ id: "ev-queued", text: "queued" }],
+  );
+});
+
 test("queuedPromptsFrom hides the initial handoff target prompt without hiding it from transcript or scheduler", () => {
   const log = [
     storedEvent(

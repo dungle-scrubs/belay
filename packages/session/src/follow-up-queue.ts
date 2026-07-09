@@ -87,3 +87,40 @@ export function pendingFollowUps(
   }
   return unclaimed;
 }
+
+/**
+ * The prompts that are visibly queued BEHIND the current turn/awaiting prompt. The host scheduler still
+ * uses {@link pendingFollowUps}, because a host restart must claim the oldest never-attempted prompt.
+ * The browser queue panel and transcript suppression use this display projection: while a turn is
+ * already in flight every pending prompt is behind it; while no run has started yet, the oldest pending
+ * prompt is the current awaiting transcript row and only the tail belongs in the queue panel.
+ */
+export function queuedFollowUps(
+  events: readonly SessionEvent[],
+  selfProducerId?: string,
+): SessionEvent[] {
+  const pending = pendingFollowUps(events, selfProducerId);
+  if (hasInFlightTurn(events)) {
+    return pending;
+  }
+  return pending.slice(1);
+}
+
+function hasInFlightTurn(events: readonly SessionEvent[]): boolean {
+  const started = new Set<string>();
+  const completed = new Set<string>();
+  for (const event of events) {
+    const decoded = decodeTrevorEvent(event);
+    if (decoded?.type === "assistant.started") {
+      started.add(decoded.runId);
+    } else if (decoded?.type === "assistant.completed") {
+      completed.add(decoded.runId);
+    }
+  }
+  for (const runId of started) {
+    if (!completed.has(runId)) {
+      return true;
+    }
+  }
+  return false;
+}

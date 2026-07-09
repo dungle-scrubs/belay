@@ -4,7 +4,7 @@ import {
   isControlProducer,
   type ModelRef,
   type PastePayload,
-  pendingFollowUps,
+  queuedFollowUps,
   type SessionEvent,
 } from "@trevor/session";
 
@@ -89,7 +89,7 @@ export function queuedPromptsFrom(
   selfProducerId?: string,
 ): QueuedPrompt[] {
   const hiddenInitialHandoffPrompts = initialHandoffPromptIds(events, selfProducerId);
-  return pendingFollowUps(events, selfProducerId)
+  return queuedFollowUps(events, selfProducerId)
     .filter((event) => !hiddenInitialHandoffPrompts.has(event.eventId))
     .map((event) => {
       const decoded = decodeTrevorEvent(event);

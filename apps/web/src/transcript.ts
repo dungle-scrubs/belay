@@ -15,7 +15,7 @@ import {
   type ProviderDiagnostic,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
-  pendingFollowUps,
+  queuedFollowUps,
   READ_ONLY_TOOL_NAMES,
   type SessionEvent,
   supersededMessageIds,
@@ -483,45 +483,18 @@ export function liveCallFrom(events: readonly SessionEvent[]): LiveCall | undefi
 }
 
 /**
- * Whether a turn is in flight: some `assistant.started` whose run has no `assistant.completed` yet.
- * Gates the durable follow-up queue's transcript suppression (plan 47): only WHILE a turn runs are the
- * unanswered prompts behind it "queued" and rendered by the queue panel instead of the main flow. With
- * no turn running, the oldest unanswered prompt IS the awaiting current prompt and renders normally.
- */
-function hasInFlightTurn(events: readonly SessionEvent[]): boolean {
-  const started = new Set<string>();
-  const completed = new Set<string>();
-  for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
-    if (decoded?.type === "assistant.started") {
-      started.add(decoded.runId);
-    } else if (decoded?.type === "assistant.completed") {
-      completed.add(decoded.runId);
-    }
-  }
-  for (const runId of started) {
-    if (!completed.has(runId)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-/**
  * The user.message eventIds the transcript hides for the durable follow-up queue (plan 47): a prompt
- * SUPERSEDED (folded / unqueued / recalled - retracted, so it never ran) and, while a turn is in flight,
- * the follow-ups QUEUED behind it (rendered by the queue panel, not duplicated in the main flow). Kept
- * scoped so an ordinary transcript - no supersede, no running turn - is unchanged.
+ * SUPERSEDED (folded / unqueued / recalled - retracted, so it never ran) and the visible queued
+ * follow-ups behind the current turn/awaiting prompt (rendered by the queue panel, not duplicated in the
+ * main flow). Kept scoped so a single ordinary awaiting prompt renders normally.
  */
 export function queuedOrSupersededUserIds(
   events: readonly SessionEvent[],
   selfProducerId?: string,
 ): Set<string> {
   const hidden = supersededMessageIds(events);
-  if (hasInFlightTurn(events)) {
-    for (const pending of pendingFollowUps(events, selfProducerId)) {
-      hidden.add(pending.eventId);
-    }
+  for (const queued of queuedFollowUps(events, selfProducerId)) {
+    hidden.add(queued.eventId);
   }
   return hidden;
 }
@@ -534,9 +507,10 @@ export function queuedOrSupersededUserIds(
  * created lazily on the first thinking/text, so an empty turn never leaves a stray bubble.
  * Payloads are read through decodeTrevorEvent, so the fold never hand-guards raw fields.
  *
- * Durable follow-up queue (plan 47): a prompt superseded (folded/unqueued) or still queued behind an
- * in-flight turn is hidden here - the queue panel renders it instead - so a published-but-not-yet-run
- * follow-up never double-renders. `selfProducerId` excludes the host's own echoes from that queue view.
+ * Durable follow-up queue (plan 47): a prompt superseded (folded/unqueued) or still queued behind the
+ * current turn/awaiting prompt is hidden here - the queue panel renders it instead - so a
+ * published-but-not-yet-run follow-up never double-renders. `selfProducerId` excludes the host's own
+ * echoes from that queue view.
  */
 export function toTranscript(
   events: readonly SessionEvent[],

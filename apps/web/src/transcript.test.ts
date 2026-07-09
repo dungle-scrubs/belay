@@ -391,7 +391,7 @@ test("M5: a /compact that FAILS (host restart mid-fold) reaps the orphaned compa
       4,
       events.commandResult({
         command: "/compact",
-        text: "Compaction interrupted — the host restarted. Run /compact again.",
+        text: "Compaction interrupted - the host restarted. Run /compact again.",
         ok: false,
       }),
     ),
@@ -1995,5 +1995,10 @@ test("plan 47: a superseded (folded/unqueued) prompt is hidden from the transcri
 
 test("plan 47: with no turn in flight, the awaiting prompt renders normally (no suppression)", () => {
   const log = [webUser(1, "e1", "awaiting prompt")];
+  assert.deepEqual(userTexts(toTranscript(log, HOST_SELF)), ["awaiting prompt"]);
+});
+
+test("plan 47: with no turn in flight, only the oldest awaiting prompt renders in transcript", () => {
+  const log = [webUser(1, "e1", "awaiting prompt"), webUser(2, "e2", "queued follow-up")];
   assert.deepEqual(userTexts(toTranscript(log, HOST_SELF)), ["awaiting prompt"]);
 });

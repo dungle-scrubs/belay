@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
-import { pendingFollowUps, supersededMessageIds } from "./follow-up-queue";
+import { pendingFollowUps, queuedFollowUps, supersededMessageIds } from "./follow-up-queue";
 import { PRODUCER_IDS, type ProducerId } from "./identity";
 import { events, type TrevorEventInput } from "./protocol";
 
@@ -123,4 +123,26 @@ test("a survived-restart backlog re-derives from the log alone, in order", () =>
     ev(events.userMessage({ text: "3", provider: "qwen" })),
   ];
   assert.deepEqual(texts(pendingFollowUps(log, HOST)), ["1", "2", "3"]);
+});
+
+test("queuedFollowUps hides the current awaiting prompt when no turn has started", () => {
+  const log = [
+    ev(events.userMessage({ text: "awaiting", provider: "qwen" })),
+    ev(events.userMessage({ text: "queued", provider: "qwen" })),
+  ];
+  assert.deepEqual(
+    texts(queuedFollowUps(log, HOST)),
+    ["queued"],
+    "only prompts behind the current awaiting row belong in the visible queue",
+  );
+});
+
+test("queuedFollowUps returns every pending prompt while a turn is in flight", () => {
+  const log = [
+    ev(events.userMessage({ text: "active", provider: "qwen" })),
+    ev(events.assistantStarted({ runId: "r1", warm: true, model: "m", provider: "qwen" }), HOST),
+    ev(events.userMessage({ text: "two", provider: "qwen" })),
+    ev(events.userMessage({ text: "three", provider: "qwen" })),
+  ];
+  assert.deepEqual(texts(queuedFollowUps(log, HOST)), ["two", "three"]);
 });
