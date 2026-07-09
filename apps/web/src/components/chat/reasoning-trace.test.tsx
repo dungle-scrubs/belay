@@ -76,6 +76,15 @@ test("M1: long reasoning is capped with an internal scroll box (never floods the
   assert.match(scroller?.className ?? "", /max-h-/);
 });
 
+test("M1: reasoning scrollbar is inset from the transcript scrollbar edge", () => {
+  const long = Array.from({ length: 80 }, (_, i) => `reasoning line ${i}`).join("\n");
+  const { container } = render(<ReasoningTrace content={long} defaultOpen />);
+  const scroller = container.querySelector('[data-slot="reasoning-text"]');
+  assert.ok(scroller, "the reasoning text sits in its own scroll container");
+  assert.match(scroller.className, /ps-6/, "left text inset stays explicit");
+  assert.match(scroller.className, /me-6/, "scroll container has a matching right inset");
+});
+
 test("M1: fade overlays use the surrounding transcript background token", () => {
   const { container } = render(<ReasoningTrace content={THINKING} streaming />);
   const fades = container.querySelectorAll('[data-slot="reasoning-fade"]');
