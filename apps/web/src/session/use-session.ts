@@ -52,6 +52,11 @@ const transport = TETHER_URL
 export const sessionTransport: SessionTransport = transport;
 const RECONNECT_BASE_MS = 250;
 const RECONNECT_MAX_MS = 2_000;
+// Live tail deltas coalesce into one state commit per ~frame (see the tail buffer in
+// `useSessionWithTransport`). 16ms tracks a 60fps frame; a plain setTimeout (not rAF) keeps the
+// flush deterministic under fake timers in jsdom tests and still fires in background tabs.
+// Exported so hook tests that deliver live tail events advance fake timers by exactly this window.
+export const TAIL_FLUSH_MS = 16;
 
 // Identity is per-tab and persisted in sessionStorage, so a page reload reuses it instead of
 // registering a new participant on every load. sessionStorage (not localStorage) scopes it to this
@@ -291,21 +296,51 @@ export function useSessionWithTransport(
     setReplayed(false);
     setReplayThroughSeq(null);
     setPresence(null);
-    // Buffer the replay burst, commit once. A reload streams the WHOLE history (10k+ events for a
+    // Buffer replay bursts, commit each once. A reload streams the WHOLE history (10k+ events for a
     // long session) as individual onEvent calls. Appending each straight to state would fire one
     // render per event - an O(n^2) storm (every append re-copies the array and recomputes the
-    // transcript/panel memos) that janks the catch-up and flashes a half-built transcript. Instead we
-    // accumulate replayed events in a local buffer (no setState, no render) and commit them in ONE
-    // update when replay completes, so every consumer (transcript, sidebar count, panel) updates a
-    // single time. Live tail events (after replay.complete) append individually as before. This is the
-    // single place replay is handled, so the gate lives here rather than in each consumer.
-    const replayBuffer: SessionEvent[] = [];
+    // transcript/panel memos) that janks the catch-up and flashes a half-built transcript. Instead
+    // each connection attempt accumulates its replayed events in a local buffer (no setState, no
+    // render) and commits them in ONE update when that connection's replay completes, so every
+    // consumer (transcript, sidebar count, panel) updates a single time. The commit is asymmetric:
+    // the FIRST replay is the full history and REPLACES state (it also stamps the page-load boundary
+    // - replayed/replayThroughSeq - exactly once); a RECONNECT catch-up connects with
+    // afterSeq=lastSeq, so the server sends only missed events and the batch APPENDS to existing
+    // state without touching the boundary consumers key live-only side effects on. This is the
+    // single place replay is handled, so the gate lives here rather than in each consumer. The
+    // replay buffer lives at EFFECT scope (shared by every connection attempt), not per
+    // connection: `onEvent` advances `lastSeq` for each buffered replay event and a reconnect
+    // asks for `afterSeq = lastSeq`, so the server never resends what was buffered - a
+    // per-connection buffer discarded on a mid-replay disconnect would lose that range for good
+    // (and the next attempt would commit a truncated log as the full history). The surviving
+    // buffer lets the next attempt keep appending and commit the union at ITS replay.complete.
     let closed = false;
     let connection: SessionConnection | null = null;
     let lastSeq = 0;
     let reconnectAttempt = 0;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-    let replaying = true;
+    let initialReplayDone = false;
+    // Live tail batching: a streaming turn delivers deltas far faster than 60fps, and committing
+    // each one re-renders the whole subscriber tree per delta. Tail events accumulate here and
+    // flush as ONE append per TAIL_FLUSH_MS window (trailing edge), so render cost tracks frames,
+    // not event rate. Order is preserved (single buffer, splice-then-append), and every teardown
+    // path - connection close, session switch, unmount - flushes rather than drops the buffer.
+    const tailBuffer: SessionEvent[] = [];
+    // Replay events buffered but not yet committed (see the effect-scope rationale above). A
+    // connection that dies mid-replay leaves its events here for the next attempt to extend.
+    const replayBuffer: SessionEvent[] = [];
+    let tailFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flushTail = (): void => {
+      if (tailFlushTimer !== null) {
+        clearTimeout(tailFlushTimer);
+        tailFlushTimer = null;
+      }
+      if (tailBuffer.length === 0) {
+        return;
+      }
+      const batch = tailBuffer.splice(0);
+      setEvents((prev) => [...prev, ...batch]);
+    };
     const scheduleReconnect = (): void => {
       if (closed || reconnectTimer !== null) {
         return;
@@ -317,30 +352,47 @@ export function useSessionWithTransport(
         start();
       }, delay);
     };
-    const onEvent = (event: SessionEvent): void => {
-      lastSeq = Math.max(lastSeq, event.seq);
-      if (replaying) {
-        replayBuffer.push(event);
-      } else {
-        setEvents((prev) => [...prev, event]);
-      }
-    };
     const start = (): void => {
       if (closed) {
         return;
       }
+      // Per-connection replay mode: EVERY attempt (first connect and each reconnect) opens in
+      // replay - the stream contract is replay-then-tail on every connection - so a mid-stream
+      // network flap buffers its catch-up burst instead of dripping it through the tail path.
+      let replaying = true;
       connection = connect(sessionTransport, {
         sessionId,
         afterSeq: lastSeq,
-        onEvent,
+        onEvent: (event) => {
+          lastSeq = Math.max(lastSeq, event.seq);
+          if (replaying) {
+            replayBuffer.push(event);
+            return;
+          }
+          tailBuffer.push(event);
+          if (tailFlushTimer === null) {
+            tailFlushTimer = setTimeout(flushTail, TAIL_FLUSH_MS);
+          }
+        },
         onReplayComplete: () => {
           if (!replaying) {
             return;
           }
           replaying = false;
-          const replayedEvents = replayBuffer.slice();
-          setEvents(replayedEvents);
-          setReplayThroughSeq(replayedEvents.at(-1)?.seq ?? 0);
+          const batch = replayBuffer.splice(0);
+          if (initialReplayDone) {
+            // Reconnect catch-up: flush tail stragglers first so seq order is kept, then append
+            // the missed events in one commit. replayed/replayThroughSeq stay untouched - they
+            // mark the initial page-load boundary, not this connection's replay.
+            flushTail();
+            if (batch.length > 0) {
+              setEvents((prev) => [...prev, ...batch]);
+            }
+            return;
+          }
+          initialReplayDone = true;
+          setEvents(batch);
+          setReplayThroughSeq(batch.at(-1)?.seq ?? 0);
           setReplayed(true);
         },
         onStatus: (next) => {
@@ -348,6 +400,10 @@ export function useSessionWithTransport(
           if (next === "open") {
             reconnectAttempt = 0;
           } else if (next === "closed") {
+            // Commit whatever the dying connection already delivered before backing off, so the
+            // UI is current during the reconnect gap and the batch can never interleave with the
+            // next connection's catch-up append.
+            flushTail();
             scheduleReconnect();
           }
         },
@@ -360,11 +416,20 @@ export function useSessionWithTransport(
       if (reconnectTimer !== null) {
         clearTimeout(reconnectTimer);
       }
+      // Flush, don't drop: on a session switch the next effect run resets state anyway, and after
+      // unmount the setState is a no-op - but a still-mounted consumer never loses a buffered event.
+      flushTail();
       connection?.close();
     };
   }, [sessionId, sessionTransport]);
 
-  return { events, presence, replayed, replayThroughSeq, status };
+  // One stable stream object per state change (Tier 1): PanelHost's memo compares its `stream`
+  // prop by identity, so a fresh literal here would re-render the whole layout on EVERY App
+  // render (clock ticks, keystrokes) instead of only when the stream actually advanced.
+  return useMemo(
+    () => ({ events, presence, replayed, replayThroughSeq, status }),
+    [events, presence, replayed, replayThroughSeq, status],
+  );
 }
 
 // --- write side: publishing user intents ---

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { act, renderHook } from "@testing-library/react";
-import type { PublishInput, SessionEvent } from "@trevor/session";
+import type {
+  ConnectSessionOptions,
+  PublishInput,
+  SessionEvent,
+  SessionTransport,
+} from "@trevor/session";
 import { recordingTransport, storedEvent } from "@trevor/test-kit";
 import { afterEach, test, vi } from "vitest";
 import { createSessionActions, useSessionWithTransport } from "./use-session";
@@ -46,9 +51,191 @@ test("reconnects after a closed stream and catches up from the last seen seq", a
     connects[1]?.onEvent(event(2, "second"));
     connects[1]?.onReplayComplete?.();
   });
+  // The tail path batches per flush window now, so let the pending flush commit before asserting.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(16);
+  });
   assert.deepEqual(
     result.current.events.map((e) => e.seq),
     [1, 2],
+  );
+
+  unmount();
+});
+
+test("coalesces a live tail burst into one commit per flush window", async () => {
+  vi.useFakeTimers();
+  const { connects, transport } = recordingTransport();
+  // Track state commits by events-array identity: every setEvents produces a fresh array, so the
+  // number of distinct identities across renders counts commits without status renders muddying it.
+  const commits: (readonly SessionEvent[])[] = [];
+  const { result, unmount } = renderHook(() => {
+    const stream = useSessionWithTransport(transport, "s");
+    if (commits.at(-1) !== stream.events) {
+      commits.push(stream.events);
+    }
+    return stream;
+  });
+
+  act(() => {
+    connects[0]?.onEvent(event(1, "first"));
+    connects[0]?.onReplayComplete?.();
+  });
+  assert.deepEqual(
+    result.current.events.map((e) => e.seq),
+    [1],
+  );
+
+  const commitsBeforeBurst = commits.length;
+  act(() => {
+    connects[0]?.onEvent(event(2, "a"));
+    connects[0]?.onEvent(event(3, "b"));
+    connects[0]?.onEvent(event(4, "c"));
+  });
+  // The burst is buffered: nothing commits until the flush window elapses.
+  assert.equal(commits.length, commitsBeforeBurst);
+  assert.deepEqual(
+    result.current.events.map((e) => e.seq),
+    [1],
+  );
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(16);
+  });
+  assert.deepEqual(
+    result.current.events.map((e) => e.seq),
+    [1, 2, 3, 4],
+  );
+  // The whole burst landed as ONE state commit, not one per event.
+  assert.equal(commits.length, commitsBeforeBurst + 1);
+
+  unmount();
+});
+
+test("buffers a reconnect catch-up replay into one appended commit", async () => {
+  vi.useFakeTimers();
+  const rt = recordingTransport();
+  const { connects, transport } = rt;
+  const commits: (readonly SessionEvent[])[] = [];
+  const { result, unmount } = renderHook(() => {
+    const stream = useSessionWithTransport(transport, "s");
+    if (commits.at(-1) !== stream.events) {
+      commits.push(stream.events);
+    }
+    return stream;
+  });
+
+  act(() => {
+    connects[0]?.onEvent(event(1, "first"));
+    connects[0]?.onReplayComplete?.();
+  });
+  assert.equal(result.current.replayed, true);
+  assert.equal(result.current.replayThroughSeq, 1);
+
+  act(() => {
+    connects[0]?.onStatus?.("closed");
+  });
+
+  // The events missed during the flap ride the reconnect's own replay-then-complete flow (the
+  // recording transport replays the seeded log via microtask, then signals replay complete).
+  rt.seed("s", [event(2, "a"), event(3, "b"), event(4, "c")]);
+  const commitsBeforeReconnect = commits.length;
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(250);
+  });
+
+  assert.equal(connects.length, 2);
+  assert.equal(connects[1]?.afterSeq, 1);
+  assert.deepEqual(
+    result.current.events.map((e) => e.seq),
+    [1, 2, 3, 4],
+  );
+  // The whole catch-up burst APPENDED as one commit, not one per missed event.
+  assert.equal(commits.length, commitsBeforeReconnect + 1);
+  // A reconnect replay never resets the initial page-load boundary consumers key side effects on.
+  assert.equal(result.current.replayed, true);
+  assert.equal(result.current.replayThroughSeq, 1);
+
+  unmount();
+});
+
+test("a disconnect mid-replay keeps the buffered events across the reconnect", async () => {
+  vi.useFakeTimers();
+  // Manual connections (no auto replay-complete): a real WS that drops mid-replay never delivers
+  // its replay.complete, but recordingTransport's connectSession always fires it via microtask,
+  // which would mask the bug this guards against. The wrapper records connects and leaves every
+  // callback to the test.
+  const rt = recordingTransport();
+  const connects: ConnectSessionOptions[] = [];
+  const transport: SessionTransport = {
+    ...rt.transport,
+    connectSession: (options) => {
+      connects.push(options);
+      options.onStatus?.("open");
+      return { close: () => {} };
+    },
+  };
+  const { result, unmount } = renderHook(() => useSessionWithTransport(transport, "s"));
+
+  // The initial replay delivers part of the history, then the socket drops BEFORE the replay
+  // completes. lastSeq has already advanced past the buffered events, so the reconnect asks
+  // afterSeq=2 and the server never resends seqs 1-2 - the buffer must outlive the connection.
+  act(() => {
+    connects[0]?.onEvent(event(1, "first"));
+    connects[0]?.onEvent(event(2, "second"));
+    connects[0]?.onStatus?.("closed");
+  });
+  assert.equal(result.current.replayed, false);
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(250);
+  });
+  assert.equal(connects.length, 2);
+  assert.equal(connects[1]?.afterSeq, 2);
+
+  // The retry resumes the same replay and completes it: the committed initial history is the
+  // UNION of both attempts, not just the retry's tail.
+  act(() => {
+    connects[1]?.onEvent(event(3, "third"));
+    connects[1]?.onReplayComplete?.();
+  });
+  assert.deepEqual(
+    result.current.events.map((e) => e.seq),
+    [1, 2, 3],
+  );
+  assert.equal(result.current.replayed, true);
+  assert.equal(result.current.replayThroughSeq, 3);
+
+  unmount();
+});
+
+test("flushes a pending tail buffer when the connection closes", async () => {
+  vi.useFakeTimers();
+  const { connects, transport } = recordingTransport();
+  const { result, unmount } = renderHook(() => useSessionWithTransport(transport, "s"));
+
+  act(() => {
+    connects[0]?.onEvent(event(1, "first"));
+    connects[0]?.onReplayComplete?.();
+  });
+
+  act(() => {
+    connects[0]?.onEvent(event(2, "a"));
+    connects[0]?.onEvent(event(3, "b"));
+  });
+  assert.deepEqual(
+    result.current.events.map((e) => e.seq),
+    [1],
+  );
+
+  // The close flushes the buffer synchronously (no timer advance), so nothing buffered is lost or
+  // delayed across the reconnect gap.
+  act(() => {
+    connects[0]?.onStatus?.("closed");
+  });
+  assert.deepEqual(
+    result.current.events.map((e) => e.seq),
+    [1, 2, 3],
   );
 
   unmount();

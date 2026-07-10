@@ -10,8 +10,8 @@ import {
   type TrevorEventInput,
 } from "@trevor/session";
 import { recordingTransport, storedEvent } from "@trevor/test-kit";
-import { test, vi } from "vitest";
-import { useSessionWithTransport } from "@/session/use-session";
+import { afterEach, test, vi } from "vitest";
+import { TAIL_FLUSH_MS, useSessionWithTransport } from "@/session/use-session";
 import { useLaunch } from "./use-launch";
 
 /**
@@ -21,6 +21,20 @@ import { useLaunch } from "./use-launch";
  * still navigates). The CALLER owns the control subscription here exactly as the real surfaces do, so the
  * one machine is exercised the same way the picker and the session view drive it.
  */
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/**
+ * Commits buffered live tail events: the session hook batches tail deltas into one commit per
+ * TAIL_FLUSH_MS window (Tier 2.1), so a delivered control event only folds after the flush timer
+ * fires. Tests run under fake timers (real microtasks) so the flush is advanced deterministically.
+ */
+const flushControl = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(TAIL_FLUSH_MS);
+  });
 
 const controlConnect = (connects: readonly ConnectSessionOptions[]) =>
   connects.find((c) => c.sessionId === SUPERVISOR_SESSION_ID);
@@ -87,6 +101,7 @@ test("launch can request an exact existing session id for session-view restart",
 });
 
 test("a reused host navigates immediately without a host.online wait", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});
 
@@ -102,6 +117,7 @@ test("a reused host navigates immediately without a host.online wait", async () 
       1,
     );
   });
+  await flushControl();
   assert.deepEqual(onNavigate.mock.calls, [["sess-reused"]], "a reused host navigates at once");
   assert.equal(
     result.current.launchState,
@@ -111,6 +127,7 @@ test("a reused host navigates immediately without a host.online wait", async () 
 });
 
 test("a freshly launched host navigates only after its host.online", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});
   rec.seed("sess-new", [
@@ -132,12 +149,18 @@ test("a freshly launched host navigates only after its host.online", async () =>
       1,
     );
   });
+  // Synchronous advance: the tail flush commits and the fold starts the host.online watch, but its
+  // microtask replay has not run yet - the launched host is still awaiting host.online here.
+  act(() => {
+    vi.advanceTimersByTime(TAIL_FLUSH_MS);
+  });
   assert.equal(onNavigate.mock.calls.length, 0, "a launched host waits for host.online");
   await act(async () => {}); // flush the awaitEvent replay + navigation
   assert.deepEqual(onNavigate.mock.calls, [["sess-new"]], "navigates once host.online arrives");
 });
 
 test("a launched host that never comes online gives up: idle + error, no navigate", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});
 
@@ -153,8 +176,10 @@ test("a launched host that never comes online gives up: idle + error, no navigat
       1,
     );
   });
+  await flushControl();
+  // Let the host.online wait window (50ms) elapse and resolve null.
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 90));
+    await vi.advanceTimersByTimeAsync(90);
   });
   assert.equal(
     onNavigate.mock.calls.length,
@@ -166,6 +191,7 @@ test("a launched host that never comes online gives up: idle + error, no navigat
 });
 
 test("a failed launch enters the failed state with a named error and does not navigate", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});
 
@@ -182,12 +208,14 @@ test("a failed launch enters the failed state with a named error and does not na
       1,
     );
   });
+  await flushControl();
   assert.equal(result.current.launchState, "failed", "a failed launch enters the failed state");
   assert.equal(result.current.error, "no local supervisor", "the error names the failure class");
   assert.equal(onNavigate.mock.calls.length, 0, "a failed launch never navigates");
 });
 
 test("retry re-publishes the last attempted root and returns to starting", async () => {
+  vi.useFakeTimers();
   const { rec, result } = renderLaunch();
   await act(async () => {});
 
@@ -204,6 +232,7 @@ test("retry re-publishes the last attempted root and returns to starting", async
       1,
     );
   });
+  await flushControl();
   assert.equal(result.current.launchState, "failed");
 
   act(() => result.current.retry());
@@ -224,6 +253,7 @@ test("a launched host whose session already had a host.online navigates (a stale
   // log. The launch resolves `launched`; awaitEvent finds a host.online and navigates (to the session
   // already in view, a harmless no-op there). The "restarting host…" LABEL is a render-site decision
   // (`hostAnnouncement(events) !== null`), covered in host-launch-status.test.tsx.
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});
   rec.seed("sess-stale", [
@@ -245,11 +275,13 @@ test("a launched host whose session already had a host.online navigates (a stale
       1,
     );
   });
-  await act(async () => {});
+  await flushControl();
+  await act(async () => {}); // flush the awaitEvent replay + navigation
   assert.deepEqual(onNavigate.mock.calls, [["sess-stale"]], "a restart target still resolves");
 });
 
 test("reset returns to idle and invalidates a pending host.online navigation", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});
   rec.seed("sess-late", [
@@ -270,6 +302,11 @@ test("reset returns to idle and invalidates a pending host.online navigation", a
       }),
       1,
     );
+  });
+  // Synchronous advance: the result folds and the host.online watch starts, but its microtask
+  // replay has not resolved yet - the pending navigation is genuinely in flight when reset runs.
+  act(() => {
+    vi.advanceTimersByTime(TAIL_FLUSH_MS);
   });
   // Reset (a session switch / picker close) before the host.online watch resolves.
   act(() => result.current.reset());

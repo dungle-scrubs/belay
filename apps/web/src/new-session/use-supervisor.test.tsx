@@ -10,7 +10,8 @@ import {
   type TrevorEventInput,
 } from "@trevor/session";
 import { recordingTransport, storedEvent } from "@trevor/test-kit";
-import { test, vi } from "vitest";
+import { afterEach, test, vi } from "vitest";
+import { TAIL_FLUSH_MS } from "@/session/use-session";
 import { useSupervisor } from "./use-supervisor";
 
 /**
@@ -19,6 +20,20 @@ import { useSupervisor } from "./use-supervisor";
  * (and no-op cancel), path validation, and the launch state machine (starting -> reused-immediate /
  * launched-await-host.online / failed-inline-error).
  */
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+/**
+ * Commits buffered live tail events: the session hook batches tail deltas into one commit per
+ * TAIL_FLUSH_MS window (Tier 2.1), so a delivered control event only folds after the flush timer
+ * fires. Tests run under fake timers (real microtasks) so the flush is advanced deterministically.
+ */
+const flushControl = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(TAIL_FLUSH_MS);
+  });
 
 const controlConnect = (connects: readonly ConnectSessionOptions[]) =>
   connects.find((c) => c.sessionId === SUPERVISOR_SESSION_ID);
@@ -53,6 +68,7 @@ function renderSupervisor(over: { localPickerAvailable?: boolean; onNavigate?: (
 }
 
 test("opening the picker publishes projects.list.requested and renders the returned recents", async () => {
+  vi.useFakeTimers();
   const { rec, result } = renderSupervisor();
   await act(async () => {});
 
@@ -73,6 +89,7 @@ test("opening the picker publishes projects.list.requested and renders the retur
       1,
     );
   });
+  await flushControl();
   assert.deepEqual(
     result.current.recents.map((r) => r.root),
     ["~/dev/trevor"],
@@ -80,6 +97,7 @@ test("opening the picker publishes projects.list.requested and renders the retur
 });
 
 test("the folder icon publishes folder.pick.requested and fills the path from the result", async () => {
+  vi.useFakeTimers();
   const { rec, result } = renderSupervisor();
   await act(async () => {});
 
@@ -95,11 +113,13 @@ test("the folder icon publishes folder.pick.requested and fills the path from th
       1,
     );
   });
+  await flushControl();
   assert.equal(result.current.path, "/picked/dir", "the chosen path fills the field");
   assert.equal(result.current.validation, "valid", "an absolute path validates");
 });
 
 test("a cancelled folder pick is a no-op (the path is unchanged)", async () => {
+  vi.useFakeTimers();
   const { rec, result } = renderSupervisor();
   await act(async () => {});
   act(() => result.current.onPathChange("~/existing"));
@@ -110,6 +130,7 @@ test("a cancelled folder pick is a no-op (the path is unchanged)", async () => {
   act(() => {
     deliverControl(rec.connects, sessionEvents.folderPickResult({ requestId, cancelled: true }), 1);
   });
+  await flushControl();
   assert.equal(result.current.path, "~/existing", "a cancel leaves the typed path alone");
 });
 
@@ -146,6 +167,7 @@ test("Create publishes session.launch.requested { root } and enters starting", a
 });
 
 test("a reused host navigates immediately without a host.online wait", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderSupervisor();
   await act(async () => {});
 
@@ -159,10 +181,12 @@ test("a reused host navigates immediately without a host.online wait", async () 
       1,
     );
   });
+  await flushControl();
   assert.deepEqual(onNavigate.mock.calls, [["sess-reused"]], "a reused host navigates at once");
 });
 
 test("a freshly launched host navigates only after its host.online", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderSupervisor();
   await act(async () => {});
   // The new session announces host.online on its OWN log (seeded so awaitEvent resolves).
@@ -183,13 +207,18 @@ test("a freshly launched host navigates only after its host.online", async () =>
       1,
     );
   });
-  // Before host.online is observed, no navigation has happened.
+  // Synchronous advance: the tail flush commits and the fold starts the host.online watch, but its
+  // microtask replay has not run yet. Before host.online is observed, no navigation has happened.
+  act(() => {
+    vi.advanceTimersByTime(TAIL_FLUSH_MS);
+  });
   assert.equal(onNavigate.mock.calls.length, 0, "a launched host waits for host.online");
   await act(async () => {}); // flush the awaitEvent replay + navigation
   assert.deepEqual(onNavigate.mock.calls, [["sess-new"]], "navigates once host.online arrives");
 });
 
 test("a launched host that never comes online gives up: idle + error, no navigate", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderSupervisor();
   await act(async () => {});
   // Do NOT seed host.online for the target session, so awaitEvent times out (resolves null at 50ms).
@@ -203,9 +232,10 @@ test("a launched host that never comes online gives up: idle + error, no navigat
       1,
     );
   });
+  await flushControl();
   // Let the host.online wait window (50ms) elapse and resolve null.
   await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 90));
+    await vi.advanceTimersByTimeAsync(90);
   });
   assert.equal(
     onNavigate.mock.calls.length,
@@ -217,6 +247,7 @@ test("a launched host that never comes online gives up: idle + error, no navigat
 });
 
 test("a failed launch surfaces a named error in the failed state and does not navigate", async () => {
+  vi.useFakeTimers();
   const { rec, result, onNavigate } = renderSupervisor();
   await act(async () => {});
 
@@ -235,6 +266,7 @@ test("a failed launch surfaces a named error in the failed state and does not na
       1,
     );
   });
+  await flushControl();
   // 44.3: a failed launch is a first-class recovery state (error + Retry), not a silent drop to idle.
   assert.equal(result.current.launchState, "failed", "a failed launch enters the failed state");
   assert.equal(result.current.error, "no local supervisor", "the error surfaces inline");
