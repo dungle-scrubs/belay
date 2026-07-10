@@ -6,6 +6,7 @@ import {
   type ToolName,
 } from "@trevor/session";
 import type { ReactElement } from "react";
+import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { multiEditDetailArgs, parseToolArgs, toolSummary } from "@/tool-args";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
 import { ArchiveResult, parseArchiveResult } from "./archive";
@@ -333,7 +334,7 @@ const renderVideoInspect: RenderArm = ({ message, status, className, startedAt }
   );
 };
 
-// bash/grep render their text output (command output, matches) flat.
+// grep and the short text tools render their output flat (always-expanded, capped preview).
 const renderOutput: RenderArm = ({ message, status, className }) => (
   <ToolOutput
     className={className}
@@ -343,6 +344,28 @@ const renderOutput: RenderArm = ({ message, status, className }) => (
     status={status}
   />
 );
+
+// mcp / lsp_* / bash return long, bounded flat text; render it inside the collapsible ToolFallback
+// shell (collapsed by default) so a big diagnostics/call/command body stays out of the DOM until the
+// row is opened, with a running shimmer + live elapsed clock from `startedAt` (58.6.2 F7). The
+// Result/Error blocks are null-until-complete per M1: nothing but the shimmering trigger shows while
+// running.
+const renderFallback: RenderArm = ({ message, status, className, startedAt }) => {
+  const parsed = parseToolArgs(message.args);
+  const argsText = Object.keys(parsed).length > 0 ? JSON.stringify(parsed, null, 2) : undefined;
+
+  return (
+    <ToolFallback
+      className={className}
+      toolName={message.name}
+      argsSummary={toolSummary(message.name, message.args)}
+      argsText={argsText}
+      result={message.result}
+      status={status}
+      startedAt={startedAt}
+    />
+  );
+};
 
 // The default for every other (and every unknown/dynamic) tool: the generic ToolCall row. Tools
 // whose primary arg is a file path get a clickable path that opens it in the editor (read/ls/...);
@@ -398,21 +421,25 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   // source/bridge-calls/budgets live in the detail takeover (plan 16 M8), not the transcript row.
   tool_script: renderOutput,
   // `mcp` (plan 23 M7) returns bounded flat text for every action (search hits, call output,
-  // resource/prompt records, server status), so it renders like other text-output tools.
-  mcp: renderOutput,
+  // resource/prompt records, server status) that can run long, so it renders inside the collapsible
+  // ToolFallback shell (58.6.2 F7) rather than always-expanded.
+  mcp: renderFallback,
   // lsp_* (plan 24) return bounded flat text (status lines, diagnostic lists, hover content,
-  // outlines, symbol matches, code-action proposals), so they render like other text-output tools.
-  lsp_status: renderOutput,
-  lsp_diagnostics: renderOutput,
-  lsp_hover: renderOutput,
-  lsp_document_symbols: renderOutput,
-  lsp_workspace_symbols: renderOutput,
-  lsp_code_actions: renderOutput,
+  // outlines, symbol matches, code-action proposals); the list-shaped ones can run long, so they all
+  // render inside the collapsible ToolFallback shell (58.6.2 F7).
+  lsp_status: renderFallback,
+  lsp_diagnostics: renderFallback,
+  lsp_hover: renderFallback,
+  lsp_document_symbols: renderFallback,
+  lsp_workspace_symbols: renderFallback,
+  lsp_code_actions: renderFallback,
   clipboard_write: renderClipboard,
   // video_inspect (plan 39) shows the sampled frame thumbnails + metadata; a rich per-frame
   // timeline lives in the detail takeover.
   video_inspect: renderVideoInspect,
-  bash: renderOutput,
+  // bash output (command stdout/stderr) can run long, so it renders inside the collapsible
+  // ToolFallback shell (58.6.2 F7); grep stays on the always-expanded capped preview above.
+  bash: renderFallback,
   write: renderDiff,
   edit: renderDiff,
   multi_edit: renderMultiEdit,

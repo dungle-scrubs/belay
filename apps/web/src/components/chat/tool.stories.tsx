@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { storyFrame } from "@/components/chat/story-frame";
 import { ToolCall } from "./message";
 import { type MultiEdit, MultiEditDiff } from "./multi-edit-diff";
@@ -406,6 +407,93 @@ export const WebSearchError: Story = {
   render: () => (
     <Frame>
       <WebSearchResults query={QUERY} error="Missing BRAVE_API_KEY or SERPER_API_KEY" />
+    </Frame>
+  ),
+};
+
+// mcp / lsp_* / bash render their long, bounded flat text inside the collapsible ToolFallback shell
+// (58.6.2 F7): the trigger (icon + name(args) + a running clock) is always visible; the Args/Result
+// body is collapsed by default so a big diagnostics/call/command body stays out of the DOM until the
+// row is opened. Click a trigger to expand it.
+const LSP_DIAGNOSTICS = [
+  "src/app.tsx:41:9 error TS2322: Type 'string' is not assignable to type 'number'.",
+  "src/app.tsx:88:3 error TS2532: Object is possibly 'undefined'.",
+  "src/session/use-session.ts:12:15 warning: 'result' is declared but its value is never read.",
+  "src/session/use-session.ts:57:1 error TS2304: Cannot find name 'sessionId'.",
+  "src/transcript.ts:210:5 error TS7006: Parameter 'event' implicitly has an 'any' type.",
+  "src/transcript.ts:344:19 warning: prefer const over let for 'startedAt'.",
+  "src/derive.ts:96:10 error TS2554: Expected 1 arguments, but got 2.",
+].join("\n");
+
+const MCP_RESULT = `server: github (connected)
+tool: list_pull_requests
+returned 3 records:
+  #4821  Isolate scroll and render state from the App root      (open, 2 files)
+  #4820  Window oversized turns as row blocks and memoize rows   (merged)
+  #4817  Move relative-time ticks to leaf clocks                 (merged)`;
+
+// A long lsp_diagnostics result, collapsed by default: only the trigger shows until you open it.
+export const LspDiagnosticsCollapsed: Story = {
+  render: () => (
+    <Frame>
+      <ToolFallback
+        toolName="lsp_diagnostics"
+        argsSummary="apps/web/src"
+        argsText={JSON.stringify({ path: "apps/web/src" }, null, 2)}
+        result={LSP_DIAGNOSTICS}
+        status="done"
+      />
+    </Frame>
+  ),
+};
+
+// An mcp call result, collapsed by default.
+export const McpCollapsed: Story = {
+  render: () => (
+    <Frame>
+      <ToolFallback
+        toolName="mcp"
+        argsSummary="call github/list_pull_requests"
+        argsText={JSON.stringify(
+          { action: "call", server: "github", tool: "list_pull_requests", args: { state: "open" } },
+          null,
+          2,
+        )}
+        result={MCP_RESULT}
+        status="done"
+      />
+    </Frame>
+  ),
+};
+
+// A running fallback row: the trigger shimmers, the icon spins, and the elapsed clock ticks from
+// `startedAt`. No result body yet (null-until-complete).
+export const FallbackRunning: Story = {
+  render: () => (
+    <Frame>
+      <ToolFallback
+        toolName="bash"
+        argsSummary="pnpm --filter @trevor/web test"
+        argsText={JSON.stringify({ command: "pnpm --filter @trevor/web test" }, null, 2)}
+        status="running"
+        startedAt={Date.now() - 8_000}
+      />
+    </Frame>
+  ),
+};
+
+// A failed bash row: the `error:` result routes to the Error block (prefix stripped).
+export const FallbackError: Story = {
+  render: () => (
+    <Frame>
+      <ToolFallback
+        toolName="bash"
+        argsSummary="false"
+        argsText={JSON.stringify({ command: "false" }, null, 2)}
+        result="error: command exited with code 1"
+        status="error"
+        defaultOpen
+      />
     </Frame>
   ),
 };

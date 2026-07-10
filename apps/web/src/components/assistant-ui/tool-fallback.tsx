@@ -1,28 +1,29 @@
 "use client";
 
-import { memo, useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
-import {
-  useToolCallElapsed,
-  type ToolApprovalOption,
-  type ToolCallMessagePart,
-  type ToolCallMessagePartProps,
-  type ToolCallMessagePartStatus,
-  type ToolCallMessagePartComponent,
-} from "@assistant-ui/react";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
-import { formatElapsed } from "@/derive";
+import { useState } from "react";
+import { statusIcon, type ToolStatus } from "@/components/chat/tool-status";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { useElapsedLabel } from "@/hooks/use-elapsed-label";
 import { cn } from "@/lib/utils";
-import { statusIcon } from "@/components/chat/tool-status";
-import {
-  ANIMATION_DURATION,
-  useCollapsibleDisclosure,
-} from "./use-collapsible-disclosure";
+import { ANIMATION_DURATION, useCollapsibleDisclosure } from "./use-collapsible-disclosure";
+
+/**
+ * The collapsible Args/Result/Error shell for a flat-text tool row (mcp, lsp_*, bash). Adapted from
+ * the assistant-ui vendored `tool-fallback`, but decoupled from the assistant-ui runtime (58.6.2 F7):
+ * the vendored `useToolCallElapsed` timer and the `ToolFallbackApproval` sub-part - which drove
+ * `addResult`/`resume`/`respondToApproval` and only worked inside the assistant-ui runtime, dead in
+ * Trevor - are both gone. It now reads Trevor's own `ToolStatus`, drives the running clock from
+ * `ToolMessage.startedAt` via the shared `useElapsedLabel` leaf clock (58.6.1 M2), and collapses the
+ * result by default so a long `lsp_diagnostics`/`mcp`/`bash` body stays out of the DOM until opened.
+ */
+
+/** Trevor's `ToolStatus` (running/done/error) mapped to the assistant-ui lifecycle-icon axis. */
+const STATUS_ICON_TYPE = {
+  running: "running",
+  done: "complete",
+  error: "incomplete",
+} as const;
 
 export type ToolFallbackRootProps = Omit<
   React.ComponentProps<typeof Collapsible>,
@@ -53,10 +54,7 @@ function ToolFallbackRoot({
       data-slot="tool-fallback-root"
       open={open}
       onOpenChange={onOpenChange}
-      className={cn(
-        "aui-tool-fallback-root group/tool-fallback-root w-full",
-        className,
-      )}
+      className={cn("aui-tool-fallback-root group/tool-fallback-root w-full", className)}
       style={
         {
           "--animation-duration": `${ANIMATION_DURATION}ms`,
@@ -69,12 +67,17 @@ function ToolFallbackRoot({
   );
 }
 
+/** The live elapsed cell, ticking only while running (paused via an undefined `startedAt`). */
 function ToolFallbackDuration({
+  startedAt,
+  running,
   className,
   ...props
-}: React.ComponentProps<"span">) {
-  const elapsedMs = useToolCallElapsed();
-  if (elapsedMs === undefined) return null;
+}: React.ComponentProps<"span"> & { startedAt?: number; running: boolean }) {
+  const label = useElapsedLabel(running ? startedAt : undefined);
+  if (!label) {
+    return null;
+  }
 
   return (
     <span
@@ -85,27 +88,35 @@ function ToolFallbackDuration({
       )}
       {...props}
     >
-      {formatElapsed(elapsedMs, { tenths: true })}
+      {label}
     </span>
   );
 }
 
 function ToolFallbackTrigger({
   toolName,
+  argsSummary,
   status,
+  startedAt,
   className,
   ...props
 }: React.ComponentProps<typeof CollapsibleTrigger> & {
   toolName: string;
-  status?: ToolCallMessagePartStatus;
+  /** Bounded one-line arg summary shown beside the name so a collapsed row stays informative. */
+  argsSummary?: string;
+  status: ToolStatus;
+  startedAt?: number;
 }) {
-  const statusType = status?.type ?? "complete";
-  const isRunning = statusType === "running";
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled";
+  const isRunning = status === "running";
+  const isError = status === "error";
+  const Icon = statusIcon(STATUS_ICON_TYPE[status]);
 
-  const Icon = statusIcon(statusType);
-  const label = isCancelled ? "Cancelled tool" : "Used tool";
+  const nameLabel = (
+    <>
+      <b>{toolName}</b>
+      {argsSummary ? <span className="text-muted-foreground">({argsSummary})</span> : null}
+    </>
+  );
 
   return (
     <CollapsibleTrigger
@@ -120,31 +131,26 @@ function ToolFallbackTrigger({
         data-slot="tool-fallback-trigger-icon"
         className={cn(
           "aui-tool-fallback-trigger-icon size-4 shrink-0",
-          isCancelled && "text-muted-foreground",
           isRunning && "animate-spin",
+          isError && "text-smui-red",
         )}
       />
       <span
         data-slot="tool-fallback-trigger-label"
-        className={cn(
-          "aui-tool-fallback-trigger-label-wrapper relative inline-block text-start leading-none",
-          isCancelled && "text-muted-foreground line-through",
-        )}
+        className="aui-tool-fallback-trigger-label-wrapper relative inline-block text-start leading-none"
       >
-        <span>
-          {label}: <b>{toolName}</b>
-        </span>
+        <span>{nameLabel}</span>
         {isRunning && (
           <span
             aria-hidden
             data-slot="tool-fallback-trigger-shimmer"
             className="aui-tool-fallback-trigger-shimmer shimmer pointer-events-none absolute inset-0 motion-reduce:animate-none"
           >
-            {label}: <b>{toolName}</b>
+            {nameLabel}
           </span>
         )}
       </span>
-      <ToolFallbackDuration />
+      <ToolFallbackDuration startedAt={startedAt} running={isRunning} />
       <ChevronDownIcon
         data-slot="tool-fallback-trigger-chevron"
         className={cn(
@@ -191,7 +197,9 @@ function ToolFallbackArgs({
 }: React.ComponentProps<"div"> & {
   argsText?: string;
 }) {
-  if (!argsText) return null;
+  if (!argsText) {
+    return null;
+  }
 
   return (
     <div
@@ -211,9 +219,11 @@ function ToolFallbackResult({
   className,
   ...props
 }: React.ComponentProps<"div"> & {
-  result?: unknown;
+  result?: string;
 }) {
-  if (result === undefined) return null;
+  if (!result) {
+    return null;
+  }
 
   return (
     <div
@@ -225,32 +235,25 @@ function ToolFallbackResult({
         Result:
       </p>
       <pre className="aui-tool-fallback-result-content bg-muted/50 text-muted-foreground mt-1 rounded-md p-2.5 text-xs whitespace-pre-wrap">
-        {typeof result === "string" ? result : JSON.stringify(result, null, 2)}
+        {result}
       </pre>
     </div>
   );
 }
 
 function ToolFallbackError({
-  status,
+  error,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
-  status?: ToolCallMessagePartStatus;
+  error?: string;
 }) {
-  if (status?.type !== "incomplete") return null;
+  if (!error) {
+    return null;
+  }
 
-  const error = status.error;
-  const errorText = error
-    ? typeof error === "string"
-      ? error
-      : JSON.stringify(error)
-    : null;
-
-  if (!errorText) return null;
-
-  const isCancelled = status.reason === "cancelled";
-  const headerText = isCancelled ? "Cancelled reason:" : "Error:";
+  // The `error:` result convention (see tool-status) - drop the prefix under the explicit header.
+  const reason = error.replace(/^error:\s*/u, "");
 
   return (
     <div
@@ -258,277 +261,77 @@ function ToolFallbackError({
       className={cn("aui-tool-fallback-error", className)}
       {...props}
     >
-      <p className="aui-tool-fallback-error-header text-muted-foreground font-semibold">
-        {headerText}
-      </p>
-      <p className="aui-tool-fallback-error-reason text-muted-foreground">
-        {errorText}
-      </p>
+      <p className="aui-tool-fallback-error-header text-smui-red font-semibold">Error:</p>
+      <pre className="aui-tool-fallback-error-reason text-smui-red mt-1 whitespace-pre-wrap text-xs">
+        {reason}
+      </pre>
     </div>
   );
 }
 
-const APPROVED_RESULT = "Approved by user";
-const DENIED_RESULT = "User denied tool execution";
-
-const APPROVAL_OPTION_DEFAULT_LABELS: Record<string, string> = {
-  "allow-once": "Allow",
-  "allow-always": "Always allow",
-  "reject-once": "Deny",
-  "reject-always": "Always deny",
-};
-
-const isAllowKind = (kind: string) =>
-  kind === "allow-once" || kind === "allow-always";
-
-const approvalOptionLabel = (option: ToolApprovalOption) =>
-  option.label ??
-  (Object.hasOwn(APPROVAL_OPTION_DEFAULT_LABELS, option.kind)
-    ? APPROVAL_OPTION_DEFAULT_LABELS[option.kind]
-    : undefined) ??
-  option.id;
-
-function ToolFallbackApproval({
-  className,
-  addResult,
-  resume,
-  interrupt,
-  approval,
-  respondToApproval,
-  ...props
-}: React.ComponentProps<"div"> &
-  Partial<
-    Pick<ToolCallMessagePartProps, "addResult" | "resume" | "respondToApproval">
-  > & {
-    interrupt?: ToolCallMessagePart["interrupt"];
-    approval?: ToolCallMessagePart["approval"];
-  }) {
-  const [submitted, setSubmitted] = useState(false);
-  const [confirmingId, setConfirmingId] = useState<string | null>(null);
-
-  if (
-    approval != null &&
-    (approval.approved !== undefined || approval.resolution !== undefined)
-  )
-    return null;
-
-  // Custom (`_`-prefixed) kinds cannot be resolved to a boolean by the kit;
-  // hosts using custom kinds render their own bar. A declared option list is
-  // a host constraint: the kit never adds an approval path beyond it, but
-  // always preserves a refusal path.
-  const declaredOptions = respondToApproval ? approval?.options : undefined;
-  const options = declaredOptions?.filter((o) =>
-    Object.hasOwn(APPROVAL_OPTION_DEFAULT_LABELS, o.kind),
-  );
-
-  const respond = (approved: boolean) => {
-    if (submitted) return;
-    if (
-      approval != null &&
-      approval.approved === undefined &&
-      respondToApproval
-    ) {
-      respondToApproval({ approved });
-    } else if (interrupt) {
-      resume?.({ approved });
-    } else {
-      addResult?.(approved ? APPROVED_RESULT : DENIED_RESULT);
-    }
-    setSubmitted(true);
-  };
-
-  const respondWithOption = (option: ToolApprovalOption) => {
-    if (submitted) return;
-    respondToApproval?.({ optionId: option.id });
-    setSubmitted(true);
-    setConfirmingId(null);
-  };
-
-  const handleOption = (option: ToolApprovalOption) => {
-    if (option.confirm) {
-      setConfirmingId(option.id);
-    } else {
-      respondWithOption(option);
-    }
-  };
-
-  const confirming =
-    confirmingId != null
-      ? options?.find((o) => o.id === confirmingId)
-      : undefined;
-
-  if (confirming) {
-    const confirmMeta =
-      typeof confirming.confirm === "object" ? confirming.confirm : undefined;
-    const confirmDescription =
-      confirmMeta?.description ?? confirming.description;
-    return (
-      <div
-        data-slot="tool-fallback-approval-confirm"
-        className={cn(
-          "aui-tool-fallback-approval-confirm flex flex-col gap-2 pt-1",
-          className,
-        )}
-        {...props}
-      >
-        <p className="aui-tool-fallback-approval-confirm-title font-semibold">
-          {confirmMeta?.title ?? `${approvalOptionLabel(confirming)}?`}
-        </p>
-        {confirmDescription && (
-          <p className="aui-tool-fallback-approval-confirm-description text-muted-foreground">
-            {confirmDescription}
-          </p>
-        )}
-        {confirming.grants && confirming.grants.length > 0 && (
-          <ul className="aui-tool-fallback-approval-confirm-grants flex flex-col gap-1">
-            {confirming.grants.map((grant) => (
-              <li key={grant}>
-                <code className="aui-tool-fallback-approval-confirm-grant bg-muted rounded px-1.5 py-0.5 text-xs">
-                  {grant}
-                </code>
-              </li>
-            ))}
-          </ul>
-        )}
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            onClick={() => respondWithOption(confirming)}
-            disabled={submitted}
-          >
-            Confirm
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setConfirmingId(null)}
-            disabled={submitted}
-          >
-            Back
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
-  if (declaredOptions && declaredOptions.length > 0) {
-    const allowOptions = options?.filter((o) => isAllowKind(o.kind)) ?? [];
-    const rejectOptions = options?.filter((o) => !isAllowKind(o.kind)) ?? [];
-    return (
-      <div
-        data-slot="tool-fallback-approval"
-        className={cn(
-          "aui-tool-fallback-approval flex flex-wrap items-center gap-2 pt-1",
-          className,
-        )}
-        {...props}
-      >
-        {[...allowOptions, ...rejectOptions].map((option) => (
-          <Button
-            key={option.id}
-            size="sm"
-            variant={option === allowOptions[0] ? "default" : "outline"}
-            onClick={() => handleOption(option)}
-            disabled={submitted}
-          >
-            {approvalOptionLabel(option)}
-          </Button>
-        ))}
-        {rejectOptions.length === 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => respond(false)}
-            disabled={submitted}
-          >
-            Deny
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      data-slot="tool-fallback-approval"
-      className={cn(
-        "aui-tool-fallback-approval flex items-center gap-2 pt-1",
-        className,
-      )}
-      {...props}
-    >
-      <Button size="sm" onClick={() => respond(true)} disabled={submitted}>
-        Allow
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={() => respond(false)}
-        disabled={submitted}
-      >
-        Deny
-      </Button>
-    </div>
-  );
+export interface ToolFallbackProps {
+  toolName: string;
+  /** Bounded one-line arg summary shown on the (collapsed) trigger beside the tool name. */
+  argsSummary?: string;
+  /** The full arguments text shown in the expanded Args block. */
+  argsText?: string;
+  /** The tool's flat-text result; the `error:` convention routes to the Error block instead. */
+  result?: string;
+  status: ToolStatus;
+  /** Ms epoch of `tool.started`; drives the running clock (58.6.1 M2). */
+  startedAt?: number;
+  defaultOpen?: boolean;
+  className?: string;
 }
 
-const ToolFallbackImpl: ToolCallMessagePartComponent = ({
+/**
+ * A flat-text tool row rendered as a collapsible disclosure: the trigger (icon + `name(args)` +
+ * running clock) is always visible; Args, Result, and Error live in the content, unmounted while
+ * closed. Collapsed by default (`defaultOpen=false`) so a long body stays out of the DOM until the
+ * user opens it. The Result/Error blocks are null-until-complete (F5): while running, only the
+ * shimmering trigger shows - no partial result body.
+ */
+function ToolFallbackImpl({
   toolName,
+  argsSummary,
   argsText,
   result,
   status,
-  addResult,
-  resume,
-  interrupt,
-  approval,
-  respondToApproval,
-}) => {
-  const isCancelled =
-    status?.type === "incomplete" && status.reason === "cancelled";
-  const isRequiresAction = status?.type === "requires-action";
-
-  const [open, setOpen] = useState(isRequiresAction);
-  const [prevRequiresAction, setPrevRequiresAction] =
-    useState(isRequiresAction);
-  if (isRequiresAction !== prevRequiresAction) {
-    setPrevRequiresAction(isRequiresAction);
-    if (isRequiresAction) setOpen(true);
-  }
+  startedAt,
+  defaultOpen = false,
+  className,
+}: ToolFallbackProps) {
+  const [open, setOpen] = useState(defaultOpen);
+  const isError = status === "error";
 
   return (
-    <ToolFallbackRoot open={open} onOpenChange={setOpen}>
-      <ToolFallbackTrigger toolName={toolName} status={status} />
+    <ToolFallbackRoot open={open} onOpenChange={setOpen} className={className}>
+      <ToolFallbackTrigger
+        toolName={toolName}
+        argsSummary={argsSummary}
+        status={status}
+        startedAt={startedAt}
+      />
       <ToolFallbackContent>
-        <ToolFallbackError status={status} />
-        <ToolFallbackArgs
-          argsText={argsText}
-          className={cn(isCancelled && "opacity-60")}
-        />
-        {isRequiresAction && (
-          <ToolFallbackApproval
-            addResult={addResult}
-            resume={resume}
-            interrupt={interrupt}
-            approval={approval}
-            respondToApproval={respondToApproval}
-          />
+        <ToolFallbackArgs argsText={argsText} />
+        {isError ? (
+          <ToolFallbackError error={result} />
+        ) : (
+          <ToolFallbackResult result={status === "running" ? undefined : result} />
         )}
-        {!isCancelled && <ToolFallbackResult result={result} />}
       </ToolFallbackContent>
     </ToolFallbackRoot>
   );
-};
+}
 
-const ToolFallback = memo(
-  ToolFallbackImpl,
-) as unknown as ToolCallMessagePartComponent & {
+const ToolFallback = ToolFallbackImpl as typeof ToolFallbackImpl & {
+  displayName?: string;
   Root: typeof ToolFallbackRoot;
   Trigger: typeof ToolFallbackTrigger;
   Content: typeof ToolFallbackContent;
   Args: typeof ToolFallbackArgs;
   Result: typeof ToolFallbackResult;
   Error: typeof ToolFallbackError;
-  Approval: typeof ToolFallbackApproval;
 };
 
 ToolFallback.displayName = "ToolFallback";
@@ -538,7 +341,6 @@ ToolFallback.Content = ToolFallbackContent;
 ToolFallback.Args = ToolFallbackArgs;
 ToolFallback.Result = ToolFallbackResult;
 ToolFallback.Error = ToolFallbackError;
-ToolFallback.Approval = ToolFallbackApproval;
 
 export {
   ToolFallback,
@@ -548,5 +350,4 @@ export {
   ToolFallbackArgs,
   ToolFallbackResult,
   ToolFallbackError,
-  ToolFallbackApproval,
 };
