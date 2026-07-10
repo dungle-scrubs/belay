@@ -35,6 +35,9 @@ export interface ProjectSidebarRecord {
   readonly createdAt: string;
   /** ISO timestamp of last modification. */
   readonly updatedAt: string;
+  /** True when the supervisor reports the project folder gone from disk (plan 58.8). The record
+   *  stays listed (sessions remain readable/archivable); only launching into it is blocked. */
+  readonly missing?: boolean;
 }
 
 /**
@@ -68,6 +71,9 @@ export interface ProjectGroup {
   readonly updatedAt: string;
   /** ISO timestamp of first registration (creation order). */
   readonly createdAt: string;
+  /** True when the project folder no longer exists on disk (plan 58.8): the row renders a red
+   *  label + dead-path tooltip and New-session is blocked; everything else stays available. */
+  readonly missing: boolean;
 }
 
 /**
@@ -123,6 +129,13 @@ export function worktreeSummaryFromIdentity(summary: SessionSummary): WorktreeSu
 
 /** The default number of sessions shown per project before a "Show more" affordance (M6). */
 export const SESSION_CAP = 5;
+
+/** The user-facing note for a project whose folder is gone (plan 58.8) - the SAME phrasing the
+ *  launcher puts on a failed launch's reason, so the tooltip, the blocked New-session hint, and the
+ *  launch failure all name the situation identically. */
+export function missingProjectNote(path: string): string {
+  return `project folder no longer exists: ${path}`;
+}
 
 export { sessionProjectPath };
 
@@ -260,6 +273,9 @@ export function buildProjectSidebar(
       activeCount: projectSessions.length,
       updatedAt,
       createdAt,
+      // Only a registry record can be marked missing (the supervisor stats registry paths); a
+      // transient project has no record to mark and reads as present.
+      missing: record?.missing ?? false,
     });
   }
 

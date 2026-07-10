@@ -66,12 +66,15 @@ function InteractiveSidebar({
   worktrees,
   initialQuery = "",
   currentSessionId,
+  withNewSession = false,
 }: {
   projects: readonly ProjectSidebarRecord[];
   sessions: readonly SessionSummary[];
   worktrees?: readonly WorktreeSummary[];
   initialQuery?: string;
   currentSessionId?: string;
+  /** Renders the per-project New-session affordances (hover +, context menu, empty state). */
+  withNewSession?: boolean;
 }) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(
     () => new Set(projects.filter((p) => p.collapsed).map((p) => p.path)),
@@ -109,6 +112,7 @@ function InteractiveSidebar({
         onSearchChange={setQuery}
         currentSessionId={currentSessionId}
         onViewArchived={noop}
+        onNewSession={withNewSession ? noop : undefined}
         nowMs={NOW}
         className="h-full"
       />
@@ -146,6 +150,36 @@ export const ActiveProject: Story = {
         }),
       ]}
       currentSessionId="cur"
+    />
+  ),
+};
+
+/** Plan 58.8: a project whose folder was deleted renders a red name label with a tooltip naming the
+ *  dead path; its sessions stay listed and actionable, but New-session is blocked with the same
+ *  message (hover +, context menu, and the empty state of the missing archive-only project). */
+export const MissingProject: Story = {
+  render: () => (
+    <InteractiveSidebar
+      withNewSession
+      projects={[
+        project({ path: "/dev/trevor" }),
+        project({ path: "/dev/deleted-worktree", missing: true }),
+        project({ path: "/dev/deleted-empty", missing: true }),
+      ]}
+      sessions={[
+        summary({ sessionId: "ok", title: "live project session" }),
+        summary({
+          sessionId: "d1",
+          title: "session of the deleted folder",
+          projectPath: "/dev/deleted-worktree",
+        }),
+        summary({
+          sessionId: "d2",
+          title: "another readable session",
+          projectPath: "/dev/deleted-worktree",
+          updatedAt: ago(1000 * 60 * 60 * 5),
+        }),
+      ]}
     />
   ),
 };

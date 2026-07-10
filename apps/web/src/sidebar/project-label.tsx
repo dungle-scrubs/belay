@@ -16,6 +16,9 @@ export interface ProjectLabelProps {
   readonly displayName: string;
   /** The full display path, or null when unknown. */
   readonly displayPath: string | null;
+  /** True when the project's folder no longer exists on disk (plan 58.8): the name renders red and
+   *  the tooltip names the dead path so the color is explained, not just alarming. */
+  readonly missing?: boolean;
   readonly className?: string;
   /** An optional className for the muted path span (so callers control its size/tone). */
   readonly pathClassName?: string;
@@ -24,14 +27,18 @@ export interface ProjectLabelProps {
 export function ProjectLabel({
   displayName,
   displayPath,
+  missing = false,
   className,
   pathClassName,
 }: ProjectLabelProps) {
-  // Show the path tooltip only when it carries MORE than the name (a basename-only path adds no info).
-  const showPath = displayPath != null && displayPath !== displayName;
+  // Show the tooltip when the path carries MORE than the name (a basename-only path adds no info) -
+  // or always for a missing project, whose tooltip is the explanation of the red label.
+  const showPath = displayPath != null && (missing || displayPath !== displayName);
 
   const label = (
-    <span className={cn("min-w-0 flex-1 truncate font-medium", className)}>
+    <span
+      className={cn("min-w-0 flex-1 truncate font-medium", className, missing && "text-smui-red")}
+    >
       <span className="truncate">{displayName}</span>
     </span>
   );
@@ -47,6 +54,7 @@ export function ProjectLabel({
         <div className="flex flex-col gap-0.5">
           <span className="font-medium text-foreground">{displayName}</span>
           <span className={cn("text-muted-foreground/70", pathClassName)}>{displayPath}</span>
+          {missing ? <span className="text-smui-red">folder no longer exists</span> : null}
         </div>
       </TooltipContent>
     </Tooltip>

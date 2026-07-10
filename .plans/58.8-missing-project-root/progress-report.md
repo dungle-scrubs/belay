@@ -2,15 +2,15 @@
 
 **Plan:** `58.8-missing-project-root`
 **Stage:** ready
-**Current focus:** M4 - Sidebar missing-project treatment (0/4)
+**Current focus:** Gate
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks (total) | 23 |
-| Checked (done) | 18 |
-| Current-cutoff blockers (unchecked) | 5 |
+| Checked (done) | 22 |
+| Current-cutoff blockers (unchecked) | 1 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
@@ -56,15 +56,15 @@
 - [x] GREEN: thread the reason string through the existing failed-state surfaces.
 - [x] REFACTOR: name the two timeouts (`result-wait`, `host-online`) as explicit machine phases.
 
-### M4 - Sidebar missing-project treatment (0/4)
+### M4 - Sidebar missing-project treatment (4/4)
 
-- [ ] Thread `missing` from the supervisor projects mapping into `ProjectSidebarRecord` /
+- [x] Thread `missing` from the supervisor projects mapping into `ProjectSidebarRecord` /
       `ProjectGroup` (`apps/web/src/sidebar/project-sidebar-model.ts`).
-- [ ] Storybook story + production wiring: missing projects render a red name label with a tooltip
+- [x] Storybook story + production wiring: missing projects render a red name label with a tooltip
       naming the dead path; their sessions stay listed beneath.
-- [ ] Block New-session on a missing project (hover button + context menu) with the missing-folder
+- [x] Block New-session on a missing project (hover button + context menu) with the missing-folder
       message; Remove, archive, and rename stay available.
-- [ ] Verify: jsdom tests for red label, blocked new-session, untouched archive/rename; manual pass
+- [x] Verify: jsdom tests for red label, blocked new-session, untouched archive/rename; manual pass
       against the owner's two standing dead registry records.
 
 ### Gate
@@ -75,7 +75,12 @@
 
 ## Accepted/Deferred Follow-up
 
-None.
+- [ ] Deferred manual EZE (M4 task 5, second half): the in-browser pass against the owner's two
+      standing dead registry records (absolute + corrupt tilde-keyed `58-project-sidebar-sessions`).
+      tool-proxy `browser-tools` was not available in the implementing session; every gate behavior
+      is pinned by the hermetic suites (supervisor survival + failed reason: launch-dispatch.test.ts;
+      failed reason + Retry in the UI: use-launch.test.tsx + host-launch-status/panel-host tests;
+      red labels + blocked New-session + untouched archive/rename: missing-project.test.tsx).
 
 ## Superseded/Obsolete
 

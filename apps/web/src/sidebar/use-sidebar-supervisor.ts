@@ -38,6 +38,8 @@ function toSidebarRecord(p: SupervisorProject): ProjectSidebarRecord {
     collapsed: false,
     createdAt: p.updatedAt,
     updatedAt: p.updatedAt,
+    // The supervisor's stat-marking (plan 58.8); absent from older supervisors reads as present.
+    missing: p.missing ?? false,
   };
 }
 

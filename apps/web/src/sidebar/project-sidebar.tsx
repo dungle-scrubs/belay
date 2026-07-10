@@ -20,7 +20,7 @@ import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState }
 import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 import { ProjectLabel } from "./project-label";
-import { type ProjectGroup, SESSION_CAP } from "./project-sidebar-model";
+import { missingProjectNote, type ProjectGroup, SESSION_CAP } from "./project-sidebar-model";
 import { WorktreeBadge } from "./worktree-badge";
 
 /**
@@ -347,6 +347,7 @@ function RenameInput({
 /** The context menu for a project row: New Session, Rename, Remove, View Archive. */
 function ProjectContextMenu({
   hasActive,
+  missingNote,
   onNewSession,
   onRename,
   onRemove,
@@ -354,6 +355,9 @@ function ProjectContextMenu({
   onClose,
 }: {
   hasActive: boolean;
+  /** Set when the project folder no longer exists (plan 58.8): New Session is blocked with this
+   *  message; Rename/Remove/View-archive stay available (the sessions do not depend on the folder). */
+  missingNote?: string;
   onNewSession?: () => void;
   onRename: () => void;
   onRemove: () => void;
@@ -381,13 +385,24 @@ function ProjectContextMenu({
         <button
           type="button"
           onClick={() => {
+            if (missingNote) return;
             onNewSession();
             onClose();
           }}
-          className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui text-foreground hover:bg-card/60"
+          disabled={missingNote != null}
+          title={missingNote}
+          className={cn(
+            "flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-ui",
+            missingNote != null
+              ? "cursor-not-allowed text-muted-foreground/40"
+              : "text-foreground hover:bg-card/60",
+          )}
         >
           <Plus className="size-3" />
           <span>New session</span>
+          {missingNote != null ? (
+            <span className="ml-auto text-label text-muted-foreground/40">missing</span>
+          ) : null}
         </button>
       ) : null}
       <button
@@ -660,6 +675,7 @@ function ProjectRow({
           <ProjectLabel
             displayName={group.displayName}
             displayPath={group.displayPath}
+            missing={group.missing}
             className="min-w-0 flex-1 text-ui text-foreground"
             pathClassName="text-muted-foreground/50"
           />
@@ -670,11 +686,20 @@ function ProjectRow({
               <button
                 type="button"
                 aria-label="New session"
+                disabled={group.missing}
+                title={group.missing ? missingProjectNote(group.displayPath) : undefined}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onNewSession(group.key);
+                  if (!group.missing) {
+                    onNewSession(group.key);
+                  }
                 }}
-                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                className={cn(
+                  "rounded p-0.5",
+                  group.missing
+                    ? "cursor-not-allowed text-muted-foreground/30"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
               >
                 <Plus className="size-3" />
               </button>
@@ -718,6 +743,7 @@ function ProjectRow({
       {menuOpen ? (
         <ProjectContextMenu
           hasActive={hasActive}
+          missingNote={group.missing ? missingProjectNote(group.displayPath) : undefined}
           onNewSession={onNewSession ? () => onNewSession(group.key) : undefined}
           onRename={onStartRename}
           onRemove={() => onRemoveProject?.(group.key)}
@@ -731,14 +757,24 @@ function ProjectRow({
 
 /** The empty state for a project with only archived sessions: an archive link affordance (plan 58 M7).
  *  When {@link onViewArchive} is provided, the state is a clickable link that opens the archive browser
- *  filtered to this project's path; otherwise it is a static label. */
+ *  filtered to this project's path; otherwise it is a static label. A missing project (plan 58.8) gets
+ *  the missing-folder message instead of a New-session affordance it could never satisfy. */
 function EmptyProjectState({
   projectKey,
+  missingNote,
   onNewSession,
 }: {
   projectKey: string;
+  missingNote?: string;
   onNewSession?: (projectKey: string) => void;
 }) {
+  if (missingNote) {
+    return (
+      <div className="flex items-center gap-1.5 py-1.5 pl-7 pr-2.5 text-label tracking-wider text-smui-red/70">
+        <span>{missingNote}</span>
+      </div>
+    );
+  }
   if (onNewSession) {
     return (
       <button
@@ -882,7 +918,13 @@ export function ProjectSidebar({
                   {!group.collapsed ? (
                     <div>
                       {group.sessions.length === 0 ? (
-                        <EmptyProjectState projectKey={group.key} onNewSession={onNewSession} />
+                        <EmptyProjectState
+                          projectKey={group.key}
+                          missingNote={
+                            group.missing ? missingProjectNote(group.displayPath) : undefined
+                          }
+                          onNewSession={onNewSession}
+                        />
                       ) : (
                         visible.map((row) => (
                           <SessionRow
