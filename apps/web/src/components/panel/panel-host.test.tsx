@@ -4,6 +4,7 @@ import { useRef } from "react";
 import { expect, test, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useComposer } from "@/hooks/use-composer";
+import { createScrollFollowUi } from "@/hooks/use-scroll-follow";
 import { createScrollFollowController } from "@/scroll-follow";
 import type { HostStatus } from "../../derive";
 import type { InventoryState } from "../../resume";
@@ -150,14 +151,12 @@ function PanelHostHarness(props: {
       }}
       question={{ onAnswer: vi.fn(), pending: null }}
       scroll={{
-        atBottom: true,
-        bottomRequestId: 0,
         controller: createScrollFollowController(),
-        hasUnseen: false,
         onScroll: vi.fn(),
         onUserGesture: vi.fn(),
         scrollToBottom: vi.fn(),
         transcriptRef,
+        ui: createScrollFollowUi().ui,
       }}
       sessionName="session"
       sidebar={{
@@ -178,7 +177,6 @@ function PanelHostHarness(props: {
         onRemoveProject: vi.fn(),
         currentSessionId: "s",
         liveActivity: new Map(),
-        nowMs: 1_800_000_000_000,
         onClose: vi.fn(),
         onOpen: vi.fn(),
       }}

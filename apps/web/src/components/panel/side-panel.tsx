@@ -1,5 +1,5 @@
 import type { GitStatus, UsageBreakdown } from "@trevor/session";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtTokens } from "@/derive";
 import { useArmedAfterMount } from "@/hooks/use-armed-after-mount";
@@ -258,7 +258,16 @@ function BreakdownView({
   emptyLabel: string;
   ready?: boolean;
 }) {
-  const bd = breakdown ? panelBreakdown(breakdown) : null;
+  // Memoized on the breakdown object so `bd.leaves` keeps identity across
+  // unrelated re-renders - the Treemap's squarify layout memo is keyed on the
+  // leaves array, and a fresh derivation here would bust it every render.
+  const bd = useMemo(() => (breakdown ? panelBreakdown(breakdown) : null), [breakdown]);
+  // Legend order (biggest first) derives from the same leaves; memoize the
+  // sort alongside so it doesn't rerun on unrelated renders either.
+  const sortedLeaves = useMemo(
+    () => (bd ? [...bd.leaves].sort((a, c) => c.value - a.value) : []),
+    [bd],
+  );
 
   if (!bd || bd.total <= 0) {
     return (
@@ -280,28 +289,26 @@ function BreakdownView({
       {/* One legend row per treemap cell (biggest first), so the list and the
           treemap always agree on what's shown. */}
       <ul className="flex flex-col gap-1">
-        {[...bd.leaves]
-          .sort((a, c) => c.value - a.value)
-          .map((leaf) => {
-            const leafTokens =
-              totalTokens != null && bd.total > 0
-                ? Math.round((leaf.value / bd.total) * totalTokens)
-                : null;
-            const share = pct(leaf.value, bd.total);
-            const shareLabel = share === 0 && leaf.value > 0 ? "<1%" : `${share}%`;
-            return (
-              <li key={leaf.key} className="flex items-center gap-2 text-sm">
-                <span
-                  className="size-2.5 shrink-0 rounded-[2px]"
-                  style={{ background: leaf.color }}
-                />
-                <span className="truncate text-foreground">{leaf.label}</span>
-                <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
-                  {leafTokens != null ? `${fmtTokens(leafTokens)} · ${shareLabel}` : shareLabel}
-                </span>
-              </li>
-            );
-          })}
+        {sortedLeaves.map((leaf) => {
+          const leafTokens =
+            totalTokens != null && bd.total > 0
+              ? Math.round((leaf.value / bd.total) * totalTokens)
+              : null;
+          const share = pct(leaf.value, bd.total);
+          const shareLabel = share === 0 && leaf.value > 0 ? "<1%" : `${share}%`;
+          return (
+            <li key={leaf.key} className="flex items-center gap-2 text-sm">
+              <span
+                className="size-2.5 shrink-0 rounded-[2px]"
+                style={{ background: leaf.color }}
+              />
+              <span className="truncate text-foreground">{leaf.label}</span>
+              <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
+                {leafTokens != null ? `${fmtTokens(leafTokens)} · ${shareLabel}` : shareLabel}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

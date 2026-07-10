@@ -1,5 +1,5 @@
-import { ChevronDown } from "lucide-react";
-import { type ReactNode, useCallback, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useCallback, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { JumpToBottom } from "@/components/chat/jump-to-bottom";
 import type { ScrollFollow } from "@/hooks/use-scroll-follow";
 import { cn } from "@/lib/utils";
 import { liveEdgeOffset } from "@/scroll";
@@ -86,6 +86,21 @@ export function LiveScrollSurface(props: LiveScrollSurfaceProps) {
   const previousScrollTopRef = useRef<number | null>(null);
   const visualAnchorRef = useRef<VisualAnchorSnapshot | null>(null);
 
+  // The adapter no longer mirrors these into its owner's render (Tier 2.4), so this surface
+  // subscribes itself: a pin flip must re-run the anchor-snapshot layout effect below (it decides
+  // follow-vs-compensate and where to snapshot from), and a bottom request drives the jump effect.
+  // Re-rendering here is cheap - `children` keeps identity, so React bails out of the subtree.
+  const atBottom = useSyncExternalStore(
+    scroll.controller.subscribe,
+    scroll.controller.isPinned,
+    scroll.controller.isPinned,
+  );
+  const bottomRequestId = useSyncExternalStore(
+    scroll.ui.subscribe,
+    scroll.ui.bottomRequestId,
+    scroll.ui.bottomRequestId,
+  );
+
   const scrollToLiveEdge = useCallback(() => {
     const element = scroll.transcriptRef.current;
     if (!element || element.scrollHeight <= element.clientHeight) {
@@ -111,10 +126,10 @@ export function LiveScrollSurface(props: LiveScrollSurfaceProps) {
     const previousRevision = previousRevisionRef.current;
     const contentChanged = previousRevision !== null && previousRevision !== revision;
 
-    if (element && previousRevision === null && scroll.atBottom) {
+    if (element && previousRevision === null && atBottom) {
       scrollToLiveEdge();
     } else if (element && contentChanged) {
-      if (scroll.atBottom) {
+      if (atBottom) {
         scrollToLiveEdge();
       } else {
         const previousAnchor = visualAnchorRef.current;
@@ -148,17 +163,17 @@ export function LiveScrollSurface(props: LiveScrollSurfaceProps) {
       }
     }
 
-    visualAnchorRef.current = scroll.atBottom ? null : visibleAnchorIn(element, itemSelector);
+    visualAnchorRef.current = atBottom ? null : visibleAnchorIn(element, itemSelector);
     previousScrollTopRef.current = element?.scrollTop ?? null;
     previousRevisionRef.current = revision;
   });
 
   useLayoutEffect(() => {
-    if (scroll.bottomRequestId === 0) {
+    if (bottomRequestId === 0) {
       return;
     }
     scrollToLiveEdge();
-  }, [scroll.bottomRequestId, scrollToLiveEdge]);
+  }, [bottomRequestId, scrollToLiveEdge]);
 
   const viewportData = viewportDataAttribute ? { [viewportDataAttribute]: "" } : {};
 
@@ -174,27 +189,13 @@ export function LiveScrollSurface(props: LiveScrollSurfaceProps) {
           }
         }}
         data-live-scroll-viewport
-        data-live-scroll-pinned={scroll.atBottom ? "true" : "false"}
+        data-live-scroll-pinned={atBottom ? "true" : "false"}
         className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto", className)}
       >
         {children}
       </div>
-      {!scroll.atBottom ? (
-        <button
-          type="button"
-          onClick={scroll.scrollToBottom}
-          aria-label={scroll.hasUnseen ? "Scroll to new content" : "Scroll to bottom"}
-          data-unseen={scroll.hasUnseen ? "true" : undefined}
-          className={cn(
-            "absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-md border bg-card shadow-sm transition-colors",
-            scroll.hasUnseen
-              ? "border-primary text-primary"
-              : "border-border text-muted-foreground hover:text-foreground",
-          )}
-        >
-          <ChevronDown className="size-4" />
-        </button>
-      ) : null}
+      {/* The shared jump-to-bottom leaf (Tier 2.4): it owns its pin/unseen subscriptions. */}
+      <JumpToBottom controller={scroll.controller} ui={scroll.ui} onJump={scroll.scrollToBottom} />
     </div>
   );
 }

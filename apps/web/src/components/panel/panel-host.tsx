@@ -12,14 +12,19 @@ import type {
   TaskSnapshot,
   WorktreeSummary,
 } from "@trevor/session";
-import { ChevronDown } from "lucide-react";
+import { useMemoizedFn } from "ahooks";
 import {
+  memo,
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  type WheelEvent as ReactWheelEvent,
   type RefObject,
   type SubmitEvent,
+  useEffect,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { ArtifactPanel } from "@/artifact-panel/artifact-panel";
 import type { ArtifactPanelLayout } from "@/artifact-panel/artifact-panel-state";
@@ -34,6 +39,7 @@ import { activeOptionId } from "@/components/chat/autocomplete-menu";
 import { CommandMenu, SLASH_MENU_LISTBOX_ID } from "@/components/chat/command-menu";
 import { CommandPreview } from "@/components/chat/command-preview";
 import { FILE_MENTION_LISTBOX_ID, FileMentionMenu } from "@/components/chat/file-mention-menu";
+import { JumpToBottom } from "@/components/chat/jump-to-bottom";
 import { LoopInventory } from "@/components/chat/loop/loop-inventory";
 import { PromptInput } from "@/components/chat/prompt-input";
 import { QueuedPrompts } from "@/components/chat/queued-prompts";
@@ -47,7 +53,7 @@ import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/pan
 import { QuestionSurface } from "@/components/question";
 import type { CommandArgPreview } from "@/derive";
 import type { Composer } from "@/hooks/use-composer";
-import { cn } from "@/lib/utils";
+import type { ScrollFollowUi } from "@/hooks/use-scroll-follow";
 import type { ScrollFollowController } from "@/scroll-follow";
 import type { SessionStream } from "@/session/use-session";
 import { ProjectSidebar } from "@/sidebar/project-sidebar";
@@ -98,10 +104,11 @@ export interface TranscriptScroll {
   /** The follow authority (plan 12.2), threaded to VirtualTranscript so its writes ask the same
    *  controller the jump affordance reads. */
   readonly controller: ScrollFollowController;
-  readonly atBottom: boolean;
-  /** True when content appended below the fold while scrolled up (D-093): glows the chevron. */
-  readonly hasUnseen: boolean;
-  readonly bottomRequestId: number;
+  /** The adapter's unseen/bottom-request store (Tier 2.4). The pin bit, the unseen flag, and the
+   *  bottom-request counter are all SUBSCRIBED here or on the controller - never plain fields - so a
+   *  scroll-state change re-renders the subscribing leaf, not App, and this whole binding stays
+   *  identity-stable. */
+  readonly ui: ScrollFollowUi;
   readonly onScroll: () => void;
   /** A directional user gesture (wheel `deltaY` sign): upward unpins synchronously. */
   readonly onUserGesture: (direction: "up" | "down") => void;
@@ -252,7 +259,6 @@ export interface SidebarBinding {
   readonly currentSessionId: string;
   /** Live run state per session, layered over each row's durable activity. */
   readonly liveActivity: ReadonlyMap<string, SessionActivity>;
-  readonly nowMs: number;
 }
 
 /**
@@ -263,8 +269,13 @@ export interface SidebarBinding {
  * wires the hooks (session, composer, send queue) and folds the memos (transcript, panelModel,
  * host), then hands them here as cohesive objects. The JSX is moved verbatim from app.tsx - same
  * DOM, classes, element order, conditionals, and keys.
+ *
+ * Memo boundary (Tier 1): App re-renders on plenty of state that never reaches this tree (palette /
+ * help / takeover open flags, launch machinery). Every prop is either a Tier 1 useMemo'd group, a
+ * useMemoizedFn callback, or intentionally-changing data (`stream` per event, `host` per live-clock
+ * tick), so the shallow compare skips exactly the renders that carry nothing for the layout.
  */
-export function PanelHost(props: {
+function PanelHostImpl(props: {
   composer: Composer;
   compose: ComposeWiring;
   stream: SessionStream;
@@ -350,9 +361,71 @@ export function PanelHost(props: {
   // Every scroll event reaches the controller, even before the list reveals (`data-transcript-ready`
   // false). The controller recognizes its own settle-loop writes as self-writes, so they no longer need
   // to be dropped here to avoid a false unpin (plan 12.2); dropping them was one of the flick-reset causes.
-  const onTranscriptScroll = () => {
+  // Stable-identity handlers (Tier 6.3): the scroll well fires these at gesture rate, and inline
+  // lambdas gave the <div> fresh handler props every render. useMemoizedFn keeps one identity for
+  // the component's lifetime while always calling the latest `scroll` closure.
+  const onTranscriptScroll = useMemoizedFn(() => {
     scroll.onScroll();
-  };
+  });
+  const onTranscriptWheel = useMemoizedFn((event: ReactWheelEvent<HTMLDivElement>) => {
+    // Extract the gesture DIRECTION from the wheel: an upward wheel unpins synchronously at
+    // this event, before the DOM has even moved. A touch drag / scrollbar / keyboard scroll
+    // has no wheel event and is caught by the controller's scroll-event catch-all instead.
+    if (event.deltaY !== 0) {
+      scroll.onUserGesture(event.deltaY < 0 ? "up" : "down");
+    }
+  });
+  // The sidebar resize drag reads `sidebarWidth` at mousedown time; useMemoizedFn sees the latest
+  // value without re-creating the handler when the preview width changes mid-drag.
+  const onSidebarResizeMouseDown = useMemoizedFn((e: ReactMouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    const handle = e.currentTarget;
+    handle.style.backgroundColor = "rgb(255 255 255 / 0.2)";
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    let latestWidth = startWidth;
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX;
+      latestWidth = Math.max(180, Math.min(480, startWidth + delta));
+      setSidebarPreviewWidth(latestWidth);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      handle.style.backgroundColor = "";
+      setSidebarPreviewWidth(null);
+      sidebar.onResize(latestWidth);
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+  // The explicit live-edge request counter (Tier 2.4), subscribed from the adapter's ui store rather
+  // than lifted through App state: a jump/submit/pinned-resize request re-renders this component (the
+  // counter must reach VirtualTranscript's scroll effect as a prop) but no longer the whole app. The
+  // getter returns a primitive, so unrelated store changes (the unseen flag) bail out without a render.
+  const bottomRequestId = useSyncExternalStore(
+    scroll.ui.subscribe,
+    scroll.ui.bottomRequestId,
+    scroll.ui.bottomRequestId,
+  );
+  // The `data-transcript-pinned` debug attribute, kept OFF the render path (Tier 2.4): the pin bit is
+  // the highest-churn scroll-follow state, and only this attribute + the JumpToBottom leaf read it.
+  // Written imperatively from the controller's own subscription; React never renders this attribute,
+  // so re-renders of the JSX below cannot clobber it.
+  useEffect(() => {
+    const el = scroll.transcriptRef.current;
+    if (!el) {
+      return;
+    }
+    const sync = () =>
+      el.setAttribute("data-transcript-pinned", scroll.controller.isPinned() ? "true" : "false");
+    sync();
+    return scroll.controller.subscribe(sync);
+  }, [scroll.controller, scroll.transcriptRef]);
 
   return (
     <div className="flex h-svh overflow-hidden">
@@ -379,7 +452,6 @@ export function PanelHost(props: {
             onViewArchived={sidebar.onViewArchived}
             liveActivity={sidebar.liveActivity}
             currentSessionId={sidebar.currentSessionId}
-            nowMs={sidebar.nowMs}
             className="h-full min-w-0 flex-1"
           />
           {/* Drag-to-resize handle: a thin strip on the sidebar's right edge. Pointer events
@@ -387,32 +459,7 @@ export function PanelHost(props: {
           <button
             type="button"
             aria-label="Resize sidebar"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              const handle = e.currentTarget;
-              handle.style.backgroundColor = "rgb(255 255 255 / 0.2)";
-              const startX = e.clientX;
-              const startWidth = sidebarWidth;
-              let latestWidth = startWidth;
-              const onMove = (ev: MouseEvent) => {
-                const delta = ev.clientX - startX;
-                latestWidth = Math.max(180, Math.min(480, startWidth + delta));
-                setSidebarPreviewWidth(latestWidth);
-              };
-              const onUp = () => {
-                document.removeEventListener("mousemove", onMove);
-                document.removeEventListener("mouseup", onUp);
-                document.body.style.cursor = "";
-                document.body.style.userSelect = "";
-                handle.style.backgroundColor = "";
-                setSidebarPreviewWidth(null);
-                sidebar.onResize(latestWidth);
-              };
-              document.body.style.cursor = "col-resize";
-              document.body.style.userSelect = "none";
-              document.addEventListener("mousemove", onMove);
-              document.addEventListener("mouseup", onUp);
-            }}
+            onMouseDown={onSidebarResizeMouseDown}
             className="absolute -right-0.5 top-0 z-10 h-full w-1 cursor-col-resize border-0 bg-transparent transition-colors hover:bg-foreground/20"
           />
         </div>
@@ -455,16 +502,8 @@ export function PanelHost(props: {
           <div
             ref={scroll.transcriptRef}
             onScroll={onTranscriptScroll}
-            onWheel={(event) => {
-              // Extract the gesture DIRECTION from the wheel: an upward wheel unpins synchronously at
-              // this event, before the DOM has even moved. A touch drag / scrollbar / keyboard scroll
-              // has no wheel event and is caught by the controller's scroll-event catch-all instead.
-              if (event.deltaY !== 0) {
-                scroll.onUserGesture(event.deltaY < 0 ? "up" : "down");
-              }
-            }}
+            onWheel={onTranscriptWheel}
             data-transcript-scroll
-            data-transcript-pinned={scroll.atBottom ? "true" : "false"}
             style={{ overflowAnchor: "none" }}
             className="flex min-h-0 flex-1 flex-col overflow-y-auto py-4"
           >
@@ -489,29 +528,18 @@ export function PanelHost(props: {
                 rows={rows}
                 scrollRef={scroll.transcriptRef}
                 controller={scroll.controller}
-                scrollToBottomRequest={scroll.bottomRequestId}
+                scrollToBottomRequest={bottomRequestId}
                 rowConfig={rowConfig}
               />
             )}
           </div>
-          {!scroll.atBottom ? (
-            <button
-              type="button"
-              onClick={scroll.scrollToBottom}
-              aria-label={scroll.hasUnseen ? "Scroll to new content" : "Scroll to bottom"}
-              data-unseen={scroll.hasUnseen ? "true" : undefined}
-              className={cn(
-                "absolute bottom-3 left-1/2 z-10 flex size-8 -translate-x-1/2 cursor-pointer items-center justify-center rounded-md border bg-card shadow-sm transition-colors",
-                // Two states: plain away-from-edge, or a primary-colored border/icon when there is
-                // unseen content below (no glow shadow - the border color alone signals it).
-                scroll.hasUnseen
-                  ? "border-primary text-primary"
-                  : "border-border text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <ChevronDown className="size-4" />
-            </button>
-          ) : null}
+          {/* The jump-to-bottom chevron is its own leaf (Tier 2.4): it subscribes to the pin +
+            unseen state itself, so a scroll away from / back to the live edge re-renders only it. */}
+          <JumpToBottom
+            controller={scroll.controller}
+            ui={scroll.ui}
+            onJump={scroll.scrollToBottom}
+          />
         </div>
 
         {/* The ONE pinned live turn-status line (plan 50), above the checklist for the whole active
@@ -720,3 +748,5 @@ export function PanelHost(props: {
     </div>
   );
 }
+
+export const PanelHost = memo(PanelHostImpl);

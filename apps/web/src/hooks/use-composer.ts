@@ -1,4 +1,5 @@
 import { type ArtifactRef, errorMessage, isLargePaste, type PastePayload } from "@trevor/session";
+import { useMemoizedFn } from "ahooks";
 import {
   type ChangeEvent,
   type Dispatch,
@@ -7,6 +8,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,
   type SetStateAction,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -72,13 +74,15 @@ export function useComposer(): Composer {
 
   // `setDraft` keeps the string API; every text change reconciles BOTH the image refs and the pasted
   // payloads against the new text (surviving tokens keep their numbers, so a deleted token of either
-  // kind drops the right ref/payload).
-  const setDraft: Dispatch<SetStateAction<string>> = (action) => {
+  // kind drops the right ref/payload). The public handlers here are all useMemoizedFn (Tier 1):
+  // stable identity with the latest closure, so the `composer` object (a PanelHost prop and a
+  // PromptInput prop) only changes when its DATA changes, not on every render.
+  const setDraft: Dispatch<SetStateAction<string>> = useMemoizedFn((action) => {
     setComposerDraft((prev) => {
       const nextText = typeof action === "function" ? action(prev.text) : action;
       return syncComposerDraft(prev, nextText);
     });
-  };
+  });
 
   // Parks the caret at `cursor` after a programmatic edit (insert/delete).
   const parkCaret = (cursor: number) => {
@@ -91,11 +95,11 @@ export function useComposer(): Composer {
     });
   };
 
-  const quoteSelection = (selected: string) => {
+  const quoteSelection = useMemoizedFn((selected: string) => {
     const { value, cursor } = buildQuotedComposerText(draft, selected);
     setDraft(value);
     parkCaret(cursor);
-  };
+  });
 
   // Inserts uploaded image tokens at the captured cursor (clamped to the latest text), then parks
   // the caret after them. Deterministic order: the whole batch inserts together.
@@ -156,12 +160,12 @@ export function useComposer(): Composer {
   /** The live caret position (where a token should land), or the end of the draft as a fallback. */
   const caretNow = () => inputRef.current?.selectionStart ?? draft.length;
 
-  const onPickFiles = (event: ChangeEvent<HTMLInputElement>) => {
+  const onPickFiles = useMemoizedFn((event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files) {
       addFiles(event.target.files, caretNow());
     }
     event.target.value = ""; // let the same file be re-picked
-  };
+  });
   // Inserts a large pasted-text token at the current selection (paired to the exact payload), parking
   // the caret after it. Reads the live selection so a paste over a selection replaces it.
   const insertPastedText = (text: string) => {
@@ -175,7 +179,7 @@ export function useComposer(): Composer {
     });
   };
 
-  const onPaste = (event: ReactClipboardEvent<HTMLTextAreaElement>) => {
+  const onPaste = useMemoizedFn((event: ReactClipboardEvent<HTMLTextAreaElement>) => {
     // Files (images/documents) win and route to upload intake, even when the clipboard ALSO carries
     // text, so a copied image is never demoted to a paste token.
     const files = [...event.clipboardData.files];
@@ -192,17 +196,17 @@ export function useComposer(): Composer {
       event.preventDefault();
       insertPastedText(text);
     }
-  };
-  const onDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+  });
+  const onDrop = useMemoizedFn((event: ReactDragEvent<HTMLDivElement>) => {
     event.preventDefault();
     if (event.dataTransfer.files.length) {
       addFiles(event.dataTransfer.files, caretNow());
     }
-  };
+  });
 
   // Backspace/Delete next to a whole token removes the token + its ref atomically (so a token never
   // splits into broken text). When no token is adjacent the textarea handles the key normally.
-  const handleKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = useMemoizedFn((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key !== "Backspace" && event.key !== "Delete") {
       return;
     }
@@ -220,28 +224,47 @@ export function useComposer(): Composer {
       setComposerDraft(result.draft);
       parkCaret(result.cursor);
     }
-  };
+  });
 
-  const removeAttachment = (hash: string) =>
-    setAttachments((a) => a.filter((ref) => ref.hash !== hash));
+  const removeAttachment = useMemoizedFn((hash: string) =>
+    setAttachments((a) => a.filter((ref) => ref.hash !== hash)),
+  );
 
-  return {
-    draft,
-    setDraft,
-    imageRefs: composerDraft.imageRefs,
-    pastes: composerDraft.pastes,
-    attachments,
-    setAttachments,
-    uploading,
-    uploadError,
-    setUploadError,
-    inputRef,
-    fileInputRef,
-    onPickFiles,
-    onPaste,
-    onDrop,
-    handleKeyDown,
-    removeAttachment,
-    quoteSelection,
-  };
+  // One stable container per state change (Tier 1): the handlers above never change identity, so the
+  // composer object is re-minted only when its actual data (draft/attachments/upload state) moves -
+  // a streaming transcript render no longer busts the PanelHost/PromptInput prop identity.
+  return useMemo<Composer>(
+    () => ({
+      draft: composerDraft.text,
+      setDraft,
+      imageRefs: composerDraft.imageRefs,
+      pastes: composerDraft.pastes,
+      attachments,
+      setAttachments,
+      uploading,
+      uploadError,
+      setUploadError,
+      inputRef,
+      fileInputRef,
+      onPickFiles,
+      onPaste,
+      onDrop,
+      handleKeyDown,
+      removeAttachment,
+      quoteSelection,
+    }),
+    [
+      composerDraft,
+      attachments,
+      uploading,
+      uploadError,
+      setDraft,
+      onPickFiles,
+      onPaste,
+      onDrop,
+      handleKeyDown,
+      removeAttachment,
+      quoteSelection,
+    ],
+  );
 }
