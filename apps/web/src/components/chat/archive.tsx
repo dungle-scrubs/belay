@@ -75,6 +75,8 @@ interface ArchiveResultProps {
   readonly parsed?: ParsedArchiveResult | null;
   readonly status?: ToolStatus;
   readonly className?: string;
+  /** Ms epoch of the tool's start; feeds the running row's live elapsed clock (58.6.1 M2). */
+  readonly startedAt?: number;
 }
 
 export function ArchiveResult({
@@ -83,6 +85,7 @@ export function ArchiveResult({
   parsed,
   status = "done",
   className,
+  startedAt,
 }: ArchiveResultProps) {
   const body = parsed ? <ArchiveBody parsed={parsed} /> : null;
   const target = args === NO_SOURCE_SENTINEL ? undefined : args;
@@ -95,6 +98,7 @@ export function ArchiveResult({
       error={parsed?.error}
       running={status === "running" && !parsed}
       runningLabel={toolActionLabelForTarget(name, target)}
+      startedAt={startedAt}
       className={className}
       renderBody={() => body}
     />

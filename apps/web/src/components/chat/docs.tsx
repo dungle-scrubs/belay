@@ -260,6 +260,8 @@ interface DocsResultProps {
   /** Whether the body starts expanded; the global compact setting drives this. */
   defaultOpen?: boolean;
   className?: string;
+  /** Ms epoch of the tool's start; feeds the running row's live elapsed clock (58.6.1 M2). */
+  startedAt?: number;
 }
 
 /**
@@ -278,6 +280,7 @@ export function DocsResult({
   status = "done",
   defaultOpen = true,
   className,
+  startedAt,
 }: DocsResultProps) {
   const corpus = parsed?.corpus;
   const excerpts = parsed?.excerpts ?? [];
@@ -364,6 +367,7 @@ export function DocsResult({
       error={parsed?.error}
       running={status === "running" && !parsed}
       runningLabel={toolActionLabelForTarget("docs", runningTarget)}
+      startedAt={startedAt}
       defaultOpen={defaultOpen}
       className={className}
       renderBody={() => body}

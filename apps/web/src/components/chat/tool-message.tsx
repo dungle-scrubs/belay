@@ -72,6 +72,8 @@ interface RenderContext {
   status: ToolStatus;
   onOpenPath: (path: string) => void;
   className?: string;
+  /** Ms epoch of the tool's `tool.started`; feeds the running row's live elapsed clock (58.6.1 M2). */
+  startedAt?: number;
 }
 
 /** Each arm renders its tool, or returns null to defer to the generic fallback row (e.g. a
@@ -134,7 +136,7 @@ const renderDiff: RenderArm = ({ message, status, onOpenPath, className }) => {
 
 // web_search renders its JSON output as a result list (or the working indicator while running,
 // or its error message).
-const renderWebSearch: RenderArm = ({ message, status, className }) => {
+const renderWebSearch: RenderArm = ({ message, status, className, startedAt }) => {
   const a = parseToolArgs(message.args);
   const parsed = parseWebSearchResult(message.result);
 
@@ -147,13 +149,14 @@ const renderWebSearch: RenderArm = ({ message, status, className }) => {
       results={parsed?.results}
       error={parsed?.error}
       status={status}
+      startedAt={startedAt}
     />
   );
 };
 
 // web_fetch renders its envelope as flat source content (title, final URL, the markdown/text body,
 // and a backend/attempts footer), or the working indicator while running, or its error message.
-const renderWebFetch: RenderArm = ({ message, status, className }) => {
+const renderWebFetch: RenderArm = ({ message, status, className, startedAt }) => {
   const a = parseToolArgs(message.args);
 
   return (
@@ -162,11 +165,12 @@ const renderWebFetch: RenderArm = ({ message, status, className }) => {
       url={typeof a.url === "string" ? a.url : ""}
       parsed={parseWebFetchResult(message.result)}
       status={status}
+      startedAt={startedAt}
     />
   );
 };
 
-const renderArchive: RenderArm = ({ message, status, className }) => {
+const renderArchive: RenderArm = ({ message, status, className, startedAt }) => {
   const a = parseToolArgs(message.args);
   const source =
     typeof a.path === "string" ? a.path : typeof a.url === "string" ? a.url : "archive";
@@ -178,6 +182,7 @@ const renderArchive: RenderArm = ({ message, status, className }) => {
       args={source}
       parsed={parseArchiveResult(message.result)}
       status={status}
+      startedAt={startedAt}
     />
   );
 };
@@ -186,7 +191,7 @@ const renderArchive: RenderArm = ({ message, status, className }) => {
 // ranked cited excerpts (resolve/refresh preview or search matches), a bounded page read, or the
 // corpus inventory, with visible stale/partial/error states (or the looking-up indicator while
 // running, or its error message).
-const renderDocs: RenderArm = ({ message, status, className }) => {
+const renderDocs: RenderArm = ({ message, status, className, startedAt }) => {
   const a = parseToolArgs(message.args);
   const action = typeof a.action === "string" ? a.action : "docs";
   const target = [a.subject, a.query, a.url, a.corpusId].find(
@@ -200,13 +205,14 @@ const renderDocs: RenderArm = ({ message, status, className }) => {
       runningTarget={target}
       parsed={parseDocsResult(message.result)}
       status={status}
+      startedAt={startedAt}
     />
   );
 };
 
 // session_recall renders its distilled findings + cited source rows (or the recalling indicator
 // while running, or its error/empty note) from the JSON recall result.
-const renderRecall: RenderArm = ({ message, status, className }) => {
+const renderRecall: RenderArm = ({ message, status, className, startedAt }) => {
   const a = parseToolArgs(message.args);
   return (
     <SessionRecallResults
@@ -214,6 +220,7 @@ const renderRecall: RenderArm = ({ message, status, className }) => {
       query={typeof a.query === "string" ? a.query : ""}
       result={decodeRecallResult(message.result)}
       status={status}
+      startedAt={startedAt}
     />
   );
 };
@@ -221,7 +228,7 @@ const renderRecall: RenderArm = ({ message, status, className }) => {
 // source_recall renders its cited candidates (file/line/symbol/snippet) over a provider + freshness
 // meta line (or the searching indicator while running, or its error/unavailable note), separate from
 // session_recall's conversation-memory rows.
-const renderSourceRecall: RenderArm = ({ message, status, onOpenPath, className }) => {
+const renderSourceRecall: RenderArm = ({ message, status, onOpenPath, className, startedAt }) => {
   const a = parseToolArgs(message.args);
   return (
     <SourceRecallResults
@@ -230,6 +237,7 @@ const renderSourceRecall: RenderArm = ({ message, status, onOpenPath, className 
       result={decodeSourceRecallResult(message.result)}
       status={status}
       onOpenPath={onOpenPath}
+      startedAt={startedAt}
     />
   );
 };
@@ -312,7 +320,7 @@ const renderClipboard: RenderArm = ({ message, status, className }) => {
 
 // video_inspect renders the sampled-frame thumbnails plus metadata (duration, dimensions, frame
 // count, truncation) and warnings, or the unavailable note when ffprobe/ffmpeg are missing.
-const renderVideoInspect: RenderArm = ({ message, status, className }) => {
+const renderVideoInspect: RenderArm = ({ message, status, className, startedAt }) => {
   const a = parseToolArgs(message.args);
   return (
     <VideoInspectResult
@@ -320,6 +328,7 @@ const renderVideoInspect: RenderArm = ({ message, status, className }) => {
       args={typeof a.path === "string" ? a.path : "video"}
       parsed={parseVideoInspectResult(message.result)}
       status={status}
+      startedAt={startedAt}
     />
   );
 };
@@ -441,7 +450,13 @@ export function ToolRenderer({
   // The shared lifecycle rule: aborted -> error, unfinished -> running, finished -> error when the
   // result is the `error:` convention else done (so an error-result read-only tool matches the batch).
   const status: ToolStatus = toolMessageStatus(message);
-  const ctx: RenderContext = { message, status, onOpenPath, className };
+  const ctx: RenderContext = {
+    message,
+    status,
+    onOpenPath,
+    className,
+    startedAt: message.startedAt,
+  };
 
   const arm = Object.hasOwn(TOOL_RENDERERS, message.name)
     ? TOOL_RENDERERS[message.name as ToolName]

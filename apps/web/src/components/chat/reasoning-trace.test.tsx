@@ -67,6 +67,21 @@ test("M1: markdown-rich reasoning renders real markdown when expanded", () => {
   assert.ok(container.querySelector("code"), "inline code renders");
 });
 
+test("58.6.1 M1: the LIVE reasoning path renders through MarkdownBody (the `marked` stack), not assistant-ui MarkdownText", () => {
+  // Characterization guard for the dead-markdown prune: the transcript's reasoning trace renders its
+  // thinking string through `MarkdownBody` -> `src/markdown.tsx` (the `marked` + DOMPurify stack),
+  // which stamps the `.smui-md` re-theme wrapper. The now-deleted assistant-ui `MarkdownText`
+  // (@assistant-ui/react-markdown + remark-gfm) never appeared on this path, so pruning it cannot
+  // touch live rendering. Asserting the `.smui-md` container (unique to the `marked` body) locks that.
+  const { container } = render(<ReasoningTrace content={"**bold** reasoning"} defaultOpen />);
+  const body = container.querySelector(".smui-md");
+  assert.ok(
+    body,
+    "reasoning renders through the shared MarkdownBody (`.smui-md`, the `marked` stack)",
+  );
+  assert.ok(body?.querySelector("strong"), "the `marked` stack rendered the bold markup");
+});
+
 test("M1: long reasoning is capped with an internal scroll box (never floods the transcript)", () => {
   const long = Array.from({ length: 80 }, (_, i) => `reasoning line ${i}`).join("\n");
   const { container } = render(<ReasoningTrace content={long} defaultOpen />);

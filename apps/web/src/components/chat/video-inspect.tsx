@@ -87,6 +87,8 @@ interface VideoInspectResultProps {
   /** Resolves a frame hash to an image URL; defaults (via MessageImages) to the blob-store src. */
   readonly srcOf?: (hash: string) => string;
   readonly onOpenArtifact?: (artifact: ArtifactRef) => void;
+  /** Ms epoch of the tool's start; feeds the running row's live elapsed clock (58.6.1 M2). */
+  readonly startedAt?: number;
 }
 
 export function VideoInspectResult({
@@ -96,6 +98,7 @@ export function VideoInspectResult({
   className,
   srcOf,
   onOpenArtifact,
+  startedAt,
 }: VideoInspectResultProps) {
   return (
     <StatusAwareToolRenderer
@@ -105,6 +108,7 @@ export function VideoInspectResult({
       error={parsed?.error}
       running={status === "running" && !parsed}
       runningLabel={toolActionLabelForTarget("video_inspect", args)}
+      startedAt={startedAt}
       className={className}
       renderBody={() =>
         parsed ? (

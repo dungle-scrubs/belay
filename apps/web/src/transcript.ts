@@ -72,6 +72,11 @@ export type ToolMessage = {
   aborted?: boolean;
   /** The tool's rendered output (from tool.completed), used by renderers like web_search. */
   result?: string;
+  /** Ms epoch of the `tool.started` envelope (`createdAt`) - drives the running row's live elapsed
+   *  cell while the tool runs, no extra wire data (mirrors `InlineAgent.startedAt`, D-005). Absent
+   *  when the envelope's `createdAt` is malformed (the NaN guard), so the clock pauses instead of
+   *  rendering NaN. */
+  startedAt?: number;
 };
 // The host's result for an immediate slash command (the command lane - these never go to the model,
 // so they render on their own, not as assistant turns). The command itself is not listed; only its
@@ -1036,6 +1041,10 @@ function createTranscriptFold(): TranscriptFold {
         // A start that arrives AFTER its run already terminated (the cancel race) is aborted on
         // arrival; otherwise it joins the run's open-tool list so the completion can finalize it.
         const aborted = terminatedRuns.has(decoded.runId);
+        // `startedAt` is THIS start event's own timestamp - the free live clock the running row's
+        // elapsed cell ticks from (D-005); a malformed createdAt drops it (NaN guard) so the label
+        // pauses instead of rendering NaN. Same conversion as the InlineAgent.startedAt fold above.
+        const startedAt = Date.parse(event.createdAt);
         const tool: ToolMessage = {
           kind: "tool",
           id: decoded.callId,
@@ -1043,6 +1052,7 @@ function createTranscriptFold(): TranscriptFold {
           args: decoded.arguments,
           done: aborted,
           ...(aborted ? { aborted: true } : {}),
+          ...(Number.isNaN(startedAt) ? {} : { startedAt }),
         };
         toolByCall.set(decoded.callId, tool);
         if (!aborted) {

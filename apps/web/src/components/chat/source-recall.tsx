@@ -33,6 +33,8 @@ interface SourceRecallResultsProps {
   onOpenPath?: (path: string) => void;
   defaultOpen?: boolean;
   className?: string;
+  /** Ms epoch of the tool's start; feeds the running row's live elapsed clock (58.6.1 M2). */
+  startedAt?: number;
 }
 
 /** A compact provider/latency/freshness meta line under the query row. */
@@ -119,6 +121,7 @@ export function SourceRecallResults({
   onOpenPath,
   defaultOpen = true,
   className,
+  startedAt,
 }: SourceRecallResultsProps) {
   const error =
     status === "running" && !result
@@ -138,6 +141,7 @@ export function SourceRecallResults({
         error={error}
         running={status === "running" && !result}
         runningLabel={toolActionLabelForTarget("source_recall", query)}
+        startedAt={startedAt}
         defaultOpen={defaultOpen}
         className={className}
       />

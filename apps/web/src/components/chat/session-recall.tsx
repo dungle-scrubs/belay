@@ -23,6 +23,8 @@ interface SessionRecallResultsProps {
   nowMs?: number;
   defaultOpen?: boolean;
   className?: string;
+  /** Ms epoch of the tool's start; feeds the running row's live elapsed clock (58.6.1 M2). */
+  startedAt?: number;
 }
 
 /** A short kind glyph for a source row (keeps row height stable across kinds). */
@@ -50,6 +52,7 @@ export function SessionRecallResults({
   nowMs = Date.now(),
   defaultOpen = true,
   className,
+  startedAt,
 }: SessionRecallResultsProps) {
   const error =
     status === "running" && !result
@@ -67,6 +70,7 @@ export function SessionRecallResults({
         error={error}
         running={status === "running" && !result}
         runningLabel={toolActionLabelForTarget("session_recall", query)}
+        startedAt={startedAt}
         defaultOpen={defaultOpen}
         className={className}
       />

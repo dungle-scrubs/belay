@@ -18,6 +18,13 @@ interface StatusAwareToolRendererProps {
    * for a caller that has no typed target to offer.
    */
   runningLabel?: string;
+  /**
+   * Ms epoch of the tool's `tool.started` (from `ToolMessage.startedAt`). When present on the running
+   * branch it feeds the shimmer's live elapsed timer, so a slow tool ("reading… (12s)") is
+   * distinguishable from a stuck one. Absent for a legacy log with a malformed timestamp, in which
+   * case the shimmer simply renders without the elapsed meta (plan 58.6.1 M2).
+   */
+  startedAt?: number;
   defaultOpen?: boolean;
   border?: boolean;
   className?: string;
@@ -34,6 +41,7 @@ export function StatusAwareToolRenderer({
   error,
   running = false,
   runningLabel,
+  startedAt,
   defaultOpen = true,
   border = false,
   className,
@@ -67,7 +75,7 @@ export function StatusAwareToolRenderer({
         className={className}
         onOpenPath={onOpenPath}
       >
-        <ActionShimmer label={runningLabel ?? toolActionLabel(name)} />
+        <ActionShimmer label={runningLabel ?? toolActionLabel(name)} startedAt={startedAt} />
       </ToolCall>
     );
   }

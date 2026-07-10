@@ -200,3 +200,46 @@ duplicated list stored on the project record.
   `/cd <path>`) mint a fresh project-scoped session with a new id and a `session.project` marker.
 - **Project identity is canonical path.** The browser never canonicalizes; the supervisor/launcher
   returns the canonical path and display path. A normal session has one immutable project path.
+
+## assistant-ui dependency governance (`.plans/58.6.1-assistant-ui-audit-followups`)
+
+Trevor **owns copies** of the assistant-ui components it uses (vendored under
+`apps/web/src/components/assistant-ui/`); it does **not** run the assistant-ui runtime (`AssistantRuntimeProvider`,
+`ExternalStore`, thread adapters). The durable session log + host turn loop + transcript projection are the
+source of truth (58.6 D-002), so the coupling to the upstream packages is small and **deliberately pinned to
+exact versions** - a bump is a reviewed action, never a silent transitive drift. This retires the 58.6 audit's
+"unstable API churns after adoption" risk (rows E10/G8/G9/D6/C7).
+
+### Exact pins
+
+| Package | Pin | Section | Why |
+|---|---|---|---|
+| `@assistant-ui/react` | `0.14.23` (exact, no caret) | `dependencies` | Live **runtime** imports (`useScrollLock`, `useAui`). |
+| `@assistant-ui/react-markdown` | `0.14.4` (exact, no caret) | `devDependencies` | **Type-only** after the M1 prune (one `SyntaxHighlighterProps` type in `diff-viewer.tsx`); erased at build. |
+
+`remark-gfm` was removed entirely in M1 - its sole user was the deleted second markdown stack
+(`markdown-text.tsx`). The live markdown everywhere is the `marked` + DOMPurify stack in `src/markdown.tsx`
+(`MarkdownBody`), never assistant-ui's `MarkdownText`.
+
+### Live coupling ledger (every reference into the pinned packages)
+
+| Import | Kind | Site | Stability tier |
+|---|---|---|---|
+| `useScrollLock` | runtime hook | `assistant-ui/use-collapsible-disclosure.ts:3` (live via `chat/reasoning-trace.tsx` → `ReasoningGroup`) | **T1 runtime** - a bump can change behavior; guarded by the reasoning-trace render smoke tests. |
+| `useAui` | runtime hook | `assistant-ui/model-selector.tsx:18` (Storybook-only today) | **T1 runtime**, dormant surface. |
+| `ToolCallMessagePartStatus` | type-only | `chat/tool-status.ts:1`, `assistant-ui/tool-fallback.tsx:10` | **T2 type** - compile-time only; a bump surfaces at `pnpm --filter web typecheck`. |
+| `SyntaxHighlighterProps` | type-only | `assistant-ui/diff-viewer.tsx:4` | **T2 type** - compile-time only; guarded by the diff-viewer render smoke tests. |
+| Vendored components | owned copy | `apps/web/src/components/assistant-ui/*` | **T3 owned** - our source; upstream changes reach us only through a deliberate re-vendor (the drift check below), never automatically. |
+
+### Guards (survive a version bump)
+
+- **Render smoke tests** (the durable deliverable): `assistant-ui/diff-viewer.test.tsx`,
+  `chat/diff-render-smoke.test.tsx`, and the existing `chat/reasoning-trace.test.tsx` assert the STRUCTURAL
+  output (data-slots, add/del line typing, the reasoning disclosure) of the assistant-ui-derived surfaces -
+  not styling - so a bump that breaks the render fails at review time.
+- **Vendored-component drift check**: `pnpm --filter @trevor/web check:assistant-ui-drift` runs
+  `apps/web/scripts/assistant-ui-drift.sh`, an `assistant-ui add --dry` dry-run over the vendored files, so an
+  upstream change to a component we copied is visible before we adopt it. It is a review aid, not a CI gate.
+- **Update path**: to bump, change the exact pin, run `pnpm install`, run the render smoke tests + the drift
+  check, reconcile any vendored-component diffs by hand, and update this ledger. Never widen a pin back to a
+  caret.

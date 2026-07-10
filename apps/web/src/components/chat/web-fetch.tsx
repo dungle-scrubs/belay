@@ -100,6 +100,8 @@ interface WebFetchResultProps {
   /** Whether the body starts expanded; the global compact setting drives this. */
   defaultOpen?: boolean;
   className?: string;
+  /** Ms epoch of the tool's start; feeds the running row's live elapsed clock (58.6.1 M2). */
+  startedAt?: number;
 }
 
 /**
@@ -115,6 +117,7 @@ export function WebFetchResult({
   status = "done",
   defaultOpen = true,
   className,
+  startedAt,
 }: WebFetchResultProps) {
   const linkUrl = parsed?.finalUrl ?? parsed?.url ?? url;
   const meta = parsed ? footer(parsed) : "";
@@ -153,6 +156,7 @@ export function WebFetchResult({
       error={parsed?.error}
       running={status === "running" && !parsed}
       runningLabel={toolActionLabelForTarget("web_fetch", url)}
+      startedAt={startedAt}
       defaultOpen={defaultOpen}
       className={className}
       renderBody={() => body}

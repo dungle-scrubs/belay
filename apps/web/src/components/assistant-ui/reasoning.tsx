@@ -12,8 +12,6 @@ import {
 } from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
-import { type ReasoningMessagePartComponent } from "@assistant-ui/react";
-import { MarkdownText } from "@/components/assistant-ui/markdown-text-lazy";
 import {
   Collapsible,
   CollapsibleContent,
@@ -312,8 +310,6 @@ function ReasoningText({
   );
 }
 
-const ReasoningImpl: ReasoningMessagePartComponent = () => <MarkdownText />;
-
 export type ReasoningGroupProps = Omit<ReasoningRootProps, "children"> & {
   children: React.ReactNode;
   active?: boolean;
@@ -348,8 +344,6 @@ const ReasoningGroup = memo(function ReasoningGroup({
   );
 });
 
-const Reasoning = memo(ReasoningImpl) as ReasoningMessagePartComponent;
-Reasoning.displayName = "Reasoning";
 ReasoningGroup.displayName = "ReasoningGroup";
 
-export { Reasoning, ReasoningGroup, reasoningVariants };
+export { ReasoningGroup, reasoningVariants };

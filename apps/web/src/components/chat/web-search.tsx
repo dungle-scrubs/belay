@@ -31,6 +31,8 @@ interface WebSearchResultsProps {
    */
   border?: boolean;
   className?: string;
+  /** Ms epoch of the tool's start; feeds the running row's live elapsed clock (58.6.1 M2). */
+  startedAt?: number;
 }
 
 /** Hostname + path, www-stripped, for the subdued link line under each title. */
@@ -61,6 +63,7 @@ export function WebSearchResults({
   defaultOpen = true,
   border = false,
   className,
+  startedAt,
 }: WebSearchResultsProps) {
   const items = results ?? [];
   const meta = [
@@ -109,6 +112,7 @@ export function WebSearchResults({
       error={error}
       running={status === "running" && items.length === 0}
       runningLabel={toolActionLabelForTarget("web_search", query)}
+      startedAt={startedAt}
       defaultOpen={defaultOpen}
       className={className}
       border={border}

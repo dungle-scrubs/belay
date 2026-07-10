@@ -40,6 +40,47 @@ const breakdown: UsageBreakdown = {
 const ev = (seq: number, input: TrevorEventInput): SessionEvent =>
   storedEvent(input, { seq, producerId: "trevor-host", createdAt: "2026-06-24T00:00:00.000Z" });
 
+// A stored event with an explicit createdAt, for the elapsed-clock timestamp source (M2).
+const evAt = (seq: number, createdAt: string, input: TrevorEventInput): SessionEvent =>
+  storedEvent(input, { seq, producerId: "trevor-host", createdAt });
+
+test("58.6.1 M2: a tool.started row carries startedAt = Date.parse(event.createdAt) for the elapsed clock", () => {
+  // The running-tool elapsed clock ticks from the tool's own start, sourced from the existing event
+  // envelope's `createdAt` (no wire change, D-005) - mirroring the shipped InlineAgent.startedAt fold.
+  const createdAt = "2026-06-24T00:00:05.000Z";
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    evAt(
+      2,
+      createdAt,
+      events.toolStarted({ runId: "r1", callId: "c1", name: "read", arguments: '{"path":"a"}' }),
+    ),
+  ];
+  const tool = toTranscript(log).find((m) => m.kind === "tool");
+  assert.ok(tool && tool.kind === "tool", "the tool row is projected");
+  assert.equal(
+    tool.startedAt,
+    Date.parse(createdAt),
+    "startedAt is the running link's own timestamp",
+  );
+});
+
+test("58.6.1 M2: a malformed tool.started createdAt leaves startedAt undefined (never renders NaN)", () => {
+  // Mirror the InlineAgent NaN guard: a bad createdAt must leave startedAt absent so the elapsed
+  // label pauses (undefined = clock off) rather than rendering "NaN".
+  const log = [
+    ev(1, events.assistantStarted({ runId: "r1", model: "qwen", provider: "qwen", warm: true })),
+    evAt(
+      2,
+      "not-a-real-timestamp",
+      events.toolStarted({ runId: "r1", callId: "c1", name: "read", arguments: "{}" }),
+    ),
+  ];
+  const tool = toTranscript(log).find((m) => m.kind === "tool");
+  assert.ok(tool && tool.kind === "tool", "the tool row is projected");
+  assert.equal(tool.startedAt, undefined, "a malformed timestamp yields no startedAt");
+});
+
 test("M4: tool results land by call id when tool.completed arrives out of call order", () => {
   // Phase 1 (D-050) runs a step's read-only calls concurrently. tool.started is hoisted in CALL
   // order, but tool.completed rides out in COMPLETION order. The web keys results on callId
