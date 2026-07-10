@@ -41,6 +41,38 @@ export interface SpawnedHost {
   readonly command: string;
 }
 
+/** Why a launch failed, as a closed set: `missing-root` = the project folder is gone (pre-checked
+ *  before spawning, plan 58.8); `spawn-failed` = the host child errored instead of starting (root
+ *  vanished between check and spawn, bad executable). */
+export type LaunchErrorCode = "missing-root" | "spawn-failed";
+
+/**
+ * The launcher's typed failure surface (plan 58.8): every caller (CLI, supervisor, fleet) sees a
+ * launch failure as this one type, whose `message` is already the user-facing reason - the
+ * supervisor publishes it verbatim as the failed `session.launch.result` reason.
+ */
+export class LaunchError extends Error {
+  readonly code: LaunchErrorCode;
+  /** The project root the launch targeted. */
+  readonly root: string;
+
+  constructor(code: LaunchErrorCode, root: string, message: string) {
+    super(message);
+    this.name = "LaunchError";
+    this.code = code;
+    this.root = root;
+  }
+}
+
+export function isLaunchError(error: unknown): error is LaunchError {
+  return error instanceof LaunchError;
+}
+
+/** The missing-root failure, with the message the user ultimately sees (launch UI, resume row). */
+export function missingRootError(root: string): LaunchError {
+  return new LaunchError("missing-root", root, `project folder no longer exists: ${root}`);
+}
+
 /** Live progress sink the orchestrator drives through each phase (a spinner in the real CLI, a no-op
  *  in tests), so `trevor` gives immediate feedback during the several seconds of startup. */
 export interface Reporter {
@@ -155,6 +187,12 @@ async function launchInner(
 ): Promise<LaunchOutcome> {
   platform.reporter.step("resolving project…");
   const root = options.session?.root ?? resolveProjectRoot(platform.cwd, platform.fs);
+  // Fail closed on a deleted project folder (plan 58.8): without this, spawn(cwd: root) emits an
+  // async ENOENT `error` event that used to kill the whole supervisor. Checked before the registry
+  // touch so a dead root is never (re-)added to the sidebar's project list.
+  if (!platform.fs.directoryExists(root)) {
+    throw missingRootError(root);
+  }
   const sessionId =
     options.session?.sessionId ?? resolveSession(platform.fs, platform.home, root, platform.now());
   const url = sessionUrl(sessionId);

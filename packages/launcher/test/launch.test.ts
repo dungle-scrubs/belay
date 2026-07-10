@@ -3,8 +3,15 @@ import { SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
 import { recordingTelemetrySink } from "@trevor/test-kit";
 import { test } from "vitest";
 import type { LauncherFs } from "../src/fs";
-import { recordHost } from "../src/host-registry";
-import { formatStatus, type LaunchPlatform, launch, sessionUrl } from "../src/launch";
+import { loadHosts, recordHost } from "../src/host-registry";
+import {
+  formatStatus,
+  isLaunchError,
+  LaunchError,
+  type LaunchPlatform,
+  launch,
+  sessionUrl,
+} from "../src/launch";
 import { resolveSession } from "../src/project";
 import { loadProjectRegistry } from "../src/project-registry";
 import { RESERVED_PORTS, type ServiceName, type ServiceProbe } from "../src/services";
@@ -24,6 +31,9 @@ function fakeFs(): LauncherFs & { files: Map<string, string> } {
     readFile: (path) => files.get(path) ?? null,
     writeFile: (path, content) => void files.set(path, content),
     exists: (path) => files.has(path),
+    // A directory "exists" when any stored file lies under it (e.g. seeding `/work/app/.git` makes
+    // the `/work/app` root present), mirroring how the tests seed project roots.
+    directoryExists: (path) => [...files.keys()].some((k) => k.startsWith(`${path}/`)),
     remove: (path) => void files.delete(path),
   };
 }
@@ -102,6 +112,35 @@ function makePlatform(opts: FakeOpts = {}): Spy {
   }
   return { platform, started, spawned, opened };
 }
+
+test("launching into a root that no longer exists rejects with a typed missing-root error, records nothing", async () => {
+  const spy = makePlatform({ gitRoot: "/work/app" });
+  await assert.rejects(
+    launch(spy.platform, { session: { sessionId: "dead-session", root: "/gone/project" } }),
+    (error: unknown) =>
+      isLaunchError(error) && error.code === "missing-root" && error.root === "/gone/project",
+  );
+  // Nothing was spawned and no host record was written (the pid:-1 ghost from the crash evidence).
+  assert.deepEqual(spy.spawned, []);
+  assert.equal(loadHosts(spy.platform.fs, "/home/.trevor")["dead-session"], undefined);
+  // The dead root was NOT (re-)added to the project registry.
+  assert.equal(loadProjectRegistry(spy.platform.fs, spy.platform.home).has("/gone/project"), false);
+});
+
+test("a spawn that fails after the pre-check rejects the launch and records no host", async () => {
+  const spy = makePlatform({ gitRoot: "/work/app" });
+  const platform: LaunchPlatform = {
+    ...spy.platform,
+    // The TOCTOU window: the root passed the pre-check but the spawn itself errored.
+    spawnHost: () =>
+      Promise.reject(new LaunchError("spawn-failed", "/work/app", "failed to start agent host")),
+  };
+  await assert.rejects(
+    launch(platform, { session: { sessionId: "toctou-session", root: "/work/app" } }),
+    (error: unknown) => isLaunchError(error) && error.code === "spawn-failed",
+  );
+  assert.equal(loadHosts(platform.fs, "/home/.trevor")["toctou-session"], undefined);
+});
 
 test("a launch emits a trevor.cli.launch span with host action + counts, no paths/session ids/urls", async () => {
   const recorder = recordingTelemetrySink();

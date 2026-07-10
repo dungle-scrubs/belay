@@ -12,7 +12,7 @@ import {
 } from "@trevor/session";
 import { raceTimeout, sleep } from "@trevor/session/async";
 import { nodeFs } from "./fs";
-import type { LaunchPlatform, Reporter, SpawnedHost } from "./launch";
+import { LaunchError, type LaunchPlatform, type Reporter, type SpawnedHost } from "./launch";
 import { TREVOR_HOME, TREVOR_STATE_HOME } from "./project";
 import {
   SERVICE_FILTERS,
@@ -206,6 +206,25 @@ export function buildHostSpawnCommand(opts: {
   };
 }
 
+/**
+ * Settles once the child either spawns or fails to: resolves on the `spawn` event, rejects with a
+ * typed `spawn-failed` LaunchError on the `error` event. Without this, spawn's asynchronous error
+ * (e.g. ENOENT for a root deleted between the launch pre-check and the spawn) is an UNCAUGHT event
+ * that kills the whole calling process - the supervisor crash plan 58.8 removes. A permanent no-op
+ * `error` listener stays attached so a late error can never crash the process either.
+ */
+export function awaitSpawned(child: ChildProcess, root: string): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    child.on("error", () => {
+      // Permanent guard: keeps any error event (including post-settle ones) handled.
+    });
+    child.once("spawn", resolve);
+    child.once("error", (error: Error) => {
+      reject(new LaunchError("spawn-failed", root, `failed to start agent host: ${error.message}`));
+    });
+  });
+}
+
 async function spawnHost(opts: {
   sessionId: string;
   root: string;
@@ -247,6 +266,9 @@ async function spawnHost(opts: {
       ...(opts.debug ? { TREVOR_DEBUG: "1" } : {}),
     },
   });
+  // Wait for the spawn/error verdict BEFORE handing the pid back: a failed spawn rejects (so the
+  // caller records no host and surfaces the failure) instead of returning the pid:-1 ghost.
+  await awaitSpawned(child, opts.root);
   child.unref();
   return { pid: child.pid ?? -1, command: `${command.command} (SESSION_ID=${opts.sessionId})` };
 }

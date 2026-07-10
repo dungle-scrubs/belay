@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 /**
@@ -13,6 +13,10 @@ export interface LauncherFs {
   /** Writes the file, creating parent directories as needed. */
   writeFile(path: string, content: string): void;
   exists(path: string): boolean;
+  /** True when the path exists AND is a directory. The single owner of the "does this project root
+   *  still exist" check (plan 58.8): the launch missing-root gate and the supervisor's
+   *  `projects.list` missing-marking both route here, so they can never disagree. */
+  directoryExists(path: string): boolean;
   remove(path: string): void;
 }
 
@@ -31,6 +35,13 @@ export const nodeFs: LauncherFs = {
   },
   exists(path) {
     return existsSync(path);
+  },
+  directoryExists(path) {
+    try {
+      return statSync(path).isDirectory();
+    } catch {
+      return false;
+    }
   },
   remove(path) {
     try {

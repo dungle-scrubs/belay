@@ -2,32 +2,32 @@
 
 **Plan:** `58.8-missing-project-root`
 **Stage:** ready
-**Current focus:** M1 - Launcher missing-root guard (0/6)
+**Current focus:** M2 - Supervisor failed result + `missing` flag on projects.list (0/6)
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks (total) | 23 |
-| Checked (done) | 0 |
-| Current-cutoff blockers (unchecked) | 23 |
+| Checked (done) | 6 |
+| Current-cutoff blockers (unchecked) | 17 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
 ## Current Cutoff
 
-### M1 - Launcher missing-root guard (0/6)
+### M1 - Launcher missing-root guard (6/6)
 
-- [ ] Seams under test: `launch()` (`packages/launcher/src/launch.ts`) and `spawnHost`
+- [x] Seams under test: `launch()` (`packages/launcher/src/launch.ts`) and `spawnHost`
       (`packages/launcher/src/platform.ts`) error path.
-- [ ] RED: launching with a nonexistent root rejects with a typed `missing-root` error naming the
+- [x] RED: launching with a nonexistent root rejects with a typed `missing-root` error naming the
       path - no process crash, no `hosts.json` `pid: -1` record.
-- [ ] GREEN: pre-check the root in `launchInner` before `spawnHost`.
-- [ ] RED: a spawn whose child emits `error` (root vanishes between check and spawn / bad
+- [x] GREEN: pre-check the root in `launchInner` before `spawnHost`.
+- [x] RED: a spawn whose child emits `error` (root vanishes between check and spawn / bad
       executable) rejects the `launch()` promise instead of throwing an uncaught event.
-- [ ] GREEN: attach the child `error` listener in `spawnHost`, route it into the launch failure
+- [x] GREEN: attach the child `error` listener in `spawnHost`, route it into the launch failure
       path, and skip host recording on a failed spawn.
-- [ ] REFACTOR: consolidate the launcher failure taxonomy into one typed error surface shared by
+- [x] REFACTOR: consolidate the launcher failure taxonomy into one typed error surface shared by
       CLI and supervisor callers.
 
 ### M2 - Supervisor failed result + `missing` flag on projects.list (0/6)

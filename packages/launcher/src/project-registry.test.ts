@@ -30,6 +30,7 @@ function fakeFs(): LauncherFs & { files: Map<string, string> } {
       files.set(path, content);
     },
     exists: (path) => files.has(path),
+    directoryExists: (path) => [...files.keys()].some((k) => k.startsWith(`${path}/`)),
     remove: (path) => {
       files.delete(path);
     },

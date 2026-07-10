@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
+import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { test } from "vitest";
-import { buildHostSpawnCommand, findListenerPids, parseListenerPids } from "../src/platform";
+import { isLaunchError } from "../src/launch";
+import {
+  awaitSpawned,
+  buildHostSpawnCommand,
+  findListenerPids,
+  parseListenerPids,
+} from "../src/platform";
 
 test("host spawn command uses opchain when the Trevor env file exists", () => {
   const command = buildHostSpawnCommand({
@@ -44,6 +52,31 @@ test("host spawn command falls back to direct node when the Trevor env file is a
     "/repo/apps/agent-host/src/main.ts",
   ]);
   assert.equal(command.command, "tsx agent-host");
+});
+
+test("awaitSpawned resolves on the spawn event and rejects with a typed spawn-failed error on child error", async () => {
+  // The happy path: the child announces `spawn`.
+  const okChild = new EventEmitter();
+  const ok = awaitSpawned(okChild as unknown as ChildProcess, "/work/app");
+  okChild.emit("spawn");
+  await ok;
+
+  // The failure path (root vanished between check and spawn, bad executable): the child emits
+  // `error`, which without a listener would be an uncaught event that kills the whole process -
+  // the supervisor crash this plan removes. It must surface as a typed rejection instead.
+  const badChild = new EventEmitter();
+  const failed = awaitSpawned(badChild as unknown as ChildProcess, "/gone/project");
+  badChild.emit("error", new Error("spawn ENOENT"));
+  await assert.rejects(
+    failed,
+    (error: unknown) =>
+      isLaunchError(error) &&
+      error.code === "spawn-failed" &&
+      error.root === "/gone/project" &&
+      error.message.includes("spawn ENOENT"),
+  );
+  // A late error event after settling must stay handled (no uncaught 'error' crash).
+  badChild.emit("error", new Error("late error"));
 });
 
 test("parseListenerPids reads lsof -t output into unique positive pids", () => {

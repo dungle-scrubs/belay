@@ -20,6 +20,7 @@ function fakeFs(dirs: Iterable<string> = []): LauncherFs & { files: Map<string, 
       present.add(path);
     },
     exists: (path) => files.has(path) || present.has(path),
+    directoryExists: (path) => [...files.keys(), ...present].some((k) => k.startsWith(`${path}/`)),
     remove: (path) => {
       files.delete(path);
       present.delete(path);

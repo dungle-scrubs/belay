@@ -14,6 +14,7 @@ function fakeFs(files: Record<string, string> = {}): LauncherFs {
     readFile: (path) => store.get(path) ?? null,
     writeFile: (path, content) => void store.set(path, content),
     exists: (path) => store.has(path),
+    directoryExists: (path) => [...store.keys()].some((k) => k.startsWith(`${path}/`)),
     remove: (path) => void store.delete(path),
   };
 }

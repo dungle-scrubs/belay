@@ -24,6 +24,7 @@ function fakeFs(): LauncherFs & { files: Map<string, string> } {
     readFile: (path) => files.get(path) ?? null,
     writeFile: (path, content) => void files.set(path, content),
     exists: (path) => files.has(path),
+    directoryExists: (path) => [...files.keys()].some((k) => k.startsWith(`${path}/`)),
     remove: (path) => void files.delete(path),
   };
 }
