@@ -189,6 +189,9 @@ function SessionRow({
                 aria-label="Rename session"
                 onClick={(e) => {
                   e.stopPropagation();
+                  // Drop the click focus so the action cluster's focus-within (a keyboard
+                  // affordance) never pins the buttons visible after the pointer leaves the row.
+                  e.currentTarget.blur();
                   onStartRename();
                 }}
                 className="rounded p-0.5 text-muted-foreground hover:text-foreground"
@@ -202,6 +205,7 @@ function SessionRow({
                 aria-label="Archive session"
                 onClick={(e) => {
                   e.stopPropagation();
+                  e.currentTarget.blur();
                   onArchiveSession(summary.sessionId);
                 }}
                 className="rounded p-0.5 text-muted-foreground hover:text-smui-red"
@@ -226,10 +230,12 @@ function SessionRow({
             ) : null}
           </span>
         ) : null}
+        {/* group-focus-within (not focus-within: this span has no focusable children) so a
+            keyboard-focused action button hides the timestamp instead of overlapping it. */}
         <span
           className={cn(
             "pointer-events-none whitespace-nowrap pl-1 text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
-            hasActions && "group-hover:opacity-0 focus-within:opacity-0",
+            hasActions && "group-hover:opacity-0 group-focus-within:opacity-0",
           )}
         >
           {activity === "running" ? (

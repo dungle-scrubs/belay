@@ -6,6 +6,10 @@ import { workspaceBasename } from "../derive";
 import { useInventory } from "../resume";
 import type { WorktreeActivity } from "../worktrees";
 
+/** The project sidebar's default width (px) - the seed for the persisted preference and the value a
+ *  double-click on the resize handle snaps back to. */
+export const DEFAULT_SIDEBAR_WIDTH = 352;
+
 export function useModalState(opts: {
   readonly worktrees: readonly WorktreeSummary[];
   readonly host: HostStatus;
@@ -34,7 +38,7 @@ export function useModalState(opts: {
   // The sidebar width is draggable (plan 58 polish): persisted across reloads, clamped to a
   // usable range so it can't collapse to nothing or eat the whole viewport.
   const [sidebarWidth, setSidebarWidth] = useLocalStorageState<number>("trevor.sidebar.width", {
-    defaultValue: 352,
+    defaultValue: DEFAULT_SIDEBAR_WIDTH,
   });
   // The right-side panel is toggleable; remember the choice across reloads.
   const [panelOpen, setPanelOpen] = useLocalStorageState<boolean>("trevor.panel", {
@@ -82,7 +86,7 @@ export function useModalState(opts: {
     setArchiveOpen,
     sidebarOpen: Boolean(sidebarOpen),
     setSidebarOpen,
-    sidebarWidth: sidebarWidth ?? 352,
+    sidebarWidth: sidebarWidth ?? DEFAULT_SIDEBAR_WIDTH,
     setSidebarWidth,
     panelOpen: Boolean(panelOpen),
     setPanelOpen,

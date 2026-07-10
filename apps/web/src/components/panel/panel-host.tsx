@@ -53,6 +53,7 @@ import { SidePanel, SidePanelBreakdown, SidePanelHeader } from "@/components/pan
 import { QuestionSurface } from "@/components/question";
 import type { CommandArgPreview } from "@/derive";
 import type { Composer } from "@/hooks/use-composer";
+import { DEFAULT_SIDEBAR_WIDTH } from "@/hooks/use-modal-state";
 import type { ScrollFollowUi } from "@/hooks/use-scroll-follow";
 import type { ScrollFollowController } from "@/scroll-follow";
 import type { SessionStream } from "@/session/use-session";
@@ -455,11 +456,13 @@ function PanelHostImpl(props: {
             className="h-full min-w-0 flex-1"
           />
           {/* Drag-to-resize handle: a thin strip on the sidebar's right edge. Pointer events
-              preview the width locally and persist it once on release; clamped to [180, 480]. */}
+              preview the width locally and persist it once on release; clamped to [180, 480].
+              Double-click snaps back to the default width. */}
           <button
             type="button"
             aria-label="Resize sidebar"
             onMouseDown={onSidebarResizeMouseDown}
+            onDoubleClick={() => sidebar.onResize(DEFAULT_SIDEBAR_WIDTH)}
             className="absolute -right-0.5 top-0 z-10 h-full w-1 cursor-col-resize border-0 bg-transparent transition-colors hover:bg-foreground/20"
           />
         </div>
