@@ -199,10 +199,35 @@ export function createMermaidRenderConfig(): MermaidRenderConfig {
   };
 }
 
+// Theme signal the render config depends on. The app currently pins the dark
+// class at startup (see main.tsx), but keying on the live signals keeps the
+// cache correct if a runtime theme toggle ever lands: any change to the root
+// element's dark class or the OS color scheme produces a new key, which
+// invalidates the cached config and forces one re-initialize.
+function currentMermaidThemeKey(): string {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return "ssr";
+  }
+
+  const rootIsDark = document.documentElement.classList.contains("dark");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  return `${rootIsDark ? "dark" : "light"}:${prefersDark ? "os-dark" : "os-light"}`;
+}
+
+// mermaid.initialize resets internal parser/renderer state and our config
+// build walks ~20 getComputedStyle token lookups, so both are per-theme work,
+// not per-diagram work. Cache the last initialized theme key at module level
+// and skip initialize entirely while the theme is unchanged.
+let initializedMermaidThemeKey: string | null = null;
+
 export const renderMermaidDiagram: MermaidRender = async (id, source) => {
   const mermaidModule = await import("mermaid");
   const mermaid = mermaidModule.default;
-  mermaid.initialize(createMermaidRenderConfig());
+  const themeKey = currentMermaidThemeKey();
+  if (initializedMermaidThemeKey !== themeKey) {
+    mermaid.initialize(createMermaidRenderConfig());
+    initializedMermaidThemeKey = themeKey;
+  }
   const result = await mermaid.render(id, source);
   return result.svg;
 };
