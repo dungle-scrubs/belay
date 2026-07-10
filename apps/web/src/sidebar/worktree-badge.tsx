@@ -69,7 +69,9 @@ export function WorktreeBadge({ worktree, className }: WorktreeBadgeProps) {
           <FolderGit2 className="size-3" aria-hidden="true" />
         </span>
       </TooltipTrigger>
-      <TooltipContent side="right" align="center" className="max-w-80">
+      {/* Above the badge (Radix flips it below at the viewport edge): opening to the right sat the
+          tooltip directly over the row's hover action buttons. */}
+      <TooltipContent side="top" align="center" className="max-w-80">
         <div className="flex flex-col gap-0.5">
           <span className="font-medium text-foreground">{tip.branch}</span>
           <div className="flex items-start gap-1.5">

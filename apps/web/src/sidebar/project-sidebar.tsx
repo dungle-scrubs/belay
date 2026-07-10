@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import { DrawerToggle } from "@/components/panel/side-drawer";
 import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 import { ProjectLabel } from "./project-label";
@@ -59,6 +60,9 @@ export interface ProjectSidebarProps {
   readonly onViewArchived?: () => void;
   /** Add a new project via the OS folder picker. */
   readonly onAddProject?: () => void;
+  /** Collapse (hide) the sidebar - the same drawer toggle the right panel offers; the reopen
+   *  affordance lives in the main header strip once hidden. */
+  readonly onCollapse?: () => void;
   /** Create a fresh session for a project. */
   readonly onNewSession?: (projectKey: string) => void;
   /** Archive a session (hover action on session rows). */
@@ -151,126 +155,138 @@ function SessionRow({
   }
 
   return (
+    // The menu is a sibling of the row box, NOT a child: the row clips its content
+    // (overflow-hidden for long titles), and an absolutely-positioned menu inside it renders
+    // fully clipped - open but invisible. Mirrors ProjectRow's wrapper structure.
     // biome-ignore lint/a11y/noStaticElementInteractions: session row right-click opens a context menu; the inner button handles selection for keyboard users
-    <div
-      className={cn(
-        "group relative flex w-full items-center overflow-hidden py-1.5 pl-7 pr-2.5 text-left text-ui",
-        selected
-          ? "bg-card text-foreground"
-          : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
-      )}
-      style={{
-        ["--row-bg" as string]: selected ? "hsl(var(--card))" : "transparent",
-      }}
-      onContextMenu={canMenu ? handleContextMenu : undefined}
-    >
-      {renaming ? (
-        <RenameInput
-          initial={summary.title}
-          onSave={onRenameSave ?? (() => undefined)}
-          onCancel={onRenameCancel ?? (() => undefined)}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => onSelect(summary)}
-          className="flex min-w-0 flex-1 items-center gap-1 pr-16 text-left"
-        >
-          <span className="min-w-0 flex-1 truncate">{summary.title}</span>
-          {worktree ? <WorktreeBadge worktree={worktree} /> : null}
-        </button>
-      )}
-      {/* Right slot: absolutely positioned so long titles never push it off-screen. The title
+    <div className="group relative" onContextMenu={canMenu ? handleContextMenu : undefined}>
+      <div
+        className={cn(
+          "flex w-full items-center overflow-hidden py-1.5 pl-7 pr-2.5 text-left text-ui",
+          selected
+            ? "bg-card text-foreground"
+            : "text-muted-foreground hover:bg-card/60 hover:text-foreground",
+        )}
+        style={{
+          ["--row-bg" as string]: selected ? "hsl(var(--card))" : "transparent",
+        }}
+      >
+        {renaming ? (
+          <RenameInput
+            initial={summary.title}
+            onSave={onRenameSave ?? (() => undefined)}
+            onCancel={onRenameCancel ?? (() => undefined)}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => onSelect(summary)}
+            className="flex min-w-0 flex-1 items-center gap-1 pr-16 text-left"
+          >
+            <span className="min-w-0 flex-1 truncate">{summary.title}</span>
+            {worktree ? <WorktreeBadge worktree={worktree} /> : null}
+          </button>
+        )}
+        {/* Right slot: absolutely positioned so long titles never push it off-screen. The title
           gets right padding (pr-16) so its truncated ellipsis lands before this overlay. Hidden
           while renaming so the input owns the full row width. */}
-      <span
-        className={cn(
-          "pointer-events-none absolute right-1.5 top-1/2 flex h-4 -translate-y-1/2 items-center justify-end gap-0.5",
-          renaming && "hidden",
-        )}
-      >
-        {hasActions ? (
-          <span className="pointer-events-none absolute right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
-            {onStartRename ? (
-              <button
-                type="button"
-                aria-label="Rename session"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Drop the click focus so the action cluster's focus-within (a keyboard
-                  // affordance) never pins the buttons visible after the pointer leaves the row.
-                  e.currentTarget.blur();
-                  onStartRename();
-                }}
-                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-              >
-                <Pencil className="size-3" />
-              </button>
-            ) : null}
-            {onArchiveSession ? (
-              <button
-                type="button"
-                aria-label="Archive session"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.currentTarget.blur();
-                  onArchiveSession(summary.sessionId);
-                }}
-                className="rounded p-0.5 text-muted-foreground hover:text-smui-red"
-              >
-                <Archive className="size-3" />
-              </button>
-            ) : null}
-            {hasWorktree && canMenu ? (
-              <button
-                type="button"
-                aria-label="Session actions"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  e.currentTarget.blur();
-                  setMenuOpen((v) => !v);
-                }}
-                className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-              >
-                <MoreVertical className="size-3" />
-              </button>
-            ) : null}
-          </span>
-        ) : null}
-        {/* group-focus-within (not focus-within: this span has no focusable children) so a
-            keyboard-focused action button hides the timestamp instead of overlapping it. */}
         <span
           className={cn(
-            "pointer-events-none whitespace-nowrap pl-1 text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
-            hasActions && "group-hover:opacity-0 group-focus-within:opacity-0",
+            "pointer-events-none absolute right-1.5 top-1/2 flex h-4 -translate-y-1/2 items-center justify-end gap-0.5",
+            renaming && "hidden",
           )}
         >
-          {activity === "running" ? (
-            <span className="inline-flex items-center gap-[3px]" role="status" aria-label="running">
-              {[0, 200, 400].map((delay) => (
-                <span
-                  key={delay}
-                  className="size-1 animate-pulse rounded-full bg-current"
-                  style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
-                />
-              ))}
+          {hasActions ? (
+            <span className="pointer-events-none absolute right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100">
+              {onStartRename ? (
+                <button
+                  type="button"
+                  aria-label="Rename session"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Drop the click focus so the action cluster's focus-within (a keyboard
+                    // affordance) never pins the buttons visible after the pointer leaves the row.
+                    e.currentTarget.blur();
+                    onStartRename();
+                  }}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <Pencil className="size-3" />
+                </button>
+              ) : null}
+              {onArchiveSession ? (
+                <button
+                  type="button"
+                  aria-label="Archive session"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.currentTarget.blur();
+                    onArchiveSession(summary.sessionId);
+                  }}
+                  className="rounded p-0.5 text-muted-foreground hover:text-smui-red"
+                >
+                  <Archive className="size-3" />
+                </button>
+              ) : null}
+              {hasWorktree && canMenu ? (
+                <button
+                  type="button"
+                  aria-label="Session actions"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    e.currentTarget.blur();
+                    setMenuOpen((v) => !v);
+                  }}
+                  className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                >
+                  <MoreVertical className="size-3" />
+                </button>
+              ) : null}
             </span>
-          ) : activity === "queued" ? (
-            <span className="inline-flex items-center gap-[3px]" role="status" aria-label="queued">
-              {[0, 200, 400].map((delay) => (
-                <span
-                  key={delay}
-                  className="size-1 animate-pulse rounded-full bg-current"
-                  style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
-                />
-              ))}
-            </span>
-          ) : (
-            relativeTime(summary.updatedAt, nowMs)
-          )}
+          ) : null}
+          {/* group-focus-within (not focus-within: this span has no focusable children) so a
+            keyboard-focused action button hides the timestamp instead of overlapping it. */}
+          <span
+            className={cn(
+              "pointer-events-none whitespace-nowrap pl-1 text-label tracking-wider text-muted-foreground/60 transition-opacity duration-150",
+              hasActions && "group-hover:opacity-0 group-focus-within:opacity-0",
+            )}
+          >
+            {activity === "running" ? (
+              <span
+                className="inline-flex items-center gap-[3px]"
+                role="status"
+                aria-label="running"
+              >
+                {[0, 200, 400].map((delay) => (
+                  <span
+                    key={delay}
+                    className="size-1 animate-pulse rounded-full bg-current"
+                    style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
+                  />
+                ))}
+              </span>
+            ) : activity === "queued" ? (
+              <span
+                className="inline-flex items-center gap-[3px]"
+                role="status"
+                aria-label="queued"
+              >
+                {[0, 200, 400].map((delay) => (
+                  <span
+                    key={delay}
+                    className="size-1 animate-pulse rounded-full bg-current"
+                    style={{ animationDelay: `${delay}ms`, animationDuration: "1s" }}
+                  />
+                ))}
+              </span>
+            ) : (
+              relativeTime(summary.updatedAt, nowMs)
+            )}
+          </span>
         </span>
-      </span>
+      </div>
       {menuOpen ? (
         <SessionContextMenu
           worktree={worktree}
@@ -812,6 +828,7 @@ export function ProjectSidebar({
   onViewArchive,
   onViewArchived,
   onAddProject,
+  onCollapse,
   onNewSession,
   onArchiveSession,
   onRenameSession,
@@ -875,6 +892,11 @@ export function ProjectSidebar({
           >
             <Plus className="size-3.5" />
           </button>
+        ) : null}
+        {/* The collapse toggle sits at the far edge (the "+" just left of it), mirroring the right
+            panel's drawer toggle; reopening happens from the main header strip. */}
+        {onCollapse ? (
+          <DrawerToggle side="left" onClick={onCollapse} label="Collapse sidebar" />
         ) : null}
       </header>
 

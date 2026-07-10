@@ -76,6 +76,26 @@ describe("ProjectSidebar action UI", () => {
     expect(queryByLabelText("Add project")).toBeNull();
   });
 
+  test("the Collapse sidebar toggle renders beside Add project and fires onCollapse", () => {
+    const onCollapse = vi.fn<() => void>();
+    const { getByLabelText } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groupsWithSession()}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onAddProject={() => {}}
+        onCollapse={onCollapse}
+      />,
+    );
+    const toggle = getByLabelText("Collapse sidebar");
+    // "+" sits immediately left of the collapse toggle in the header.
+    expect(toggle.previousElementSibling).toBe(getByLabelText("Add project"));
+    fireEvent.click(toggle);
+    expect(onCollapse).toHaveBeenCalledTimes(1);
+  });
+
   test("the New Session button appears on expanded projects and calls onNewSession", () => {
     const onNewSession = vi.fn<(projectKey: string) => void>();
     const { getByLabelText } = renderWithTooltip(
@@ -108,6 +128,28 @@ describe("ProjectSidebar action UI", () => {
       />,
     );
     expect(queryByLabelText("New session")).toBeNull();
+  });
+
+  test("right-click opens a session context menu that no overflow-hidden ancestor can clip", () => {
+    const { getByText } = renderWithTooltip(
+      <ProjectSidebar
+        groups={groupsWithSession()}
+        onToggleProject={() => {}}
+        onSelectSession={() => {}}
+        onShowMore={() => {}}
+        searchQuery=""
+        onArchiveSession={() => {}}
+        onRenameSession={() => {}}
+      />,
+    );
+    fireEvent.contextMenu(getByText("Fix bugs"));
+    // The menu rendered (Rename + Archive items) AND sits outside the row's overflow-hidden box:
+    // inside it, the absolutely-positioned menu (a ~28px-tall clipping box, menu anchored below
+    // it) opens fully clipped - open but invisible and unclickable.
+    const menuItem = getByText("Archive").closest("button") as HTMLElement;
+    const rowClipBox = getByText("Fix bugs").closest('[class*="overflow-hidden"]') as HTMLElement;
+    expect(rowClipBox).toBeTruthy();
+    expect(rowClipBox.contains(menuItem)).toBe(false);
   });
 
   test("the Archive button appears on session rows when onArchiveSession is provided", () => {

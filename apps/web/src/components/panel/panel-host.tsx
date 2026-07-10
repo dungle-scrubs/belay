@@ -457,6 +457,7 @@ function PanelHostImpl(props: {
             onSelectSession={sidebar.onSelect}
             onShowMore={sidebar.onShowMore}
             onAddProject={sidebar.onAddProject}
+            onCollapse={sidebar.onClose}
             onNewSession={sidebar.onNewSession}
             onArchiveSession={sidebar.onArchiveSession}
             onRenameSession={sidebar.onRenameSession}
