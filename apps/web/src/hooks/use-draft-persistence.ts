@@ -1,3 +1,4 @@
+import { useDebounceEffect } from "ahooks";
 import { type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 import { readDraft, writeDraft } from "@/composer-storage";
 
@@ -68,16 +69,16 @@ export function useDraftPersistence({
     setRestoredSession(sessionId);
   }, [sessionId, tabId, storage]);
 
-  useEffect(() => {
-    if (!sessionId || restoredSession !== sessionId) {
-      return;
-    }
-    const handle = setTimeout(
+  useDebounceEffect(
+    () => {
+      if (!sessionId || restoredSession !== sessionId) {
+        return;
+      }
       // A bare command fragment is transient, not a saved draft: persist "" for it (which also clears
       // any stale fragment already in the slot), so it can never be restored on a later switch.
-      () => writeDraft(storage, tabId, sessionId, isCommandFragment(draft) ? "" : draft),
-      DRAFT_DEBOUNCE_MS,
-    );
-    return () => clearTimeout(handle);
-  }, [draft, sessionId, restoredSession, tabId, storage]);
+      writeDraft(storage, tabId, sessionId, isCommandFragment(draft) ? "" : draft);
+    },
+    [draft, sessionId, restoredSession, tabId, storage],
+    { wait: DRAFT_DEBOUNCE_MS },
+  );
 }
