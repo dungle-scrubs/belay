@@ -1,26 +1,34 @@
 import { relativeTime } from "@trevor/session";
 import { AlertTriangle, Loader2, Play, RotateCcw } from "lucide-react";
+import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 
 export type ResumeHostRowState =
   | {
       readonly phase: "manual";
       readonly updatedAt: string;
       readonly onResume: () => void;
-      readonly nowMs: number;
+      /** Fixed wall clock for deterministic stories/tests; omitted (the live default), the row ticks
+       *  its OWN leaf clock (Tier 2.3). */
+      readonly nowMs?: number;
     }
   | { readonly phase: "starting"; readonly label: string }
   | { readonly phase: "failed"; readonly error: string; readonly onRetry: () => void }
   | {
       readonly phase: "unlaunchable";
       readonly updatedAt: string;
-      readonly nowMs: number;
+      readonly nowMs?: number;
     };
 
 export function ResumeHostRow({ state }: { readonly state: ResumeHostRowState }) {
-  const detail =
-    state.phase === "manual" || state.phase === "unlaunchable"
-      ? `Last active ${relativeTime(state.updatedAt, state.nowMs)}`
-      : null;
+  const showsRecency = state.phase === "manual" || state.phase === "unlaunchable";
+  const providedNow = showsRecency ? state.nowMs : undefined;
+  // The row's own relative-time clock (Tier 2.3), armed only for the phases that render recency text.
+  const clockNow = useNow(RELATIVE_TIME_TICK_MS, {
+    enabled: showsRecency && providedNow === undefined,
+  });
+  const detail = showsRecency
+    ? `Last active ${relativeTime(state.updatedAt, providedNow ?? clockNow)}`
+    : null;
 
   return (
     <div

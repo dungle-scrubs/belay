@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState } from "react";
+import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 import { ProjectLabel } from "./project-label";
 import { type ProjectGroup, SESSION_CAP } from "./project-sidebar-model";
@@ -75,6 +76,8 @@ export interface ProjectSidebarProps {
   readonly liveActivity?: ReadonlyMap<string, SessionActivity>;
   /** The currently selected session id (for highlight). */
   readonly currentSessionId?: string;
+  /** Wall clock for the relative-time labels. Pass a fixed value for deterministic stories/tests;
+   *  omitted (the live default), the sidebar ticks its OWN leaf clock (Tier 2.3). */
   readonly nowMs?: number;
   readonly className?: string;
 }
@@ -768,9 +771,14 @@ export function ProjectSidebar({
   onDeleteWorktree,
   liveActivity,
   currentSessionId,
-  nowMs = Date.now(),
+  nowMs,
   className,
 }: ProjectSidebarProps) {
+  // The sidebar's own relative-time clock (Tier 2.3): session rows show "Xm ago" labels, so the tick
+  // that refreshes them re-renders this leaf only - App no longer threads a clock down here. A
+  // provided nowMs (stories/tests) pauses the clock for determinism.
+  const clockNow = useNow(RELATIVE_TIME_TICK_MS, { enabled: nowMs === undefined });
+  const rowNowMs = nowMs ?? clockNow;
   const [renamingKey, setRenamingKey] = useState<string | null>(null);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   // Locally tracks which projects have been expanded past SESSION_CAP via "Show N more". The
@@ -877,7 +885,7 @@ export function ProjectSidebar({
                             worktree={row.worktree}
                             activity={effectiveActivity(row.summary, liveActivity)}
                             selected={row.summary.sessionId === currentSessionId}
-                            nowMs={nowMs}
+                            nowMs={rowNowMs}
                             onSelect={onSelectSession}
                             onArchiveSession={onArchiveSession}
                             renaming={renamingSessionId === row.summary.sessionId}

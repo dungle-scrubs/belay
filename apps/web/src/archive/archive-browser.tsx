@@ -3,6 +3,7 @@ import { AlertTriangle, ArchiveRestore, Loader2, ShieldAlert, Trash2, X } from "
 import { useEffect, useRef, useState } from "react";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { Button } from "@/components/ui/button";
+import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 import { ProjectLabel } from "@/sidebar/project-label";
 import { type ArchivedSessionRow, isArchiveRowDeletable } from "./archive-rows";
@@ -37,7 +38,8 @@ export interface ArchiveBrowserProps {
   readonly loading?: boolean;
   /** The archive inventory failed to load (surface-level, distinct from a per-row action error). */
   readonly error?: string | null;
-  /** Wall clock for the relative-time recency labels (injected for deterministic stories/tests). */
+  /** Wall clock for the relative-time recency labels (injected for deterministic stories/tests).
+   *  Omitted (the live default), the browser ticks its OWN leaf clock (Tier 2.3). */
   readonly nowMs?: number;
   readonly onUnarchive: (sessionId: string) => void;
   readonly onDelete: (sessionId: string) => void;
@@ -67,7 +69,7 @@ export function ArchiveBrowser({
   rows,
   loading = false,
   error = null,
-  nowMs = Date.now(),
+  nowMs,
   onUnarchive,
   onDelete,
   onBack,
@@ -77,6 +79,10 @@ export function ArchiveBrowser({
   onClearProjectFilter,
   className,
 }: ArchiveBrowserProps) {
+  // The browser's own relative-time clock (Tier 2.3): rows show "Xm ago" recency, so the refresh tick
+  // re-renders this leaf only. A provided nowMs (stories/tests) pauses the clock for determinism.
+  const clockNow = useNow(RELATIVE_TIME_TICK_MS, { enabled: nowMs === undefined });
+  const rowNowMs = nowMs ?? clockNow;
   // Which row's permanent-delete is being confirmed (at most one). The typed phrase lives in the
   // confirmation panel itself, reset naturally when it mounts for a different row.
   const [confirmingId, setConfirmingId] = useState<string | null>(defaultConfirmingId ?? null);
@@ -134,7 +140,7 @@ export function ArchiveBrowser({
               <ArchiveRow
                 key={row.sessionId}
                 row={row}
-                nowMs={nowMs}
+                nowMs={rowNowMs}
                 confirming={confirmingId === row.sessionId}
                 action={actionState?.[row.sessionId]}
                 onUnarchive={() => onUnarchive(row.sessionId)}
