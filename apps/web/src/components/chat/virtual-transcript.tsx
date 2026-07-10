@@ -1,11 +1,7 @@
-import {
-  defaultRangeExtractor,
-  elementScroll,
-  type Rect,
-  useVirtualizer,
-} from "@tanstack/react-virtual";
+import { elementScroll, type Rect, useVirtualizer } from "@tanstack/react-virtual";
 import type { ArtifactRef } from "@trevor/session";
 import {
+  memo,
   type RefObject,
   useCallback,
   useEffect,
@@ -22,6 +18,7 @@ import {
   COMPACT_FLUSH_PB,
   COMPACT_GAP_PB,
   estimateTranscriptTurnSize,
+  splitOversizedTurns,
   transcriptTurnKey,
 } from "@/components/chat/transcript-turns";
 import { cn } from "@/lib/utils";
@@ -82,7 +79,16 @@ function isAdjacentToolPair(row: TranscriptRow, next: TranscriptRow | undefined)
 }
 
 const ANCHOR_EPSILON_PX = 1.5;
-const FULL_RENDER_TURN_LIMIT = 64;
+/** Full render is decided on TOTAL ROW COUNT (Tier 4.1), not turn count: the old 64-TURN gate let one
+ *  turn with hundreds of tool rows disable windowing entirely. 128 rows is the old gate's budget for a
+ *  plain user/assistant conversation (64 turns x 2 rows), so ordinary short sessions keep flow layout
+ *  exactly as before - but a tool storm now counts its real row weight and virtualizes. */
+const FULL_RENDER_ROW_LIMIT = 128;
+/** Overscan measured in ROWS, not items (Tier 4.1). The old `overscan: 40` counted whole-turn items -
+ *  "40 turns each way" (02.8 audit) - which a tool-storm turn could multiply into hundreds of row
+ *  subtrees. The range extractor walks outward until it has ~this many rows pre-rendered on each side,
+ *  so a wheel/trackpad flick still lands on measured rows while the mounted row count stays bounded. */
+const OVERSCAN_ROWS = 40;
 
 interface VisualAnchorSnapshot {
   readonly id: string;
@@ -129,7 +135,7 @@ function anchorTop(scrollElement: HTMLElement, id: string): number | null {
   return row.getBoundingClientRect().top - scrollRect.top;
 }
 
-export function VirtualTranscript({
+function VirtualTranscriptImpl({
   rows,
   scrollRef,
   controller,
@@ -180,26 +186,49 @@ export function VirtualTranscript({
   // compact mode (the historical spacing applies then). Derived once per rows change.
   const compactGaps = useMemo(() => (compact ? compactLeadingGaps(rows) : null), [compact, rows]);
   const turns = useMemo(() => buildTranscriptTurns(rows), [rows]);
-  // A turn's content estimate plus its rows' compact trailing gaps (see `rowPadClass` below). Not
+  // The virtual-item unit (Tier 4.1): turns, except oversized ones split into fixed-offset blocks so
+  // one tool-storm turn cannot mount hundreds of row subtrees. For normal transcripts blocks === turns
+  // (same object identities), so keys and cached measurements are unaffected.
+  const blocks = useMemo(() => splitOversizedTurns(turns), [turns]);
+  // The gate is TOTAL ROW COUNT, not turn count (Tier 4.1): a short transcript renders fully (plain
+  // flow layout, no estimate-correction machinery), and anything larger windows - including a single
+  // turn holding hundreds of tool rows, which the old turn-count gate rendered whole.
+  const fullyRendered = rows.length <= FULL_RENDER_ROW_LIMIT;
+  // A block's content estimate plus its rows' compact trailing gaps (see `rowPadClass` below). Not
   // memoized: streamed tokens rebuild the rows array, so a callback would rebuild every render anyway.
-  const estimateTurn = (index: number): number =>
-    estimateTranscriptTurnSize(turns[index], compact, expandedRows, compactGaps);
+  const estimateBlock = (index: number): number =>
+    estimateTranscriptTurnSize(blocks[index], compact, expandedRows, compactGaps);
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLDivElement>({
-    count: turns.length,
+    count: blocks.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: estimateTurn,
-    rangeExtractor: (range) =>
-      turns.length <= FULL_RENDER_TURN_LIMIT
-        ? Array.from({ length: turns.length }, (_value, index) => index)
-        : defaultRangeExtractor(range),
+    estimateSize: estimateBlock,
+    // Row-budget overscan (Tier 4.1, replacing `overscan: 40` items): extend the visible range until
+    // ~OVERSCAN_ROWS rows are pre-rendered on each side. Blocks bound rows-per-item, and this walk
+    // bounds items-per-overscan, so the two together cap mounted row subtrees no matter how many tool
+    // rows one turn holds - while a flick still lands on already-measured rows (no correction nudge).
+    rangeExtractor: (range) => {
+      if (fullyRendered) {
+        return Array.from({ length: blocks.length }, (_value, index) => index);
+      }
+      let start = range.startIndex;
+      let end = range.endIndex;
+      let above = 0;
+      while (start > 0 && above < OVERSCAN_ROWS) {
+        start -= 1;
+        above += blocks[start]?.rows.length ?? 1;
+      }
+      let below = 0;
+      while (end < range.count - 1 && below < OVERSCAN_ROWS) {
+        end += 1;
+        below += blocks[end]?.rows.length ?? 1;
+      }
+      return Array.from({ length: end - start + 1 }, (_value, index) => start + index);
+    },
     getItemKey: (index) => {
-      const turn = turns[index];
-      return turn ? transcriptTurnKey(turn) : `missing:${index}`;
+      const block = blocks[index];
+      return block ? transcriptTurnKey(block) : `missing:${index}`;
     },
     // --- non-default virtualizer options, each justified for scroll stability (02.8 audit) ---
-    // overscan: render 40 turns beyond the viewport each way so a normal wheel/trackpad flick lands on
-    // already-measured rows (no estimate-correction nudge as they scroll into view).
-    overscan: 40,
     // anchorTo: while pinned, anchor measurement corrections to the END (the live edge we follow);
     // while unpinned, anchor to the START of the visible range so a measured-size change keeps the
     // user's topmost visible row put instead of shifting it (this IS the anchor-compensation the
@@ -215,7 +244,7 @@ export function VirtualTranscript({
       if (!pinned) {
         return 0;
       }
-      const total = turns.reduce((sum, _turn, index) => sum + estimateTurn(index), 0);
+      const total = blocks.reduce((sum, _block, index) => sum + estimateBlock(index), 0);
       return Math.max(0, total - (testInitialRect?.height ?? 0));
     },
     initialRect: testInitialRect,
@@ -274,7 +303,7 @@ export function VirtualTranscript({
 
   const scrollToLiveEdge = useCallback(
     (behavior: ScrollBehavior = "auto") => {
-      if (turns.length === 0) {
+      if (blocks.length === 0) {
         return;
       }
       // Two controller-approved writes: first let TanStack update its virtual range, then snap the real
@@ -283,7 +312,7 @@ export function VirtualTranscript({
       virtualizer.scrollToEnd({ behavior });
       scrollElementToLiveEdge(behavior);
     },
-    [scrollElementToLiveEdge, turns.length, virtualizer],
+    [scrollElementToLiveEdge, blocks.length, virtualizer],
   );
 
   useEffect(() => {
@@ -340,12 +369,21 @@ export function VirtualTranscript({
 
   useLayoutEffect(() => {
     const scrollElement = scrollRef.current;
-    const previousAnchor = visualAnchorRef.current;
-    const previousScrollTop = previousScrollTopRef.current;
     const hadPreviousLayout = previousRowsRef.current !== null;
     const rowsChanged = hadPreviousLayout && previousRowsRef.current !== rows;
     const virtualMeasurementsChanged =
       hadPreviousLayout && previousTotalSizeRef.current !== totalSize;
+    // Tier 4.2: this effect is dependency-less so it can observe every commit, but its DOM reads
+    // (visibleAnchorIn's querySelectorAll + per-row getBoundingClientRect) force a reflow per render.
+    // When a commit changed neither the rows identity nor the virtualizer's total size - composer
+    // keystrokes, pin flips, config changes - nothing this pass would read has moved, so skip it
+    // entirely. The passive scroll listener keeps the reading anchor fresh between changes, and the
+    // first layout still falls through to seed the refs and the initial anchor snapshot.
+    if (hadPreviousLayout && !rowsChanged && !virtualMeasurementsChanged) {
+      return;
+    }
+    const previousAnchor = visualAnchorRef.current;
+    const previousScrollTop = previousScrollTopRef.current;
 
     let clearLayoutShiftFrame: number | null = null;
     let secondClearLayoutShiftFrame: number | null = null;
@@ -455,11 +493,11 @@ export function VirtualTranscript({
     if (readyToReveal) {
       return;
     }
-    if (turns.length <= FULL_RENDER_TURN_LIMIT) {
+    if (fullyRendered) {
       const frame = requestAnimationFrame(() => setReadyToReveal(true));
       return () => cancelAnimationFrame(frame);
     }
-    if (!pinned || turns.length === 0) {
+    if (!pinned || blocks.length === 0) {
       const frame = requestAnimationFrame(() => setReadyToReveal(true));
       return () => cancelAnimationFrame(frame);
     }
@@ -484,11 +522,10 @@ export function VirtualTranscript({
         const contentFits = scrollElement
           ? scrollElement.scrollHeight <= scrollElement.clientHeight + ANCHOR_EPSILON_PX
           : false;
-        const currentLastIndex =
-          turns.length <= FULL_RENDER_TURN_LIMIT
-            ? turns.length - 1
-            : virtualizer.getVirtualItems().at(-1)?.index;
-        if (currentLastIndex === turns.length - 1 && (settledAtEdge || contentFits)) {
+        const currentLastIndex = fullyRendered
+          ? blocks.length - 1
+          : virtualizer.getVirtualItems().at(-1)?.index;
+        if (currentLastIndex === blocks.length - 1 && (settledAtEdge || contentFits)) {
           setReadyToReveal(true);
           return;
         }
@@ -505,7 +542,8 @@ export function VirtualTranscript({
   }, [
     pinned,
     readyToReveal,
-    turns.length,
+    fullyRendered,
+    blocks.length,
     scrollRef,
     followLiveEdge,
     controller,
@@ -546,12 +584,11 @@ export function VirtualTranscript({
     };
   }, [pinned, readyToReveal, followLiveEdge, totalSize]);
 
-  const fullyRendered = turns.length <= FULL_RENDER_TURN_LIMIT;
   const items = fullyRendered
-    ? turns.map((turn, index) => ({
+    ? blocks.map((block, index) => ({
         end: 0,
         index,
-        key: transcriptTurnKey(turn),
+        key: transcriptTurnKey(block),
         start: 0,
       }))
     : virtualItems;
@@ -578,11 +615,14 @@ export function VirtualTranscript({
       data-transcript-padding-bottom={paddingBottom}
     >
       {items.map((item) => {
-        const turn = turns[item.index];
-        if (!turn) {
+        const block = blocks[item.index];
+        if (!block) {
           return null;
         }
         return (
+          // One virtual item: a whole turn, or a fixed-offset BLOCK of an oversized turn (Tier 4.1).
+          // The attribute name predates blocks and stays `-turn` - tests and browser specs key on it,
+          // and the wrapper adds no spacing of its own, so a block boundary has no visual seam.
           <div
             key={item.key}
             ref={virtualizer.measureElement}
@@ -594,8 +634,8 @@ export function VirtualTranscript({
               transform: fullyRendered ? undefined : `translateY(${item.start}px)`,
             }}
           >
-            {turn.rows.map((row, offset) => {
-              const rowIndex = turn.startIndex + offset;
+            {block.rows.map((row, offset) => {
+              const rowIndex = block.startIndex + offset;
               // The bottom gap after this row. In compact mode it is TYPE-AWARE (plan 58): a run of
               // same-type rows sits flush (`pb-1`) and a type change opens exactly one blank line
               // (`pb-6`), driven by `compactLeadingGaps`. Outside compact mode the historical spacing
@@ -638,3 +678,13 @@ export function VirtualTranscript({
     </div>
   );
 }
+
+/**
+ * Memo boundary (Tier 1): every prop is stable across renders that did not change the transcript -
+ * `rows` only gets fresh identity when the fold re-ran over new events, `scrollRef`/`controller` are
+ * ref-stable for the session, `scrollToBottomRequest` is a counter, and `rowConfig` is App's
+ * useMemo'd bundle of useMemoizedFn callbacks + display flags. So App re-renders that carry no new
+ * events (the 4s live clock, composer keystrokes, palette/chooser toggles) skip the whole transcript
+ * subtree here.
+ */
+export const VirtualTranscript = memo(VirtualTranscriptImpl);

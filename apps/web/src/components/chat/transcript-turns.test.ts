@@ -5,6 +5,8 @@ import type { TranscriptRow } from "../../transcript-rows";
 import {
   buildTranscriptTurns,
   estimateTranscriptTurnSize,
+  splitOversizedTurns,
+  TURN_BLOCK_MAX_ROWS,
   transcriptTurnKey,
 } from "./transcript-turns";
 
@@ -128,5 +130,68 @@ describe("transcript turns", () => {
 
     assert.equal(collapsed, 72 + 20 + 28 + 28 + 20 + 75);
     assert.equal(expanded, 72 + 20 + 144 + 28 + 20 + 75);
+  });
+
+  test("splitOversizedTurns passes small turns through with the same object identity", () => {
+    const rows = [userRow("u1"), assistantRow("a1"), userRow("u2"), toolRow("t1")];
+    const turns = buildTranscriptTurns(rows);
+
+    const blocks = splitOversizedTurns(turns);
+
+    assert.equal(blocks.length, turns.length);
+    for (const [index, block] of blocks.entries()) {
+      assert.equal(block, turns[index], "an in-bound turn must not be copied or re-keyed");
+    }
+  });
+
+  test("splitOversizedTurns splits a tool-storm turn at fixed row offsets", () => {
+    const stormRows = [
+      userRow("u1"),
+      ...Array.from({ length: 80 }, (_, index) => toolRow(`t${index}`)),
+    ];
+    const rows = [assistantRow("a-preface"), ...stormRows];
+    const turns = buildTranscriptTurns(rows);
+    assert.equal(turns.length, 2, "sanity: a preface turn plus one 81-row storm turn");
+
+    const blocks = splitOversizedTurns(turns, 32);
+
+    // The preface turn is untouched; the 81-row storm becomes 32 + 32 + 17.
+    assert.equal(blocks[0], turns[0]);
+    assert.deepEqual(
+      blocks.slice(1).map((block) => block.rows.length),
+      [32, 32, 17],
+    );
+    // The first block keeps the turn's own id; continuations are suffixed, so appends that only grow
+    // the tail never re-key (or re-measure) earlier blocks.
+    assert.equal(blocks[1]?.id, turns[1]?.id);
+    assert.equal(blocks[2]?.id, `${turns[1]?.id}:block:1`);
+    assert.equal(blocks[3]?.id, `${turns[1]?.id}:block:2`);
+    // startIndex stays a GLOBAL row index (the preface row shifts everything by 1), so per-row pad
+    // classes and compact gaps resolve identically across block boundaries.
+    assert.deepEqual(
+      blocks.slice(1).map((block) => block.startIndex),
+      [1, 33, 65],
+    );
+    assert.equal(blocks[2]?.rows[0]?.id, rows[33]?.id);
+  });
+
+  test("splitOversizedTurns keeps earlier block ids stable as a storm turn streams more rows", () => {
+    const grow = (count: number) =>
+      splitOversizedTurns(
+        buildTranscriptTurns([
+          userRow("u1"),
+          ...Array.from({ length: count }, (_, index) => toolRow(`t${index}`)),
+        ]),
+        TURN_BLOCK_MAX_ROWS,
+      );
+
+    const before = grow(70);
+    const after = grow(130);
+
+    assert.deepEqual(
+      before.map((block) => block.id),
+      after.slice(0, before.length).map((block) => block.id),
+      "streamed appends must only extend the tail, never re-key settled blocks",
+    );
   });
 });
