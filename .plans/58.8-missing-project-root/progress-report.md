@@ -2,15 +2,15 @@
 
 **Plan:** `58.8-missing-project-root`
 **Stage:** ready
-**Current focus:** M3 - Web result-wait timeout (0/6)
+**Current focus:** M4 - Sidebar missing-project treatment (0/4)
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks (total) | 23 |
-| Checked (done) | 12 |
-| Current-cutoff blockers (unchecked) | 11 |
+| Checked (done) | 18 |
+| Current-cutoff blockers (unchecked) | 5 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
@@ -43,18 +43,18 @@
 - [x] GREEN: stat each record while serving the list; extend the result type additively.
 - [x] REFACTOR: one owner for the path-existence check shared by the launch gate and list marking.
 
-### M3 - Web result-wait timeout (0/6)
+### M3 - Web result-wait timeout (6/6)
 
-- [ ] Seams under test: `useLaunch` (`apps/web/src/new-session/use-launch.ts`) deterministic hook
+- [x] Seams under test: `useLaunch` (`apps/web/src/new-session/use-launch.ts`) deterministic hook
       tests.
-- [ ] RED: a launch with no arriving result folds to `failed` with a timeout message after the
+- [x] RED: a launch with no arriving result folds to `failed` with a timeout message after the
       result-wait deadline; Retry re-enters `starting`.
-- [ ] GREEN: arm a result-wait timer at publish time, cleared by any result, reset-safe via the
+- [x] GREEN: arm a result-wait timer at publish time, cleared by any result, reset-safe via the
       existing guard token.
-- [ ] RED: a `failed` result carrying the missing-folder reason renders that reason in the launch
+- [x] RED: a `failed` result carrying the missing-folder reason renders that reason in the launch
       UI and resume row.
-- [ ] GREEN: thread the reason string through the existing failed-state surfaces.
-- [ ] REFACTOR: name the two timeouts (`result-wait`, `host-online`) as explicit machine phases.
+- [x] GREEN: thread the reason string through the existing failed-state surfaces.
+- [x] REFACTOR: name the two timeouts (`result-wait`, `host-online`) as explicit machine phases.
 
 ### M4 - Sidebar missing-project treatment (0/4)
 

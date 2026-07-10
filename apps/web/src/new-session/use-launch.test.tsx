@@ -64,6 +64,7 @@ function renderLaunch(over: { onNavigate?: () => void } = {}) {
       onNavigate,
       transport: rec.transport,
       hostOnlineTimeoutMs: 50,
+      resultWaitTimeoutMs: 200,
     });
   });
   return { rec, onNavigate, ...view };
@@ -188,6 +189,83 @@ test("a launched host that never comes online gives up: idle + error, no navigat
   );
   assert.equal(result.current.launchState, "idle", "the launch gives up back to idle");
   assert.ok(result.current.error, "a give-up surfaces an inline error");
+});
+
+test("a launch whose result never arrives folds to failed after the result-wait deadline; Retry re-enters starting", async () => {
+  vi.useFakeTimers();
+  const { rec, result, onNavigate } = renderLaunch();
+  await act(async () => {});
+
+  // The supervisor never answers (dead daemon, lost result): no session.launch.result is delivered.
+  act(() => result.current.launch("~/dev/lost"));
+  assert.equal(result.current.launchState, "starting");
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(250);
+  });
+  assert.equal(result.current.launchState, "failed", "a lost result cannot hang the launch UI");
+  assert.ok(result.current.error, "the timeout surfaces a message");
+  assert.equal(onNavigate.mock.calls.length, 0);
+
+  // Retry re-publishes the same root and re-enters starting (with a fresh result-wait window).
+  act(() => result.current.retry());
+  assert.equal(result.current.launchState, "starting");
+  assert.equal(result.current.error, null);
+  const launches = launchesOf(rec.publishedBy(SUPERVISOR_SESSION_ID));
+  assert.equal(launches.length, 2, "retry publishes a second launch request");
+});
+
+test("a result arriving within the deadline disarms the result-wait timer", async () => {
+  vi.useFakeTimers();
+  const { rec, result } = renderLaunch();
+  await act(async () => {});
+
+  act(() => result.current.launch("~/dev/answered"));
+  act(() => {
+    deliverControl(
+      rec.connects,
+      sessionEvents.sessionLaunchResult({
+        requestId: lastLaunchRequestId(rec),
+        sessionId: "sess-ok",
+        status: "reused",
+      }),
+      1,
+    );
+  });
+  await flushControl();
+  assert.equal(result.current.launchState, "idle");
+  // Long after the (disarmed) result-wait deadline: no late fold to failed.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(500);
+  });
+  assert.equal(result.current.launchState, "idle", "a consumed result leaves no stray timeout");
+  assert.equal(result.current.error, null);
+});
+
+test("a failed result carrying the missing-folder reason exposes it verbatim (no generic message)", async () => {
+  vi.useFakeTimers();
+  const { rec, result } = renderLaunch();
+  await act(async () => {});
+
+  act(() => result.current.launch("~/dev/deleted"));
+  act(() => {
+    deliverControl(
+      rec.connects,
+      sessionEvents.sessionLaunchResult({
+        requestId: lastLaunchRequestId(rec),
+        sessionId: "sess-gone",
+        status: "failed",
+        error: "project folder no longer exists: /Users/me/deleted",
+      }),
+      1,
+    );
+  });
+  await flushControl();
+  assert.equal(result.current.launchState, "failed");
+  assert.equal(
+    result.current.error,
+    "project folder no longer exists: /Users/me/deleted",
+    "the launch UI and resume row render this string untouched",
+  );
 });
 
 test("a failed launch enters the failed state with a named error and does not navigate", async () => {

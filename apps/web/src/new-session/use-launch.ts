@@ -18,8 +18,17 @@ import { publishWebEvent, sessionTransport } from "@/session/use-session";
  */
 export type LaunchPhase = "idle" | "starting" | "failed";
 
+// The machine has two explicit timed phases (plan 58.8 M3), each with its own named deadline:
+//   1. result-wait - from publish until the supervisor's `session.launch.result` arrives;
+//   2. host-online - from a `launched` result until the fresh host's `host.online`.
 /** How long to wait for a freshly launched host's `host.online` before giving up the auto-navigate. */
 const HOST_ONLINE_TIMEOUT_MS = 30_000;
+/** How long to wait for `session.launch.requested` to be answered at all before folding to `failed`
+ *  (plan 58.8 D-004): a LOST result (dead supervisor, dropped control stream) previously hung the
+ *  launch UI on "Starting host..." forever. Generous by design - it only fires when the result is
+ *  lost, so it must comfortably exceed the supervisor's longest legitimate launch (its stacked
+ *  store/host-online/web readiness waits total ~65s worst case). */
+const RESULT_WAIT_TIMEOUT_MS = 90_000;
 
 const isHostOnline = (event: SessionEvent): boolean =>
   decodeTrevorEvent(event)?.type === "host.online";
@@ -41,6 +50,8 @@ export interface UseLaunchOptions {
   readonly transport?: SessionTransport;
   /** Injected for deterministic hook tests. */
   readonly hostOnlineTimeoutMs?: number;
+  /** Injected for deterministic hook tests. */
+  readonly resultWaitTimeoutMs?: number;
 }
 
 export interface LaunchController {
@@ -71,6 +82,7 @@ export interface LaunchController {
 export function useLaunch(options: UseLaunchOptions): LaunchController {
   const transport = options.transport ?? sessionTransport;
   const hostOnlineTimeoutMs = options.hostOnlineTimeoutMs ?? HOST_ONLINE_TIMEOUT_MS;
+  const resultWaitTimeoutMs = options.resultWaitTimeoutMs ?? RESULT_WAIT_TIMEOUT_MS;
   const { controlEvents, onNavigate } = options;
 
   const [launchState, setLaunchState] = useState<LaunchPhase>("idle");
@@ -84,6 +96,9 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
   const lastOptionsRef = useRef<{ sessionId?: string; projectPath?: string }>({});
   const launchTokenRef = useRef(0);
   const cursorRef = useRef(0);
+  // The result-wait deadline (58.8 M3): armed at publish, disarmed when the pending result folds or
+  // the launch is superseded/reset, so a LOST result folds to `failed` instead of hanging `starting`.
+  const resultTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The latest navigate callback, read from the async host.online continuation without making it an
   // effect dependency (the caller may pass a fresh closure each render).
   const navigateRef = useRef(onNavigate);
@@ -95,6 +110,16 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
     return viewerIdentity({ displayName: "trevor-web", instanceId: id, participantId: id });
   }, []);
 
+  // Disarms the pending result-wait deadline (any consumed result, a superseding publish, reset).
+  const clearResultTimer = useCallback(() => {
+    if (resultTimerRef.current !== null) {
+      clearTimeout(resultTimerRef.current);
+      resultTimerRef.current = null;
+    }
+  }, []);
+  // Unmount: a live timer would otherwise fire setState on an unmounted hook.
+  useEffect(() => clearResultTimer, [clearResultTimer]);
+
   const publish = useCallback(
     (root: string, options?: { sessionId?: string; projectPath?: string }) => {
       const requestId = crypto.randomUUID();
@@ -104,6 +129,20 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
       launchTokenRef.current += 1; // a fresh launch invalidates any prior pending host.online continuation
       setError(null);
       setLaunchState("starting");
+      // Arm the result-wait deadline: if NO session.launch.result ever answers this request (dead
+      // supervisor, dropped control stream), fold to `failed` with Retry instead of hanging. The
+      // requestId equality check is the guard-token: a folded result or a newer launch nulls or
+      // replaces it, so a stale deadline can never clobber a live launch.
+      clearResultTimer();
+      resultTimerRef.current = setTimeout(() => {
+        resultTimerRef.current = null;
+        if (launchReqRef.current !== requestId) {
+          return;
+        }
+        launchReqRef.current = null;
+        setError("The launch did not report back in time. The supervisor may be down - try again.");
+        setLaunchState("failed");
+      }, resultWaitTimeoutMs);
       void publishWebEvent(
         transport,
         SUPERVISOR_SESSION_ID,
@@ -115,7 +154,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
         }),
       );
     },
-    [transport],
+    [transport, resultWaitTimeoutMs, clearResultTimer],
   );
 
   const retry = useCallback(() => {
@@ -133,7 +172,8 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
     lastOptionsRef.current = {};
     launchTokenRef.current += 1; // invalidate any pending host.online navigation
     cursorRef.current = 0;
-  }, []);
+    clearResultTimer();
+  }, [clearResultTimer]);
 
   // Fold each new control-session event once, dispatching the `session.launch.result` to its pending
   // launch. A freshly launched host is awaited on its OWN session (host.online) before navigating; a
@@ -148,6 +188,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
       }
       if (decoded.type === "session.launch.result" && decoded.requestId === launchReqRef.current) {
         launchReqRef.current = null;
+        clearResultTimer(); // the result arrived: the result-wait phase is over
         if (decoded.status === "failed") {
           setError(decoded.error ?? "The session could not be started.");
           setLaunchState("failed");
@@ -187,7 +228,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
       }
     }
     cursorRef.current = controlEvents.length;
-  }, [controlEvents, transport, watchIdentity, hostOnlineTimeoutMs]);
+  }, [controlEvents, transport, watchIdentity, hostOnlineTimeoutMs, clearResultTimer]);
 
   return {
     launchState,
