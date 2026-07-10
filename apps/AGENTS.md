@@ -2,20 +2,22 @@
 
 `apps/` holds every Trevor application, and these rules cover all of them:
 
-- **`apps/web`** - the browser frontend: React 19 + Vite + Effect, a Tether
+- **`apps/web`** - the browser frontend: React 19 + Vite, a Tether
   WebSocket participant.
 - **`apps/agent-host`** - the host: Node + Effect, also a Tether participant,
   running the agent loop (model <-> tools) for each turn.
 
 These layer on the project-wide rules in the repo-root
-[`AGENTS.md`](../AGENTS.md). Each section below states its **scope**: Effect
-applies to every app here; ahooks and TanStack are React-only and apply to the
-frontend (`apps/web`), never to the Node host.
+[`AGENTS.md`](../AGENTS.md). Each section below states its **scope**: the
+Effect adoption policy governs every app here; ahooks and TanStack are
+React-only and apply to the frontend (`apps/web`), never to the Node host.
 
-## Effect - all apps
+## Effect - adoption policy for all apps
 
-Scope: every app under `apps/`. Both `apps/web` and `apps/agent-host` depend on
-the stable v3 `effect` core.
+Scope: every app under `apps/`. Today only `apps/agent-host` has adopted
+Effect (the stable v3 `effect` core). `apps/web` does not depend on Effect:
+its wire decoding rides the Schema codecs owned by `@trevor/session`, which
+collapse to plain types, callbacks, and Promises at the package edge.
 
 Follow the house policy in the `effect-standards` skill: **adopt Effect only
 where it buys a measurable benefit over plain TypeScript** - typed error
@@ -104,9 +106,10 @@ dance.
    for no gain.
 3. **One-shot mount effect with no cleanup and no semantics** - `useMount` is
    fine but not forced for a true one-liner.
-4. **When it fights Effect or React.** Keep the Effect island (Schema decode, WS
-   client) and React boundaries clean; do not wrap Effect-owned lifecycle in an
-   ahooks hook just to use one.
+4. **When it fights the session transport or React.** Keep the
+   `@trevor/session` boundary (Schema decode, WS client) and React boundaries
+   clean; do not wrap transport-owned lifecycle in an ahooks hook just to use
+   one.
 
 ### Scope of refactors
 

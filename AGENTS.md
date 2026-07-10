@@ -1,7 +1,7 @@
 # Trevor - Agent Instructions
 
-Trevor is a pnpm monorepo. The frontend is `apps/web` (React 19 + Vite +
-Effect); the host is `apps/agent-host` (Node + Effect). Both are Tether
+Trevor is a pnpm monorepo. The frontend is `apps/web` (React 19 + Vite); the
+host is `apps/agent-host` (Node + Effect). Both are Tether
 WebSocket participants. Per-directory `AGENTS.md` files (e.g.
 `apps/AGENTS.md`) layer additional rules; the rules below are project-wide.
 
@@ -160,7 +160,7 @@ they belong to.
 **Per-app environment:**
 
 - **`apps/agent-host`** (Effect) - use **`@effect/vitest`**. Drive time-injected
-  machines (`src/lease.ts`, the turn scheduler) with **`TestClock`** instead of
+  machines (`src/session/lease.ts`, the turn scheduler) with **`TestClock`** instead of
   real waits; provide the `Emit` service via a collecting test `Layer`; the
   deterministic **fake provider** stands in for a model in the turn pipeline.
 - **`apps/web`** (React) - component and hook tests run in the **`web`** project
