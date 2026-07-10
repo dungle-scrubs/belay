@@ -31,6 +31,40 @@ export default defineConfig({
     },
   },
   plugins: [react(), tailwindcss()],
+  build: {
+    rolldownOptions: {
+      output: {
+        // Vendor split (Tier 5): stable, independently-cached chunks for the heavy dependency
+        // groups, instead of one monolithic index chunk that re-downloads on every app change.
+        // Which chunks load EAGERLY is decided by the import graph, not by this list - a group only
+        // pins matching modules into one predictably-named chunk. Two families are deliberately
+        // ABSENT and left to automatic chunking: mermaid (its engine already splits itself through
+        // the dynamic import in mermaid-block) and the assistant-ui remark stack (markdown-text-lazy
+        // self-chunks it; a group would also capture its recursive deps - @assistant-ui/react,
+        // zustand - which the entry uses, welding the whole lazy stack into the initial preload set).
+        codeSplitting: {
+          groups: [
+            // Higher priority so react always lands here, even when another group captures it
+            // transitively through includeDependenciesRecursively.
+            {
+              name: "vendor-react",
+              test: /node_modules[\\/](?:react|react-dom|scheduler)[\\/]/,
+              priority: 10,
+            },
+            // The primary (eager) markdown stack: marked + DOMPurify.
+            { name: "vendor-markdown", test: /node_modules[\\/](?:marked|dompurify)[\\/]/ },
+            // Lazy: hljs core + grammars, reached only through the code-highlight facade's dynamic
+            // import.
+            { name: "vendor-highlight", test: /node_modules[\\/]highlight\.js[\\/]/ },
+            // parse-diff is NOT grouped in with `diff`: diff is eager (diff-utils prepares patches
+            // at transcript-render time) while parse-diff is only needed by the lazy DiffViewer -
+            // one shared group would drag parse-diff into the eager preload set.
+            { name: "vendor-diff", test: /node_modules[\\/]diff[\\/]/ },
+          ],
+        },
+      },
+    },
+  },
   server: {
     // Bind IPv4 loopback explicitly. Vite's default host ("localhost") resolves to ::1 (IPv6) only on
     // macOS, so a client hitting 127.0.0.1 (the reserved-port convention in ~/.trevor/PORTS.md, what
