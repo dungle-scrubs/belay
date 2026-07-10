@@ -130,13 +130,6 @@ export function worktreeSummaryFromIdentity(summary: SessionSummary): WorktreeSu
 /** The default number of sessions shown per project before a "Show more" affordance (M6). */
 export const SESSION_CAP = 5;
 
-/** The user-facing note for a project whose folder is gone (plan 58.8) - the SAME phrasing the
- *  launcher puts on a failed launch's reason, so the tooltip, the blocked New-session hint, and the
- *  launch failure all name the situation identically. */
-export function missingProjectNote(path: string): string {
-  return `project folder no longer exists: ${path}`;
-}
-
 export { sessionProjectPath };
 
 /** The last path segment of a canonical path (the project's default display name). Browser-safe: no

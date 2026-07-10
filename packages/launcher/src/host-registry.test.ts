@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { LauncherFs } from "./fs";
+import { fakeLauncherFs } from "../test/fake-fs";
 import {
   acquireLock,
   decideHostAction,
@@ -17,18 +17,6 @@ import {
  * per-session lock that stops two concurrent launches from both spawning. Pure over an in-memory fs.
  */
 
-function fakeFs(): LauncherFs & { files: Map<string, string> } {
-  const files = new Map<string, string>();
-  return {
-    files,
-    readFile: (path) => files.get(path) ?? null,
-    writeFile: (path, content) => void files.set(path, content),
-    exists: (path) => files.has(path),
-    directoryExists: (path) => [...files.keys()].some((k) => k.startsWith(`${path}/`)),
-    remove: (path) => void files.delete(path),
-  };
-}
-
 const record = (over: Partial<HostRecord> = {}): HostRecord => ({
   sessionId: "sess",
   pid: 4242,
@@ -39,7 +27,7 @@ const record = (over: Partial<HostRecord> = {}): HostRecord => ({
 });
 
 test("recordHost / loadHosts / removeHost round-trip", () => {
-  const fs = fakeFs();
+  const fs = fakeLauncherFs();
   recordHost(fs, "/home", record());
   assert.equal(loadHosts(fs, "/home").sess?.pid, 4242);
   removeHost(fs, "/home", "sess");
@@ -63,7 +51,7 @@ test("decideHostAction: spawn (no record), reuse (alive + present), replace-stal
 });
 
 test("reapDeadHosts sweeps only dead-pid records and is a no-op write when all are alive", () => {
-  const fs = fakeFs();
+  const fs = fakeLauncherFs();
   recordHost(fs, "/home", record({ sessionId: "alive-a", pid: 1 }));
   recordHost(fs, "/home", record({ sessionId: "dead-b", pid: 2 }));
   recordHost(fs, "/home", record({ sessionId: "dead-c", pid: 3 }));
@@ -79,7 +67,7 @@ test("reapDeadHosts sweeps only dead-pid records and is a no-op write when all a
 });
 
 test("reapDeadHosts never reaps a live host whose pid was reused (conservative bias)", () => {
-  const fs = fakeFs();
+  const fs = fakeLauncherFs();
   // A dead host whose pid (4242) was since taken by an UNRELATED live process: kill(pid,0) says alive.
   recordHost(fs, "/home", record({ sessionId: "reused", pid: 4242 }));
   const reaped = reapDeadHosts(fs, "/home", () => true);
@@ -89,7 +77,7 @@ test("reapDeadHosts never reaps a live host whose pid was reused (conservative b
 });
 
 test("acquireLock blocks a live concurrent holder, takes over a dead one, and releases cleanly", () => {
-  const fs = fakeFs();
+  const fs = fakeLauncherFs();
   // Launcher A (pid 100) acquires.
   const a = acquireLock(fs, "/home", "sess", { pid: 100, now: "t", processAlive: () => true });
   assert.deepEqual(a, { acquired: true });

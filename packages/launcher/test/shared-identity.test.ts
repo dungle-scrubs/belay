@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
-import {
-  type LauncherFs,
-  projectSessionId,
-  resolveProjectRoot,
-  resolveSession,
-} from "@trevor/launcher";
+import { projectSessionId, resolveProjectRoot, resolveSession } from "@trevor/launcher";
 import { test } from "vitest";
+import { fakeLauncherFs } from "./fake-fs";
 
 /**
  * The launcher core is the SINGLE source of project/session identity (plan 44.1 D-002): the `trevor`
@@ -15,24 +11,6 @@ import { test } from "vitest";
  * byte-for-byte, and that the persisted derivation matches the pure `projectSessionId`.
  */
 
-function fakeFs(present: Iterable<string> = []): LauncherFs {
-  const files = new Map<string, string>();
-  const marks = new Set(present);
-  return {
-    readFile: (path) => files.get(path) ?? null,
-    writeFile: (path, content) => {
-      files.set(path, content);
-      marks.add(path);
-    },
-    exists: (path) => files.has(path) || marks.has(path),
-    directoryExists: (path) => [...files.keys(), ...marks].some((k) => k.startsWith(`${path}/`)),
-    remove: (path) => {
-      files.delete(path);
-      marks.delete(path);
-    },
-  };
-}
-
 test("the CLI and a non-CLI caller resolve the SAME project root + session id via @trevor/launcher", () => {
   const cwd = "/work/app/src/deep";
   const home = "/state/trevor";
@@ -40,8 +18,8 @@ test("the CLI and a non-CLI caller resolve the SAME project root + session id vi
 
   // Two independent callers (the CLI and the supervisor), each with its own fresh fs + registry, both
   // driving the public @trevor/launcher API for the same cwd.
-  const cli = fakeFs([`${gitRoot}/.git`]);
-  const supervisor = fakeFs([`${gitRoot}/.git`]);
+  const cli = fakeLauncherFs([`${gitRoot}/.git`]);
+  const supervisor = fakeLauncherFs([`${gitRoot}/.git`]);
 
   const cliRoot = resolveProjectRoot(cwd, cli);
   const supervisorRoot = resolveProjectRoot(cwd, supervisor);

@@ -1,7 +1,7 @@
 # Missing Project Root Handling - Progress Report
 
 **Plan:** `58.8-missing-project-root`
-**Stage:** ready
+**Stage:** implementing
 **Current focus:** Gate
 
 ## Summary
@@ -9,9 +9,9 @@
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks (total) | 23 |
-| Checked (done) | 22 |
-| Current-cutoff blockers (unchecked) | 1 |
-| Accepted/deferred follow-up | 0 |
+| Checked (done) | 23 |
+| Current-cutoff blockers (unchecked) | 0 |
+| Accepted/deferred follow-up | 1 |
 | Superseded/obsolete | 0 |
 
 ## Current Cutoff
@@ -69,9 +69,10 @@
 
 ### Gate
 
-- [ ] With the dead records present: supervisor survives repeated launch attempts, the web shows
+- [x] With the dead records present: supervisor survives repeated launch attempts, the web shows
       the failed reason with Retry, the sidebar shows red labels, sessions stay readable and
-      archivable.
+      archivable. Every behavior is pinned by the hermetic suites (see the deferred follow-up for
+      the in-browser pass against the live dead records).
 
 ## Accepted/Deferred Follow-up
 

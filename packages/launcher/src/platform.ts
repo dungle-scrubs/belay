@@ -207,21 +207,20 @@ export function buildHostSpawnCommand(opts: {
 }
 
 /**
- * Settles once the child either spawns or fails to: resolves on the `spawn` event, rejects with a
- * typed `spawn-failed` LaunchError on the `error` event. Without this, spawn's asynchronous error
- * (e.g. ENOENT for a root deleted between the launch pre-check and the spawn) is an UNCAUGHT event
- * that kills the whole calling process - the supervisor crash plan 58.8 removes. A permanent no-op
- * `error` listener stays attached so a late error can never crash the process either.
+ * Settles once the child either spawns or fails to: resolves with the child's pid on the `spawn`
+ * event (the one place Node guarantees it is assigned), rejects with a typed `spawn-failed`
+ * LaunchError on the `error` event. Without this, spawn's asynchronous error (e.g. ENOENT for a
+ * root deleted between the launch pre-check and the spawn) is an UNCAUGHT event that kills the
+ * whole calling process - the supervisor crash plan 58.8 removes. The `error` listener stays
+ * attached for the child's lifetime (rejecting a settled promise is a no-op), so a late error can
+ * never crash the process either.
  */
-export function awaitSpawned(child: ChildProcess, root: string): Promise<void> {
-  return new Promise<void>((resolve, reject) => {
-    child.on("error", () => {
-      // Permanent guard: keeps any error event (including post-settle ones) handled.
-    });
-    child.once("spawn", resolve);
-    child.once("error", (error: Error) => {
+export function awaitSpawned(child: ChildProcess, root: string): Promise<number> {
+  return new Promise<number>((resolve, reject) => {
+    child.on("error", (error: Error) => {
       reject(new LaunchError("spawn-failed", root, `failed to start agent host: ${error.message}`));
     });
+    child.once("spawn", () => resolve(child.pid ?? -1));
   });
 }
 
@@ -268,9 +267,9 @@ async function spawnHost(opts: {
   });
   // Wait for the spawn/error verdict BEFORE handing the pid back: a failed spawn rejects (so the
   // caller records no host and surfaces the failure) instead of returning the pid:-1 ghost.
-  await awaitSpawned(child, opts.root);
+  const pid = await awaitSpawned(child, opts.root);
   child.unref();
-  return { pid: child.pid ?? -1, command: `${command.command} (SESSION_ID=${opts.sessionId})` };
+  return { pid, command: `${command.command} (SESSION_ID=${opts.sessionId})` };
 }
 
 async function openBrowser(url: string): Promise<void> {

@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { stat } from "node:fs/promises";
 import { dirname } from "node:path";
 
 /**
@@ -51,6 +52,21 @@ export const nodeFs: LauncherFs = {
     }
   },
 };
+
+/**
+ * The async form of {@link LauncherFs.directoryExists} - the SAME "does this project root still
+ * exist" semantics, off the event loop - for long-lived callers (the supervisor's `projects.list`
+ * marking, plan 58.8). A stat against a stale network mount or detached volume can hang for
+ * seconds; the sync form would freeze every dispatch behind it, so the daemon stats through the
+ * threadpool instead. Short-lived CLI callers keep the sync form.
+ */
+export async function directoryExistsAsync(path: string): Promise<boolean> {
+  try {
+    return (await stat(path)).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 /** Parses JSON from a file, returning a fallback for missing/malformed content (never throws). */
 export function readJson<T>(fs: LauncherFs, path: string, fallback: T): T {

@@ -1,4 +1,5 @@
 import {
+  missingProjectRootReason,
   relativeTime,
   type SessionActivity,
   type SessionSummary,
@@ -20,7 +21,7 @@ import { type KeyboardEvent as ReactKeyboardEvent, useEffect, useRef, useState }
 import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 import { ProjectLabel } from "./project-label";
-import { missingProjectNote, type ProjectGroup, SESSION_CAP } from "./project-sidebar-model";
+import { type ProjectGroup, SESSION_CAP } from "./project-sidebar-model";
 import { WorktreeBadge } from "./worktree-badge";
 
 /**
@@ -89,6 +90,13 @@ export type { ProjectGroup, ProjectSidebarRecord } from "./project-sidebar-model
  * Presentational components never call this; the live owner does, then passes the result in.
  */
 export { buildProjectSidebar } from "./project-sidebar-model";
+
+/** The blocked-New-session note for a group, derived ONCE for every render site (hover + button,
+ *  context menu, empty state): the protocol's missing-root wording, or undefined when the folder
+ *  is present. Pure. */
+function missingNoteFor(group: ProjectGroup): string | undefined {
+  return group.missing ? missingProjectRootReason(group.displayPath) : undefined;
+}
 
 /** The activity a row renders: the live override when present, else the durable activity. Pure. */
 function effectiveActivity(
@@ -687,7 +695,7 @@ function ProjectRow({
                 type="button"
                 aria-label="New session"
                 disabled={group.missing}
-                title={group.missing ? missingProjectNote(group.displayPath) : undefined}
+                title={missingNoteFor(group)}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (!group.missing) {
@@ -697,7 +705,7 @@ function ProjectRow({
                 className={cn(
                   "rounded p-0.5",
                   group.missing
-                    ? "cursor-not-allowed text-muted-foreground/30"
+                    ? "cursor-not-allowed text-muted-foreground/40"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -743,7 +751,7 @@ function ProjectRow({
       {menuOpen ? (
         <ProjectContextMenu
           hasActive={hasActive}
-          missingNote={group.missing ? missingProjectNote(group.displayPath) : undefined}
+          missingNote={missingNoteFor(group)}
           onNewSession={onNewSession ? () => onNewSession(group.key) : undefined}
           onRename={onStartRename}
           onRemove={() => onRemoveProject?.(group.key)}
@@ -920,9 +928,7 @@ export function ProjectSidebar({
                       {group.sessions.length === 0 ? (
                         <EmptyProjectState
                           projectKey={group.key}
-                          missingNote={
-                            group.missing ? missingProjectNote(group.displayPath) : undefined
-                          }
+                          missingNote={missingNoteFor(group)}
                           onNewSession={onNewSession}
                         />
                       ) : (

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import type { LauncherFs } from "./fs";
+import { fakeLauncherFs } from "../test/fake-fs";
 import { loadProjectMap, resolveProjectRoot, resolveSession } from "./project";
 
 /**
@@ -8,36 +8,16 @@ import { loadProjectMap, resolveProjectRoot, resolveSession } from "./project";
  * persisted root→session mapping. Driven through an in-memory fake fs - no real disk.
  */
 
-/** An in-memory LauncherFs; `dirs` pre-marks paths that `exists` should report (e.g. `.git` markers). */
-function fakeFs(dirs: Iterable<string> = []): LauncherFs & { files: Map<string, string> } {
-  const files = new Map<string, string>();
-  const present = new Set(dirs);
-  return {
-    files,
-    readFile: (path) => files.get(path) ?? null,
-    writeFile: (path, content) => {
-      files.set(path, content);
-      present.add(path);
-    },
-    exists: (path) => files.has(path) || present.has(path),
-    directoryExists: (path) => [...files.keys(), ...present].some((k) => k.startsWith(`${path}/`)),
-    remove: (path) => {
-      files.delete(path);
-      present.delete(path);
-    },
-  };
-}
-
 test("resolveProjectRoot walks up to the nearest .git, else falls back to cwd", () => {
-  const fs = fakeFs(["/a/b/.git"]);
+  const fs = fakeLauncherFs(["/a/b/.git"]);
   assert.equal(resolveProjectRoot("/a/b/c/d", fs), "/a/b");
   assert.equal(resolveProjectRoot("/a/b", fs), "/a/b");
   // No .git anywhere above: use cwd.
-  assert.equal(resolveProjectRoot("/x/y/z", fakeFs()), "/x/y/z");
+  assert.equal(resolveProjectRoot("/x/y/z", fakeLauncherFs()), "/x/y/z");
 });
 
 test("resolveSession derives a stable URL-safe id and persists the mapping", () => {
-  const fs = fakeFs();
+  const fs = fakeLauncherFs();
   const id = resolveSession(fs, "/home/.trevor", "/Users/kevin/dev/trevor", "2026-06-26T00:00:00Z");
   assert.match(id, /^[a-z0-9-]+$/);
   assert.equal(id.includes("/"), false);
@@ -55,7 +35,7 @@ test("resolveSession derives a stable URL-safe id and persists the mapping", () 
 });
 
 test("distinct project roots get distinct persisted sessions", () => {
-  const fs = fakeFs();
+  const fs = fakeLauncherFs();
   const a = resolveSession(fs, "/home/.trevor", "/work/app-a", "t");
   const b = resolveSession(fs, "/home/.trevor", "/work/app-b", "t");
   assert.notEqual(a, b);
@@ -64,7 +44,7 @@ test("distinct project roots get distinct persisted sessions", () => {
 });
 
 test("a malformed projects.json reads as an empty map (never throws)", () => {
-  const fs = fakeFs();
+  const fs = fakeLauncherFs();
   fs.writeFile("/home/.trevor/projects.json", "not json{");
   assert.deepEqual(loadProjectMap(fs, "/home/.trevor"), {});
 });

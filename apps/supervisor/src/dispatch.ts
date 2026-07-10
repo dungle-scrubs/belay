@@ -68,10 +68,11 @@ export interface SupervisorDeps {
     }[];
   };
   /** Whether a project root still exists on disk (plan 58.8). Wired to the launcher's
-   *  `nodeFs.directoryExists` - the SAME check the launch missing-root gate uses - so the list's
-   *  `missing` marking and the launch failure can never disagree. When absent, records are
-   *  reported unmarked (legacy wiring). */
-  readonly rootExists?: (path: string) => boolean;
+   *  directory-existence check - the SAME semantics the launch missing-root gate uses - so the
+   *  list's `missing` marking and the launch failure can never disagree. Async so a hung stat (a
+   *  stale network mount) never blocks the dispatch loop. When absent, records are reported
+   *  unmarked (legacy wiring). */
+  readonly rootExists?: (path: string) => boolean | Promise<boolean>;
   /** ISO timestamp source for registry `updatedAt` stamps. */
   readonly now?: () => string;
   /** This supervisor's producer id, so it never acts on its own echoed results (self-echo suppression). */
@@ -192,7 +193,10 @@ async function handleProjectsList(requestId: string, deps: SupervisorDeps): Prom
       }))
     : deps.listProjects();
   const rootExists = deps.rootExists;
-  const projects = rootExists ? base.map((p) => ({ ...p, missing: !rootExists(p.root) })) : base;
+  // Stats run in parallel: one slow root (a hung mount) delays only this response, not N-fold.
+  const projects = rootExists
+    ? await Promise.all(base.map(async (p) => ({ ...p, missing: !(await rootExists(p.root)) })))
+    : base;
   deps.log?.("projects list", { requestId, count: projects.length });
   await deps.emit(events.projectsListResult({ requestId, projects }));
 }

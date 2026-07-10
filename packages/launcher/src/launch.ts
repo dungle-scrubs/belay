@@ -1,3 +1,4 @@
+import { missingProjectRootReason } from "@trevor/session";
 import {
   NOOP_SINK,
   redactAttributeValue,
@@ -68,9 +69,10 @@ export function isLaunchError(error: unknown): error is LaunchError {
   return error instanceof LaunchError;
 }
 
-/** The missing-root failure, with the message the user ultimately sees (launch UI, resume row). */
+/** The missing-root failure, with the message the user ultimately sees (launch UI, resume row) -
+ *  worded by the protocol's single source so the sidebar copy can never drift from this reason. */
 export function missingRootError(root: string): LaunchError {
-  return new LaunchError("missing-root", root, `project folder no longer exists: ${root}`);
+  return new LaunchError("missing-root", root, missingProjectRootReason(root));
 }
 
 /** Live progress sink the orchestrator drives through each phase (a spinner in the real CLI, a no-op

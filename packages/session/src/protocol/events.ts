@@ -447,6 +447,16 @@ export type SessionLaunchStatus = (typeof SESSION_LAUNCH_STATUSES)[number];
  *  already-live one (`reused`). Shared so the launcher runner and the dispatcher can't drift. */
 export type SessionLaunchOkStatus = Exclude<SessionLaunchStatus, "failed">;
 
+/**
+ * The canonical wording for a launch target whose project folder is gone (plan 58.8). ONE source for
+ * every surface that names the situation - the launcher's typed missing-root error (whose message
+ * rides `session.launch.result.error`), the sidebar's dead-path treatment, and the blocked
+ * New-session hint - so the wire reason and the UI copy can never drift apart.
+ */
+export function missingProjectRootReason(path: string): string {
+  return `project folder no longer exists: ${path}`;
+}
+
 /** One recent project the supervisor reports in `projects.list.result` (plan 44.1): the canonical
  *  root, its derived session id, and when the launcher last touched the mapping. */
 export interface SupervisorProject {

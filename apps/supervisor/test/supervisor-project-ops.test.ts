@@ -123,7 +123,7 @@ function subscribe(deps: SupervisorDeps): Promise<void> {
   });
 }
 
-/** Awaits the first project-op result matching `requestId`. */
+/** Awaits the first project-op / projects-list result matching `requestId`. */
 function awaitResult(requestId: string) {
   return transport.awaitEvent(
     SUPERVISOR_SESSION_ID,
@@ -131,7 +131,7 @@ function awaitResult(requestId: string) {
     (event) => {
       const decoded = decodeTrevorEvent(event);
       if (!decoded) return false;
-      if (!decoded.type.startsWith("project.") || !decoded.type.endsWith(".result")) return false;
+      if (!decoded.type.startsWith("project") || !decoded.type.endsWith(".result")) return false;
       return "requestId" in decoded && decoded.requestId === requestId;
     },
     { timeoutMs: 5000 },
@@ -283,20 +283,6 @@ test("project.remove.requested publishes result with removed: true", async () =>
   });
 });
 
-/** Awaits the first `projects.list.result` matching `requestId` (the project-op filter above only
- *  matches `project.*.result`). */
-function awaitListResult(requestId: string) {
-  return transport.awaitEvent(
-    SUPERVISOR_SESSION_ID,
-    viewerIdentity({ displayName: "reader", instanceId: "reader-2", participantId: "reader-2" }),
-    (event) => {
-      const decoded = decodeTrevorEvent(event);
-      return decoded?.type === "projects.list.result" && decoded.requestId === requestId;
-    },
-    { timeoutMs: 5000 },
-  );
-}
-
 test("projects.list.result marks dead-path records missing (live ones not) without removing any record", async () => {
   const record = (path: string, updatedAt: string): FakeRecord => ({
     path,
@@ -321,7 +307,7 @@ test("projects.list.result marks dead-path records missing (live ones not) witho
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitListResult("pl-1")) ?? throwUnresolved());
+  const decoded = decodeTrevorEvent((await awaitResult("pl-1")) ?? throwUnresolved());
   assert.equal(decoded?.type, "projects.list.result");
   if (decoded?.type === "projects.list.result") {
     assert.deepEqual(

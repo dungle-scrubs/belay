@@ -1,14 +1,11 @@
 import { fireEvent, render } from "@testing-library/react";
+import { missingProjectRootReason } from "@trevor/session";
 import { sessionSummary } from "@trevor/test-kit";
 import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ProjectSidebar } from "./project-sidebar";
-import {
-  buildProjectSidebar,
-  missingProjectNote,
-  type ProjectSidebarRecord,
-} from "./project-sidebar-model";
+import { buildProjectSidebar, type ProjectSidebarRecord } from "./project-sidebar-model";
 
 /**
  * Plan 58.8 M4: the sidebar's missing-project treatment. A registry record the supervisor marked
@@ -87,7 +84,7 @@ describe("missing-project sidebar treatment", () => {
     );
     const btn = getByLabelText("New session") as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
-    expect(btn.title).toBe(missingProjectNote(DEAD));
+    expect(btn.title).toBe(missingProjectRootReason(DEAD));
     fireEvent.click(btn);
     expect(onNewSession).not.toHaveBeenCalled();
   });
@@ -112,7 +109,7 @@ describe("missing-project sidebar treatment", () => {
     );
     const newSession = getByText("New session").closest("button") as HTMLButtonElement;
     expect(newSession.disabled).toBe(true);
-    expect(newSession.title).toBe(missingProjectNote(DEAD));
+    expect(newSession.title).toBe(missingProjectRootReason(DEAD));
     fireEvent.click(newSession);
     expect(onNewSession).not.toHaveBeenCalled();
 
@@ -132,7 +129,7 @@ describe("missing-project sidebar treatment", () => {
         onNewSession={() => {}}
       />,
     );
-    expect(getByText(missingProjectNote(DEAD))).toBeTruthy();
+    expect(getByText(missingProjectRootReason(DEAD))).toBeTruthy();
     expect(queryByText("New session")).toBeNull();
   });
 

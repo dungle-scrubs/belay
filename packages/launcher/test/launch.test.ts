@@ -15,6 +15,7 @@ import {
 import { resolveSession } from "../src/project";
 import { loadProjectRegistry } from "../src/project-registry";
 import { RESERVED_PORTS, type ServiceName, type ServiceProbe } from "../src/services";
+import { fakeLauncherFs } from "./fake-fs";
 
 /**
  * The launcher orchestration end-to-end against a FAKE platform (no real services, processes, or
@@ -23,20 +24,6 @@ import { RESERVED_PORTS, type ServiceName, type ServiceProbe } from "../src/serv
  * re-spawning, defers to a concurrent lock holder, and prints a secret-free status line. This is the
  * "boots fake services" integration lane from the plan, hermetic and deterministic.
  */
-
-function fakeFs(): LauncherFs & { files: Map<string, string> } {
-  const files = new Map<string, string>();
-  return {
-    files,
-    readFile: (path) => files.get(path) ?? null,
-    writeFile: (path, content) => void files.set(path, content),
-    exists: (path) => files.has(path),
-    // A directory "exists" when any stored file lies under it (e.g. seeding `/work/app/.git` makes
-    // the `/work/app` root present), mirroring how the tests seed project roots.
-    directoryExists: (path) => [...files.keys()].some((k) => k.startsWith(`${path}/`)),
-    remove: (path) => void files.delete(path),
-  };
-}
 
 interface FakeOpts {
   fs?: LauncherFs;
@@ -59,7 +46,7 @@ interface Spy {
 }
 
 function makePlatform(opts: FakeOpts = {}): Spy {
-  const fs = opts.fs ?? fakeFs();
+  const fs = opts.fs ?? fakeLauncherFs();
   // Mark the git root present so resolveProjectRoot finds it.
   if (opts.gitRoot) {
     fs.writeFile(`${opts.gitRoot}/.git`, "");
@@ -251,7 +238,7 @@ test("--debug threads the debug flag through to the spawned host", async () => {
 });
 
 test("a healthy recorded host is reused, not re-spawned", async () => {
-  const fs = fakeFs();
+  const fs = fakeLauncherFs();
   fs.writeFile("/work/app/.git", "");
   const sessionId = resolveSession(fs, "/home/.trevor", "/work/app", "t");
   recordHost(fs, "/home/.trevor", {
