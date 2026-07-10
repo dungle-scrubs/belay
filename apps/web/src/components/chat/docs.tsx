@@ -2,6 +2,7 @@ import { ArrowUpRight } from "lucide-react";
 import { toolActionLabelForTarget } from "@/action-label";
 import { fmtBytes } from "@/derive";
 import { MarkdownBody } from "./markdown-body";
+import { prettyUrl, SourceUrl } from "./source";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
 
@@ -119,17 +120,6 @@ export function parseDocsResult(raw: string | undefined): ParsedDocs | null {
   return { error: raw };
 }
 
-/** Hostname + path, www-stripped, for the subdued link line - matches web_fetch/web_search. */
-function prettyUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    const path = u.pathname === "/" ? "" : u.pathname;
-    return `${u.hostname.replace(/^www\./u, "")}${path}${u.search}`;
-  } catch {
-    return url;
-  }
-}
-
 /** A title link styled like web_search/web_fetch source rows, with the hover affordance arrow. */
 function SourceLink({ href, label }: { href: string; label: string }) {
   return (
@@ -184,9 +174,7 @@ function CorpusHeader({ corpus }: { corpus: DocsCorpus }) {
         <span className="text-sm font-medium text-foreground">{corpus.subject ?? "Corpus"}</span>
       )}
       <div className="flex items-baseline gap-2">
-        {root ? (
-          <span className="truncate text-xs text-smui-frost-3/80">{prettyUrl(root)}</span>
-        ) : null}
+        {root ? <SourceUrl url={root} /> : null}
         {corpusMeta(corpus) ? (
           <span className="text-label tracking-wider text-muted-foreground/70">
             {corpusMeta(corpus)}
@@ -236,9 +224,7 @@ function CorpusRow({ corpus }: { corpus: DocsCorpus }) {
         <StateBadges stale={corpus.stale} partial={corpus.partial} />
       </div>
       <div className="flex items-baseline gap-2">
-        {root ? (
-          <span className="truncate text-xs text-smui-frost-3/80">{prettyUrl(root)}</span>
-        ) : null}
+        {root ? <SourceUrl url={root} /> : null}
         {corpusMeta(corpus) ? (
           <span className="text-label tracking-wider text-muted-foreground/70">
             {corpusMeta(corpus)}

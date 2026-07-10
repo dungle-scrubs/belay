@@ -58,6 +58,7 @@ import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-tr
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { createLocalAdmissionGate } from "./admission/service";
 import { nodeAdmissionCaps } from "./admission/store";
+import { makeAutoTitler } from "./agent/auto-title";
 import { makeCompactionCommands } from "./agent/compaction-commands";
 import { makeControlPrompts } from "./agent/control-prompts";
 import type { BackgroundChildInfo } from "./agent/delegate";
@@ -507,6 +508,17 @@ needsCompaction = compactionCommands.needsCompaction;
 startCompaction = compactionCommands.startCompaction;
 manualCompactFiber = compactionCommands.manualCompactFiber;
 const { forceCompact } = compactionCommands;
+
+// Session auto-titling (plan 58.6.4 A13): an un-renamed session earns one generated title on its
+// first real assistant turn. Reuses the compaction provider seam + the durable log; the job's echo
+// lands a `session.title` the inventory already yields to a manual rename.
+const { maybeAutoTitle } = makeAutoTitler({
+  emit,
+  compactionController,
+  conversationLog,
+  live: () => live,
+  lease,
+});
 
 // The host-issued control prompts + continuation lane (plan 22.3, agent/control-prompts): the
 // control/clip prompt shapes, the continue/retry/compress flows, the /clip lane, and the bounded
@@ -1020,6 +1032,12 @@ function handleEvent(message: SessionEvent): void {
     // in the log when this host took over - is caught by goLive/onBecomeLeader instead.
     if (live && lease.isLeader()) {
       maybeAutoResume();
+      // Auto-title an un-renamed session off its first real assistant turn (A13). Gated on a
+      // non-empty completion so an errored/blank turn never titles; the titler's own gate + guard
+      // make it fire at most once, and it yields to any manual rename.
+      if (decoded.text.trim()) {
+        maybeAutoTitle();
+      }
     }
   } else if (decoded.type === "context.compacted") {
     // A fold landed (our own echo, or the leader's on a standby): admit it so the projection

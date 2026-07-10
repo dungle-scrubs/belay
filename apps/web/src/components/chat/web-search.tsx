@@ -1,5 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { toolActionLabelForTarget } from "@/action-label";
+import { SourceUrl } from "./source";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
 
@@ -33,17 +34,6 @@ interface WebSearchResultsProps {
   className?: string;
   /** Ms epoch of the tool's start; feeds the running row's live elapsed clock (58.6.1 M2). */
   startedAt?: number;
-}
-
-/** Hostname + path, www-stripped, for the subdued link line under each title. */
-function prettyUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    const path = u.pathname === "/" ? "" : u.pathname;
-    return `${u.hostname.replace(/^www\./u, "")}${path}${u.search}`;
-  } catch {
-    return url;
-  }
 }
 
 /**
@@ -97,7 +87,7 @@ export function WebSearchResults({
                 </span>
               ) : null}
             </div>
-            <span className="truncate text-xs text-smui-frost-3/80">{prettyUrl(item.url)}</span>
+            <SourceUrl url={item.url} />
             <p className="text-sm text-muted-foreground">{item.snippet}</p>
           </li>
         ))}

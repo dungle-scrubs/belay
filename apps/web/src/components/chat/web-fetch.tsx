@@ -1,6 +1,7 @@
 import { ArrowUpRight } from "lucide-react";
 import { toolActionLabelForTarget } from "@/action-label";
 import { MarkdownBody } from "./markdown-body";
+import { SourceUrl } from "./source";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
 
@@ -67,17 +68,6 @@ export function parseWebFetchResult(raw: string | undefined): ParsedWebFetch | n
   return { error: raw };
 }
 
-/** Hostname + path, www-stripped, for the subdued link line - matches web_search's `prettyUrl`. */
-function prettyUrl(url: string): string {
-  try {
-    const u = new URL(url);
-    const path = u.pathname === "/" ? "" : u.pathname;
-    return `${u.hostname.replace(/^www\./u, "")}${path}${u.search}`;
-  } catch {
-    return url;
-  }
-}
-
 /** The compact `backend · N attempts · truncated` footer summarizing the ladder for this fetch. */
 function footer(parsed: ParsedWebFetch): string {
   const attempts = parsed.attempts ?? [];
@@ -136,7 +126,7 @@ export function WebFetchResult({
           <ArrowUpRight className="size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
         </a>
       ) : null}
-      <span className="truncate text-xs text-smui-frost-3/80">{prettyUrl(linkUrl)}</span>
+      <SourceUrl url={linkUrl} />
       {content ? (
         <MarkdownBody text={content} muted />
       ) : (
