@@ -13,7 +13,7 @@ import {
 import { cva, type VariantProps } from "class-variance-authority";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import { type ReasoningMessagePartComponent } from "@assistant-ui/react";
-import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { MarkdownText } from "@/components/assistant-ui/markdown-text-lazy";
 import {
   Collapsible,
   CollapsibleContent,

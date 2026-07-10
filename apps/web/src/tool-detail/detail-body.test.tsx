@@ -48,7 +48,7 @@ test("read shows the path + range and opens the file in the editor", () => {
   assert.deepEqual(onOpenPath.mock.calls, [["apps/web/src/app.tsx"]]);
 });
 
-test("write shows the file and its contents as a diff", () => {
+test("write shows the file and its contents as a diff", async () => {
   render(
     <DetailBody
       model={model({
@@ -58,7 +58,8 @@ test("write shows the file and its contents as a diff", () => {
     />,
   );
   assert.ok(screen.getAllByText("new.ts").length >= 1);
-  assert.ok(screen.getByText(/export const x = 1;/));
+  // The diff body arrives asynchronously: DiffViewer is a lazy chunk (Tier 5.2).
+  assert.ok(await screen.findByText(/export const x = 1;/));
 });
 
 test("edit shows the file and the change", () => {

@@ -1,6 +1,7 @@
+import { useCreation } from "ahooks";
 import type { ReactNode } from "react";
-import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
-import { countChanges, DiffStat, generateToolDiff } from "./diff-utils";
+import { DiffViewer } from "@/components/assistant-ui/diff-viewer-lazy";
+import { DiffStat, generateToolDiff, type ToolDiff } from "./diff-utils";
 import { OpenPathLink } from "./message";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import { ToolSection } from "./tool-section";
@@ -10,6 +11,15 @@ export interface MultiEdit {
   path: string;
   old: string;
   new: string;
+}
+
+/** One file's edits with their diffs prepared and the file's summed +/- counts. */
+interface PreparedGroup {
+  path: string;
+  /** One prepared diff per edit (patch + counts together), in original edit order. */
+  prepared: ({ edit: MultiEdit } & ToolDiff)[];
+  added: number;
+  removed: number;
 }
 
 interface MultiEditDiffProps {
@@ -44,43 +54,46 @@ export function MultiEditDiff({
   // A file name: a click-to-open link when `onOpenPath` is wired, else plain text.
   const fileName = (path: string): ReactNode =>
     onOpenPath ? <OpenPathLink onOpen={() => onOpenPath(path)}>{path}</OpenPathLink> : path;
-  // Group by file, preserving first-seen order.
-  const groups: { path: string; edits: MultiEdit[] }[] = [];
-  for (const edit of edits) {
-    const group = groups.find((g) => g.path === edit.path);
-    if (group) {
-      group.edits.push(edit);
-    } else {
-      groups.push({ path: edit.path, edits: [edit] });
+  // Every diff runs diffLines over its edit's texts, so all the diff prep - grouping by
+  // file (first-seen order), one prepared diff per edit (patch + counts together, the
+  // same single patch-prep path as single edit/write), and the per-file/total +/- sums -
+  // is cached on the edits themselves: a parent re-render never re-diffs. The transcript
+  // projector keeps an untouched row's `edits` identity stable across streaming deltas.
+  const { groups, summary } = useCreation(() => {
+    const grouped: PreparedGroup[] = [];
+    for (const edit of edits) {
+      const prepared = { edit, ...generateToolDiff(edit.path, edit.old, edit.new, 2) };
+      const group = grouped.find((g) => g.path === edit.path);
+      if (group) {
+        group.prepared.push(prepared);
+        group.added += prepared.added;
+        group.removed += prepared.removed;
+      } else {
+        grouped.push({
+          path: edit.path,
+          prepared: [prepared],
+          added: prepared.added,
+          removed: prepared.removed,
+        });
+      }
     }
-  }
 
-  let totalAdded = 0;
-  let totalRemoved = 0;
-  for (const edit of edits) {
-    const { added, removed } = countChanges(edit.old, edit.new);
-    totalAdded += added;
-    totalRemoved += removed;
-  }
-
-  const summary = `${edits.length} edit${edits.length === 1 ? "" : "s"} · ${groups.length} file${
-    groups.length === 1 ? "" : "s"
-  } · +${totalAdded} -${totalRemoved}`;
+    const totalAdded = grouped.reduce((sum, g) => sum + g.added, 0);
+    const totalRemoved = grouped.reduce((sum, g) => sum + g.removed, 0);
+    return {
+      groups: grouped,
+      summary: `${edits.length} edit${edits.length === 1 ? "" : "s"} · ${grouped.length} file${
+        grouped.length === 1 ? "" : "s"
+      } · +${totalAdded} -${totalRemoved}`,
+    };
+  }, [edits]);
 
   // multi_edit boxes per file internally (`border` drives each group), so the outer row never wraps
   // the body in its own ToolSection (border stays false) - the body is the same flat children.
   const body = (
     <div className="flex flex-col gap-2">
       {groups.map((group) => {
-        // One prepared diff per edit (patch + counts together), the same single patch-prep path as
-        // single edit/write; the group's +/- stat sums them.
-        const prepared = group.edits.map((edit) => ({
-          edit,
-          ...generateToolDiff(group.path, edit.old, edit.new, 2),
-        }));
-        const added = prepared.reduce((sum, p) => sum + p.added, 0);
-        const removed = prepared.reduce((sum, p) => sum + p.removed, 0);
-        const diffs = prepared.map((p) => (
+        const diffs = group.prepared.map((p) => (
           <DiffViewer
             key={`${group.path}::${p.edit.old}`}
             patch={p.patch}
@@ -94,7 +107,7 @@ export function MultiEditDiff({
             <ToolSection
               key={group.path}
               title={<code>{fileName(group.path)}</code>}
-              meta={<DiffStat added={added} removed={removed} />}
+              meta={<DiffStat added={group.added} removed={group.removed} />}
             >
               {diffs}
             </ToolSection>
@@ -108,7 +121,7 @@ export function MultiEditDiff({
                 {fileName(group.path)}
               </code>
               <span className="shrink-0 text-label tracking-wider">
-                <DiffStat added={added} removed={removed} />
+                <DiffStat added={group.added} removed={group.removed} />
               </span>
             </div>
             {diffs}
