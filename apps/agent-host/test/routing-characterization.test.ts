@@ -147,8 +147,13 @@ function handleEventBody(): string {
 }
 
 test("the characterized protocol snapshot matches decodeTrevorEvent's actual event kinds", () => {
+  // Each decodable kind appears exactly once, as its wireEvent("...") spec name (the
+  // single-source table that replaced the hand-written union + switch). Same character
+  // class as before: camelCase legacy kinds stay outside this characterization.
   const actual = new Set(
-    [...PROTOCOL_DECODE.matchAll(/type: "([a-z][a-z.-]*[a-z])"/g)].map((m) => m[1] as string),
+    [...PROTOCOL_DECODE.matchAll(/wireEvent\(\s*"([a-z][a-z.-]*[a-z])"/g)].map(
+      (m) => m[1] as string,
+    ),
   );
   const characterized = new Set([...ROUTED, ...UNROUTED]);
 
