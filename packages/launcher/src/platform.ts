@@ -1,5 +1,5 @@
 import { type ChildProcess, execFile, spawn } from "node:child_process";
-import { existsSync, mkdirSync, openSync } from "node:fs";
+import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -267,9 +267,22 @@ async function spawnHost(opts: {
   });
   // Wait for the spawn/error verdict BEFORE handing the pid back: a failed spawn rejects (so the
   // caller records no host and surfaces the failure) instead of returning the pid:-1 ghost.
-  const pid = await awaitSpawned(child, opts.root);
-  child.unref();
-  return { pid, command: `${command.command} (SESSION_ID=${opts.sessionId})` };
+  try {
+    const pid = await awaitSpawned(child, opts.root);
+    child.unref();
+    return { pid, command: `${command.command} (SESSION_ID=${opts.sessionId})` };
+  } finally {
+    // Close the parent's copy of the log fd either way: on spawn the child holds its own duplicated
+    // descriptor, and on failure nothing ever will - in a long-lived caller (the supervisor, which
+    // now survives failed spawns) the open copies would otherwise accumulate per launch.
+    if (out !== "ignore") {
+      try {
+        closeSync(out);
+      } catch {
+        // Already closed / invalid: nothing to release.
+      }
+    }
+  }
 }
 
 async function openBrowser(url: string): Promise<void> {
