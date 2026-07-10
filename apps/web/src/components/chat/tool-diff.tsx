@@ -1,4 +1,5 @@
-import { DiffViewer } from "@/components/assistant-ui/diff-viewer";
+import { useCreation } from "ahooks";
+import { DiffViewer } from "@/components/assistant-ui/diff-viewer-lazy";
 import { DiffStat, generateToolDiff } from "./diff-utils";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";
 import type { ToolStatus } from "./tool-status";
@@ -40,7 +41,12 @@ export function ToolDiff({
   className,
   onOpenPath,
 }: ToolDiffProps) {
-  const { patch, added, removed } = generateToolDiff(path, oldText, newText, 3);
+  // Diffing runs diffLines over both texts, so cache the prepared patch + counts on the
+  // actual content: a parent re-render (streaming deltas elsewhere) never re-diffs.
+  const { patch, added, removed } = useCreation(
+    () => generateToolDiff(path, oldText, newText, 3),
+    [path, oldText, newText],
+  );
   const diff = <DiffViewer patch={patch} variant="ghost" showHeader={false} />;
   return (
     <StatusAwareToolRenderer

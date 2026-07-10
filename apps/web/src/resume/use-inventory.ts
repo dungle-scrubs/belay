@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { type SessionSummary, streamTransport } from "@trevor/session";
+import { useMemoizedFn } from "ahooks";
+import { useMemo } from "react";
 
 export interface InventoryState {
   readonly sessions: readonly SessionSummary[];
@@ -16,6 +18,10 @@ export interface InventoryState {
 // owns the react-query polling/abort policy.
 const INVENTORY_BASE = import.meta.env.VITE_TETHER_URL ?? window.location.origin;
 const transport = streamTransport(INVENTORY_BASE);
+
+// Identity-stable empty fallback: a fresh `[]` per render while disabled/loading would churn
+// `sessions` (and every memo keyed on it - worktreeActivity, resolvedProject, baseGroups) each render.
+const EMPTY_SESSIONS: readonly SessionSummary[] = [];
 
 /**
  * Fetches the session inventory for the resume chooser + the session sidebar, only while `enabled`
@@ -36,10 +42,16 @@ export function useInventory(enabled: boolean): InventoryState {
     // switched to) shows up promptly instead of waiting for a close+reopen.
     refetchInterval: enabled ? 4_000 : false,
   });
-  return {
-    sessions: query.data ?? [],
-    loading: query.isLoading && enabled,
-    error: query.error ? (query.error as Error).message : null,
-    refetch: () => void query.refetch(),
-  };
+  // Stable identity with the latest query closure: `refetch` rides inside App-level memos (the
+  // chooser binding), so a fresh arrow per render would defeat them.
+  const refetch = useMemoizedFn(() => void query.refetch());
+  const sessions = query.data ?? EMPTY_SESSIONS;
+  const loading = query.isLoading && enabled;
+  const error = query.error ? (query.error as Error).message : null;
+  // One stable object per data change (Tier 1): this feeds PanelHost's `choosers` prop through
+  // App's choosersBinding memo, whose shallow compare a per-render literal would always fail.
+  return useMemo(
+    () => ({ sessions, loading, error, refetch }),
+    [sessions, loading, error, refetch],
+  );
 }

@@ -72,6 +72,49 @@ export function transcriptTurnKey(turn: TranscriptTurn): string {
   return turn.id;
 }
 
+/** Upper bound on rows per virtual item (Tier 4.1). Virtualization windows whole turns, but ONE turn
+ *  can hold hundreds of tool rows (a tool storm), and mounting it mounted its entire subtree at once.
+ *  Turns above this bound are split into fixed-offset blocks so the virtualizer can window WITHIN the
+ *  turn. 32 rows keeps a block taller than a viewport of compact tool rows (cheap range math) while
+ *  bounding the subtree a single mounted item can cost. */
+export const TURN_BLOCK_MAX_ROWS = 32;
+
+/**
+ * Split oversized turns into virtual-item blocks of at most `maxRows` rows (Tier 4.1). A block has the
+ * same shape as a turn, so every consumer (keys, estimates, measurement) works on blocks unchanged:
+ *
+ * - Turns at or under the bound pass through with the SAME object identity - for a normal transcript
+ *   the block list IS the turn list, and nothing about keys or measurements moves.
+ * - Block boundaries sit at fixed row offsets within the turn, so a streaming append only grows the
+ *   last block (or mints a new one); earlier block ids - and the measurement cache entries keyed on
+ *   them - stay stable across deltas.
+ * - The first block keeps the turn's own id; continuations get a `:block:N` suffix.
+ *
+ * Row spacing is untouched: the pad class between rows is computed from the flat rows array by the
+ * renderer, so a block boundary introduces no visual seam.
+ */
+export function splitOversizedTurns(
+  turns: readonly TranscriptTurn[],
+  maxRows: number = TURN_BLOCK_MAX_ROWS,
+): TranscriptTurn[] {
+  const blocks: TranscriptTurn[] = [];
+  for (const turn of turns) {
+    if (turn.rows.length <= maxRows) {
+      blocks.push(turn);
+      continue;
+    }
+    for (let offset = 0; offset < turn.rows.length; offset += maxRows) {
+      const blockIndex = offset / maxRows;
+      blocks.push({
+        id: blockIndex === 0 ? turn.id : `${turn.id}:block:${blockIndex}`,
+        rows: turn.rows.slice(offset, offset + maxRows),
+        startIndex: turn.startIndex + offset,
+      });
+    }
+  }
+  return blocks;
+}
+
 export function estimateTranscriptRowSize(
   row: TranscriptRow | undefined,
   compact: boolean,

@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { workspaceBasename } from "@/derive";
+import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 import type { PathValidation } from "./path-validation";
 import type { LaunchPhase } from "./use-launch";
@@ -47,6 +48,8 @@ export interface NewSessionPickerProps {
   readonly onCreate: (root: string) => void;
   /** Re-launch the last attempted root after a `failed` launch (returns to "starting host…"). */
   readonly onRetry?: () => void;
+  /** Wall clock for the recents' recency labels. Pass a fixed value for deterministic stories/tests;
+   *  omitted (the live default), the picker ticks its OWN leaf clock while open (Tier 2.3). */
   readonly nowMs?: number;
 }
 
@@ -110,8 +113,12 @@ export function NewSessionPicker({
   onPathChange,
   onCreate,
   onRetry,
-  nowMs = Date.now(),
+  nowMs,
 }: NewSessionPickerProps) {
+  // The picker's own relative-time clock (Tier 2.3), armed only while the modal is open (closed, the
+  // Dialog renders nothing time-based). A provided nowMs pauses it for determinism.
+  const clockNow = useNow(RELATIVE_TIME_TICK_MS, { enabled: open && nowMs === undefined });
+  const rowNowMs = nowMs ?? clockNow;
   const starting = launchState === "starting";
   const failed = launchState === "failed";
   // Both `starting` and `failed` lock the folder controls: a launch is either in flight or awaiting an
@@ -200,7 +207,7 @@ export function NewSessionPicker({
                     project={project}
                     disabled={locked}
                     onPick={onPickRecent}
-                    nowMs={nowMs}
+                    nowMs={rowNowMs}
                   />
                 ))
               )}

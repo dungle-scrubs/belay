@@ -1,19 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  type ArtifactRef,
   DEFAULT_SESSION_ID,
   type LoopControl,
   type ModelRef,
   PRODUCER_IDS,
+  type ProviderQuestionAnswer,
   type SessionSummary,
   SUPERVISOR_SESSION_ID,
   tangentsOf,
 } from "@trevor/session";
-import { useInterval, useLocalStorageState } from "ahooks";
-import { RotateCcw } from "lucide-react";
+import { useInterval, useLocalStorageState, useMemoizedFn } from "ahooks";
+import { GitBranch, RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
-  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -36,13 +37,22 @@ import type { LucidPanelWiring } from "@/artifact-panel/lucid/lucid-viewer";
 import type { TangentSelection } from "@/components/assistant-ui/quote-selection-toolbar";
 import { useLoopInventory } from "@/components/chat/loop/use-loop-inventory";
 import { loopPreviewForLine } from "@/components/chat/loop/use-loop-preview";
+import type { TranscriptRowConfig } from "@/components/chat/virtual-transcript";
 import { ModelChooser } from "@/components/chooser/model-chooser";
 import { sourceActionCommand } from "@/components/chooser/source-action";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import type { PaletteCommand } from "@/components/command-palette/palette-commands";
 import { BackToChat } from "@/components/panel/back-to-chat";
 import { ControlsPanel } from "@/components/panel/panel-controls";
-import { PanelHost } from "@/components/panel/panel-host";
+import {
+  type ArtifactPanelBinding,
+  type ChooserBinding,
+  type ComposeWiring,
+  type PanelBinding,
+  PanelHost,
+  type SidebarBinding,
+  type TranscriptView,
+} from "@/components/panel/panel-host";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
 import { ShortcutsHelp } from "@/components/shortcuts-help/shortcuts-help";
 import { sessionScopedKey } from "@/model-selection";
@@ -89,6 +99,7 @@ import { useComposer } from "./hooks/use-composer";
 import { useDraftPersistence } from "./hooks/use-draft-persistence";
 import { useFileMentionMenu } from "./hooks/use-file-mention-menu";
 import { useModalState } from "./hooks/use-modal-state";
+import { RELATIVE_TIME_TICK_MS, useNow } from "./hooks/use-now";
 import { usePromptEditor } from "./hooks/use-prompt-editor";
 import { usePromptHistory } from "./hooks/use-prompt-history";
 import { useScrollFollow } from "./hooks/use-scroll-follow";
@@ -116,6 +127,7 @@ import {
   webTabId,
 } from "./session/use-session";
 import type { Message } from "./transcript";
+import { TranscriptProjector } from "./transcript";
 
 const PROVIDER_KEY = "trevor.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
@@ -190,16 +202,15 @@ interface EscRefShape extends EscState {
 
 export function App() {
   const [target, setTarget] = useState(() => targetFromLocation());
-  const navigateToSession = useCallback(
-    (sessionId: string) => {
-      if (sessionId === target) {
-        return;
-      }
-      window.history.pushState(null, "", urlForSession(sessionId));
-      setTarget(sessionId);
-    },
-    [target],
-  );
+  // useMemoizedFn (Tier 1): stable identity with the latest `target`, so a session switch no longer
+  // churns every consumer's identity the way the old useCallback([target]) did.
+  const navigateToSession = useMemoizedFn((sessionId: string) => {
+    if (sessionId === target) {
+      return;
+    }
+    window.history.pushState(null, "", urlForSession(sessionId));
+    setTarget(sessionId);
+  });
 
   useEffect(() => {
     const syncTarget = () => setTarget(targetFromLocation());
@@ -285,7 +296,26 @@ export function App() {
   const history = usePromptHistory({ storage: window.sessionStorage, tabId, sessionId });
   // The read model owns the full-log folds that app surfaces consume. Raw events remain available for
   // compatibility paths that still need the event stream during the rest of this plan.
-  const readModel = useMemo(() => createSessionReadModel(events, { replayed }), [events, replayed]);
+  //
+  // One incremental transcript projector is bound per session (reset on switch): it folds only appended
+  // events and preserves row object identity across renders, so a streaming turn no longer re-runs an
+  // O(n^2) fold per token and untouched rows keep the identity the Tier 1 row memos skip on.
+  const projectorRef = useRef<{ key: string | null; projector: TranscriptProjector }>(null);
+  if (!projectorRef.current || projectorRef.current.key !== sessionId) {
+    projectorRef.current = {
+      key: sessionId,
+      projector: new TranscriptProjector({ selfProducerId: PRODUCER_IDS.host }),
+    };
+  }
+  const projector = projectorRef.current.projector;
+  // `sessionId` rides along so the read model ignores a FOREIGN log during a session switch: on
+  // the render where sessionId flips, `events` still holds the previous session's array (useSession
+  // clears it in its effect, after this render). Folding it would advance the fresh projector's
+  // per-session seq cursor past the new session's seqs, skipping its entire replay.
+  const readModel = useMemo(
+    () => createSessionReadModel(events, { replayed, projector, sessionId }),
+    [events, replayed, projector, sessionId],
+  );
   const transcript = readModel.transcript;
   const transcriptArtifacts = readModel.transcriptArtifacts;
   const lucidReview = readModel.lucidReview;
@@ -338,8 +368,12 @@ export function App() {
   const toolBatches = readModel.toolBatches;
   const scroll = useScrollFollow(transcript.length);
   const awaitingResponse = readModel.awaitingResponse;
+  // The App-altitude clock (Tier 2.3): feeds ONLY the time-based decisions that live here - the
+  // no-presence staleness fallback inside selectHostStatus and the orphan/hostless recovery windows.
+  // Relative-time text ticks on leaf clocks (useNow) inside the surfaces that render it. The interval
+  // itself is GATED below (after `compacting`, the last input the gate reads), so an idle session with
+  // a live leader carries no timer at all.
   const [now, setNow] = useState(() => Date.now());
-  useInterval(() => setNow(Date.now()), 4000);
   const announcement = readModel.announcement;
   const host = useMemo(
     () => selectHostStatus(readModel, presence, now),
@@ -394,16 +428,13 @@ export function App() {
   const [archiveProjectFilter, setArchiveProjectFilter] = useState<string | null>(null);
   // The single open-picker entry (plan 44.2, D-001): both the sidebar `＋ New session` and the `/new`
   // command call this, so the two entry points can never drift.
-  const openNewSession = useCallback(() => modal.setNewOpen(true), [modal.setNewOpen]);
+  const openNewSession = useMemoizedFn(() => modal.setNewOpen(true));
   // On a launched/reused session, close the picker and navigate (the safe switch path). Closing sets
   // newOpen false, which resets the supervisor hook's request/launch state.
-  const onLaunchNavigate = useCallback(
-    (launchedSessionId: string) => {
-      modal.setNewOpen(false);
-      navigateToSession(launchedSessionId);
-    },
-    [modal.setNewOpen, navigateToSession],
-  );
+  const onLaunchNavigate = useMemoizedFn((launchedSessionId: string) => {
+    modal.setNewOpen(false);
+    navigateToSession(launchedSessionId);
+  });
   // The New-session picker's live wiring over the 44.1 supervisor control session (plan 44.2 M3/M4).
   // The native folder pick is offered only when a LOCAL backend reports presence (null = remote
   // Tether), degrading to recents + paste-a-path otherwise.
@@ -449,35 +480,29 @@ export function App() {
       }),
     [host, selectedSummary, supervisor.recents, target],
   );
-  const onStartHost = useCallback(() => {
+  const onStartHost = useMemoizedFn(() => {
     if (knownRoot === null) {
       return;
     }
     setStartRequested(true);
     sessionLaunch.launch(knownRoot, { sessionId: target });
-  }, [knownRoot, sessionLaunch.launch, target]);
-  const launchExactSession = useCallback(
-    (root: string, sessionId: string) => {
-      setExactLaunchSessionId(sessionId);
-      setStartRequested(true);
-      sessionLaunch.launch(root, { sessionId });
-    },
-    [sessionLaunch.launch],
-  );
+  });
+  const launchExactSession = useMemoizedFn((root: string, sessionId: string) => {
+    setExactLaunchSessionId(sessionId);
+    setStartRequested(true);
+    sessionLaunch.launch(root, { sessionId });
+  });
   // `/new <path>` and `/cd <path>` (plan 58 M4): mint a FRESH session id (not the deterministic
   // projectSessionId) and launch a project-scoped session with a session.project marker. The
   // supervisor stamps the marker + touches the registry before spawning the host. Reuses the same
   // useLaunch + control subscription as the session-view "start host" so the two surfaces never fork.
-  const startFreshProjectSession = useCallback(
-    (projectPath: string) => {
-      const sessionId = crypto.randomUUID();
-      setExactLaunchSessionId(null);
-      setFreshLaunchSessionId(sessionId);
-      setStartRequested(true);
-      sessionLaunch.launch(projectPath, { sessionId, projectPath });
-    },
-    [sessionLaunch.launch],
-  );
+  const startFreshProjectSession = useMemoizedFn((projectPath: string) => {
+    const sessionId = crypto.randomUUID();
+    setExactLaunchSessionId(null);
+    setFreshLaunchSessionId(sessionId);
+    setStartRequested(true);
+    sessionLaunch.launch(projectPath, { sessionId, projectPath });
+  });
   // Once a host is present (the badge flips to "host active", so the launch UI is gone) or the viewed
   // session changes, disarm the subscription and reset the launch - the reset bumps useLaunch's guard
   // token so a superseded launch's pending host.online never navigates the new session late.
@@ -525,6 +550,10 @@ export function App() {
   // The sidebar's read model: groups sessions under projects, owns local collapsed/show-more/search
   // state, and exposes the project/session action callbacks. Session selection navigates; New Session
   // per-project reuses the M4 fresh-session launch; Archive publishes session.archived.
+  // Stable wrappers (Tier 1) so the sidebar binding memo below holds across renders.
+  const onSidebarArchiveSession = useMemoizedFn(
+    (sessionId: string) => void archiveSession(sessionId),
+  );
   const projectSidebar = useProjectSidebar({
     sessions: modal.inventory.sessions,
     projects: sidebarSupervisor.projects,
@@ -532,32 +561,30 @@ export function App() {
     // sessions covered by the viewed host's host.online worktrees list.
     worktrees: readModel.worktrees,
     onProjectAction: sidebarSupervisor.onProjectAction,
-    onNewSession: (projectKey) => startFreshProjectSession(projectKey),
-    onArchiveSession: (sessionId) => void archiveSession(sessionId),
+    onNewSession: startFreshProjectSession,
+    onArchiveSession: onSidebarArchiveSession,
   });
   const selectedResumeAction = useMemo(
     () => (selectedSummary ? resumeActionForSession(selectedSummary, now) : null),
     [now, selectedSummary],
   );
-  const onSelectSidebarSession = useCallback(
-    (summary: SessionSummary) => {
-      navigateToSession(summary.sessionId);
-      if (autoStartedSessionRef.current === summary.sessionId) {
-        return;
-      }
-      const action = resumeActionForSession(summary, now);
-      if (action.kind === "auto-start") {
-        autoStartedSessionRef.current = summary.sessionId;
-        launchExactSession(action.root, action.sessionId);
-      }
-    },
-    [launchExactSession, navigateToSession, now],
-  );
-  const onResumeSelectedSession = useCallback(
+  const onSelectSidebarSession = useMemoizedFn((summary: SessionSummary) => {
+    navigateToSession(summary.sessionId);
+    if (autoStartedSessionRef.current === summary.sessionId) {
+      return;
+    }
+    // Event handler, so read the wall clock directly: the gated `now` (Tier 2.3) may be frozen while
+    // the CURRENT session idles with a live leader, and the auto-start decision is day-granular.
+    const action = resumeActionForSession(summary, Date.now());
+    if (action.kind === "auto-start") {
+      autoStartedSessionRef.current = summary.sessionId;
+      launchExactSession(action.root, action.sessionId);
+    }
+  });
+  const onResumeSelectedSession = useMemoizedFn(
     (action: Extract<ResumeAction, { readonly kind: "manual" }>) => {
       launchExactSession(action.root, action.sessionId);
     },
-    [launchExactSession],
   );
 
   // Whether the open session is archived (D-094): a deep link or an archive-while-open can land the
@@ -648,6 +675,29 @@ export function App() {
   // True while a manual /compact fold is streaming (a transient bar in the transcript). ESC cancels
   // it (manual folds are interruptible; automatic ones run to completion).
   const compacting = useMemo(() => transcript.some((m) => m.kind === "compacting"), [transcript]);
+
+  // The clock gate (Tier 2.3): tick only while a tick can change a decision made at this altitude.
+  //   - busy/compacting: a turn (or manual fold) is in flight - the orphan/hostless recovery windows
+  //     must keep measuring silence, and a leader loss mid-turn must be noticed within ~4s.
+  //   - presence === null: the backend reports no live-connection set (e.g. Tether), so hostStatus's
+  //     event-log fallback times standbys out against nowMs - the one selectHostStatus path that
+  //     genuinely reads the clock. A possibly-stale host must keep being re-judged.
+  //   - no live leader: every orphan detector fires only leaderless, and the offline-host recovery
+  //     affordances (statusNode, the resume row) render recency that should not freeze.
+  // Idle with a live leader, none of those can move on a timer - the next relevant change (a presence
+  // flip, a published event, replay) re-renders App and re-evaluates this gate. Deliberately
+  // conservative: any in-doubt state lands on "keep ticking" (correctness of orphan recovery beats
+  // the optimization).
+  const clockEnabled = busy || compacting || presence === null || host.leaderId === null;
+  // Re-sample the moment the gate re-opens: `now` freezes while the gate is closed, and the recovery
+  // windows must measure silence against a fresh clock immediately (e.g. a reconnect after sleep),
+  // not one frozen when the gate last closed and not 4s late.
+  useEffect(() => {
+    if (clockEnabled) {
+      setNow(Date.now());
+    }
+  }, [clockEnabled]);
+  useInterval(() => setNow(Date.now()), clockEnabled ? 4000 : undefined);
 
   // The agent's live task checklist (host-published snapshots), rendered in the header.
   const tasks = readModel.tasks;
@@ -793,6 +843,9 @@ export function App() {
   const { queue, submit, flushQueuedSteer, unqueue, pullNewest } = useSendQueue({
     events,
     selfProducerId: PRODUCER_IDS.host,
+    // The projector already derived the queue once for this render (recomputed only on queue-relevant
+    // events, not per streamed token); consume it rather than re-scanning the whole log here.
+    projectedQueue: readModel.queued,
     publish,
     supersede,
   });
@@ -891,10 +944,10 @@ export function App() {
     remove: permanentlyDeleteSession,
     refresh: () => modal.inventory.refetch(),
   });
-  const onSelectModel = (ref: ModelRef) => {
+  const onSelectModel = useMemoizedFn((ref: ModelRef) => {
     selectActiveModel(ref);
     setChooserOpen(false);
-  };
+  });
 
   const hostCommand =
     target === DEFAULT_SESSION
@@ -904,7 +957,8 @@ export function App() {
   // A known slash command routes to the immediate host lane (runs now, bypassing the
   // model and the queue). Everything else enqueues; the drain effect publishes when
   // idle, so a second prompt during a turn waits its turn instead of firing at once.
-  const onSubmit = (event: SubmitEvent<HTMLFormElement>) => {
+  // useMemoizedFn (Tier 1): stable identity, latest state - the compose group memo depends on it.
+  const onSubmit = useMemoizedFn((event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     // The prompt shell lane (D-082): a RAW leading `!` runs a shell command immediately on the host,
     // bypassing the send queue, the model, and the provider flow. Checked before the trim/slash path
@@ -1003,11 +1057,11 @@ export function App() {
     // Re-pin to the bottom on submit, even if scrolled up: the follow effect then snaps to each
     // new item (the prompt when its event round-trips, then the streaming answer) and holds there.
     scroll.pinToBottom();
-  };
+  });
 
-  const onLoopControl = (loopId: string, controlVerb: LoopControl) => {
+  const onLoopControl = useMemoizedFn((loopId: string, controlVerb: LoopControl) => {
     void command("/loop", `${controlVerb} ${loopId}`);
-  };
+  });
 
   // Slash-menu key handling on the composer, active only while the menu is open:
   // arrows move the highlight, Tab/Enter complete it, Esc dismisses (and is swallowed
@@ -1023,7 +1077,7 @@ export function App() {
     });
   };
 
-  const onInputKeyDown = (event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
+  const onInputKeyDown = useMemoizedFn((event: ReactKeyboardEvent<HTMLTextAreaElement>) => {
     if (slashMenu.onMenuKeyDown(event)) {
       return;
     }
@@ -1076,7 +1130,7 @@ export function App() {
         recallInto(el, recalled);
       }
     }
-  };
+  });
 
   // Steer meta: the active selection (provider/reasoning/model) stamped onto a folded prompt.
   const steerMeta = () => ({
@@ -1090,7 +1144,7 @@ export function App() {
   // turn as `steered` (so the transcript shows a muted note, not the alarming red "cancelled"), and
   // publish the folded prompt so it runs next. All in one action - no two-step latch, no second Esc.
   // A plain cancel (no queued prompts) keeps the red "cancelled": it means "stop", not "redirect".
-  const onFlushQueuedSteer = () => {
+  const onFlushQueuedSteer = useMemoizedFn(() => {
     flushQueuedSteer(steerMeta());
     const runId = active ?? (awaitingResponse ? "" : null);
     if (runId !== null) {
@@ -1099,13 +1153,13 @@ export function App() {
       void cancel("", true);
     }
     inputRef.current?.focus();
-  };
+  });
 
   // Explicit cancel (Escape with no queued prompts to steer, Mod+., or the Stop control): abort the
   // active turn / awaiting turn / manual fold. A typed draft is published as the next durable follow-up
   // (it runs in order after the cancel, keeping its image/document attachments), rather than folding the
   // already-durable queue - plan 47 runs queued follow-ups as distinct ordered turns, not a collapse.
-  const onCancel = () => {
+  const onCancel = useMemoizedFn(() => {
     const runId = active ?? (awaitingResponse ? "" : null);
     const text = draft.trim();
     const all = [...imageRefs, ...attachments];
@@ -1129,17 +1183,17 @@ export function App() {
     }
     // Return focus to the composer so the user can type the next prompt immediately after cancelling.
     inputRef.current?.focus();
-  };
+  });
 
   // The deliberate stop path (plan 07 M8): Mod+. and the palette "Stop" command. A direct, non-Escape
   // stop that routes through the SAME onCancel (steer the draft, abort the run/fold), but ONLY while
   // work is in progress - idle it is a no-op, so it never clears a draft the way Escape does. Escape
   // stays the progressive path (queued-steer first, then cancel); Mod+. is the immediate stop.
-  const onStop = () => {
+  const onStop = useMemoizedFn(() => {
     if (busy || compacting) {
       onCancel();
     }
-  };
+  });
 
   // ESC mirrors the cancel button when a run is active/pending; with nothing to
   // cancel it just clears the composer. One window listener reads the latest state
@@ -1165,27 +1219,30 @@ export function App() {
   const tangentOwnsEscape = tangent.active !== null && !otherTakeoverOpen;
 
   // App actions shared by their keyboard shortcut (the router below) and their palette command, so the
-  // two surfaces can never drift (plan 07 M7/M8).
-  const toggleSidebar = () => modal.setSidebarOpen((open) => !open);
-  const togglePanel = () => modal.setPanelOpen((open) => !open);
-  const openHelp = () => setHelpOpen(true);
+  // two surfaces can never drift (plan 07 M7/M8). Stable identities (Tier 1) so the palette memo holds.
+  const toggleSidebar = useMemoizedFn(() => modal.setSidebarOpen((open) => !open));
+  const togglePanel = useMemoizedFn(() => modal.setPanelOpen((open) => !open));
+  const openHelp = useMemoizedFn(() => setHelpOpen(true));
 
   // The command palette's data-driven commands (plan 07). The Vim toggle reads the live host preference
   // for its hint and dispatches the host `/vim` command (which persists + re-announces); the rest are
   // app actions that also have a keyboard shortcut, their label + chord read from the registry via
-  // `shortcutCommand`. Cheap to build inline (and `onCancel` is a fresh closure each render, so a memo
-  // would not hold anyway). The stop row is disabled, with its reason, exactly when `onStop` is a no-op.
-  const paletteCommands: PaletteCommand[] = [
-    vimToggleCommand(vimEnabled, command),
-    shortcutCommand("toggle-sidebar", toggleSidebar),
-    shortcutCommand("toggle-panel", togglePanel),
-    shortcutCommand(
-      "stop",
-      onStop,
-      busy || compacting ? undefined : { disabledReason: "no active run" },
-    ),
-    shortcutCommand("shortcuts-help", openHelp),
-  ];
+  // `shortcutCommand`. All the run functions are useMemoizedFn now, so the array is re-minted only when
+  // its real data moves. The stop row is disabled, with its reason, exactly when `onStop` is a no-op.
+  const paletteCommands: PaletteCommand[] = useMemo(
+    () => [
+      vimToggleCommand(vimEnabled, command),
+      shortcutCommand("toggle-sidebar", toggleSidebar),
+      shortcutCommand("toggle-panel", togglePanel),
+      shortcutCommand(
+        "stop",
+        onStop,
+        busy || compacting ? undefined : { disabledReason: "no active run" },
+      ),
+      shortcutCommand("shortcuts-help", openHelp),
+    ],
+    [vimEnabled, command, busy, compacting, toggleSidebar, togglePanel, onStop, openHelp],
+  );
 
   // The latest Escape inputs + handlers, read by the router's window listener so it never goes stale.
   // The ref is reassigned every render (below); the seed only types it, so it never carries stale state.
@@ -1215,7 +1272,7 @@ export function App() {
   // pure escapeAction and routed through the one shortcut router below. The Vim layer's stopPropagation
   // suppresses this before it fires (a first Escape enters normal mode); an open overlay owns Escape via
   // escapeAction's modalOpen guard.
-  const onEscape = useCallback((event: KeyboardEvent) => {
+  const onEscape = useMemoizedFn((event: KeyboardEvent) => {
     const s = escRef.current;
     const action = escapeAction({
       active: s.active,
@@ -1240,7 +1297,7 @@ export function App() {
       s.setDraft("");
       s.resetHistory(); // clearing the composer ends any in-progress history navigation
     }
-  }, []);
+  });
   // The one window listener owning every app key: Mod chords + global Escape. While any frontmost overlay
   // (incl. the palette) is open, the global Mod shortcuts are suppressed so a key never reaches a surface
   // behind it.
@@ -1256,38 +1313,57 @@ export function App() {
     onEscape,
   });
 
-  // Model + reasoning + thinking controls, moved out of the footer into the panel.
-  const panelControls = (
-    <ControlsPanel
-      config={{
-        model: {
-          activeLabel,
-          quickGroups: selection.quickGroups,
-          sourceLabels: selection.sourceLabels,
-          modelLabels: selection.modelLabels,
-          activeModel: sendModel,
-          // Only one takeover at a time: opening the chooser closes the archive browser.
-          onOpenChooser: () => {
-            modal.setArchiveOpen(false);
-            setChooserOpen((open) => !open);
+  // Only one takeover at a time: opening the chooser closes the archive browser.
+  const onOpenChooser = useMemoizedFn(() => {
+    modal.setArchiveOpen(false);
+    setChooserOpen((open) => !open);
+  });
+  // Model + reasoning + thinking controls, moved out of the footer into the panel. Memoized (Tier 1)
+  // on the real model/display data so the panel binding below only churns when a control changed.
+  const panelControls = useMemo(
+    () => (
+      <ControlsPanel
+        config={{
+          model: {
+            activeLabel,
+            quickGroups: selection.quickGroups,
+            sourceLabels: selection.sourceLabels,
+            modelLabels: selection.modelLabels,
+            activeModel: sendModel,
+            onOpenChooser,
+            onSelectModel,
           },
-          onSelectModel,
-        },
-        reasoning: {
-          levels: activeReasoningLevels,
-          selected: activeReasoning,
-          onChange: setReasoning,
-        },
-        thinking: {
-          show: showThinkingOn,
-          onShowChange: setShowThinking,
-        },
-        compact: {
-          show: compact,
-          onShowChange: setCompact,
-        },
-      }}
-    />
+          reasoning: {
+            levels: activeReasoningLevels,
+            selected: activeReasoning,
+            onChange: setReasoning,
+          },
+          thinking: {
+            show: showThinkingOn,
+            onShowChange: setShowThinking,
+          },
+          compact: {
+            show: compact,
+            onShowChange: setCompact,
+          },
+        }}
+      />
+    ),
+    [
+      activeLabel,
+      selection.quickGroups,
+      selection.sourceLabels,
+      selection.modelLabels,
+      sendModel,
+      onOpenChooser,
+      onSelectModel,
+      activeReasoningLevels,
+      activeReasoning,
+      setReasoning,
+      showThinkingOn,
+      setShowThinking,
+      compact,
+    ],
   );
 
   // The full model chooser (D-065 M2/M3): a takeover of the transcript/composer space (the sidebars
@@ -1360,7 +1436,6 @@ export function App() {
       rows={archiveRows}
       loading={modal.inventory.loading}
       error={modal.inventory.error}
-      nowMs={now}
       actionState={archiveActions.actionState}
       onUnarchive={archiveActions.onUnarchive}
       onDelete={archiveActions.onDelete}
@@ -1375,8 +1450,9 @@ export function App() {
 
   // The tool detail takeover (plan 08): open it from a transcript row's inspect affordance, closing any
   // other center-column takeover first (only one at a time). The model is derived LIVE below, so a
-  // running tool keeps updating while open.
-  const onOpenDetail = (message: Message) => {
+  // running tool keeps updating while open. useMemoizedFn (Tier 1): these ride the rowConfig bundle
+  // into every transcript row, so their identity must never churn.
+  const onOpenDetail = useMemoizedFn((message: Message) => {
     if (!isDetailEligible(message)) {
       return;
     }
@@ -1385,33 +1461,71 @@ export function App() {
     setJobDetailId(null);
     setAgentDetailChild(null);
     setDetailId(message.id);
-  };
+  });
   // A promoted job's detail (plan 09 M8): the SAME tool-detail takeover, opened from a support-panel job
   // row. Stop a running job via the host /jobs-stop command; the row + detail update on the re-announce.
-  const onOpenJobDetail = (jobId: string) => {
+  const onOpenJobDetail = useMemoizedFn((jobId: string) => {
     setChooserOpen(false);
     modal.setArchiveOpen(false);
     setDetailId(null);
     setAgentDetailChild(null);
     setJobDetailId(jobId);
-  };
+  });
   // Open the inline-agent detail takeover from a row click (plan 09.4 M6), closing any other center
   // takeover first (only one at a time), mirroring onOpenDetail.
-  const onOpenAgent = (childSessionId: string) => {
+  const onOpenAgent = useMemoizedFn((childSessionId: string) => {
     setChooserOpen(false);
     modal.setArchiveOpen(false);
     setDetailId(null);
     setJobDetailId(null);
     setAgentDetailChild(childSessionId);
-  };
+  });
   const closeAgentDetail = () => setAgentDetailChild(null);
-  const onKillJob = (jobId: string) => void command("/jobs-stop", jobId);
-  const onDismissJob = (jobId: string) => {
+  const onKillJob = useMemoizedFn((jobId: string) => void command("/jobs-stop", jobId));
+  const onDismissJob = useMemoizedFn((jobId: string) => {
     void command("/jobs-dismiss", jobId);
     if (jobDetailId === jobId) {
       setJobDetailId(null);
     }
-  };
+  });
+  // The remaining per-row callbacks, stabilized (Tier 1) so the rowConfig bundle below never churns:
+  // TranscriptRowView's memo skips untouched rows only while every rowConfig field keeps identity.
+  const onOpenPath = useMemoizedFn((path: string) => void openInEditor(path));
+  const onOpenArtifact = useMemoizedFn((artifact: ArtifactRef) => {
+    setChooserOpen(false);
+    modal.setArchiveOpen(false);
+    setDetailId(null);
+    setJobDetailId(null);
+    setArtifactPanel((state) =>
+      openArtifactPanel(state ?? createArtifactPanelState(), { artifact }),
+    );
+  });
+  const onDoctorRefresh = useMemoizedFn(() => void command("/doctor", "refresh"));
+  const onMenuAction = useMemoizedFn((cmd: string, args: string) => void command(cmd, args));
+  // The per-row rendering config (Tier 1): every callback above is identity-stable, so this bundle
+  // changes only when a display flag flips - the anchor TranscriptRowView's memo leans on.
+  const rowConfig = useMemo<TranscriptRowConfig>(
+    () => ({
+      onOpenPath,
+      onOpenArtifact,
+      onDoctorRefresh,
+      onMenuAction,
+      onOpenDetail,
+      onOpenAgent,
+      showThinking: showThinkingOn,
+      compact,
+    }),
+    [
+      onOpenPath,
+      onOpenArtifact,
+      onDoctorRefresh,
+      onMenuAction,
+      onOpenDetail,
+      onOpenAgent,
+      showThinkingOn,
+      compact,
+    ],
+  );
   const closeJobDetail = () => setJobDetailId(null);
   const closeDetail = () => {
     const sourceId = detailId;
@@ -1432,7 +1546,7 @@ export function App() {
       <ToolDetailView
         model={detail}
         onBack={closeDetail}
-        onOpenPath={(path) => void openInEditor(path)}
+        onOpenPath={onOpenPath}
         className="h-full"
       />
     ) : undefined;
@@ -1455,7 +1569,7 @@ export function App() {
         childSessionId={agentDetailChild}
         {...(agentDetailName !== undefined ? { agent: agentDetailName } : {})}
         onBack={closeAgentDetail}
-        onOpenPath={(path) => void openInEditor(path)}
+        onOpenPath={onOpenPath}
       />
     ) : undefined;
 
@@ -1468,11 +1582,17 @@ export function App() {
     setJobDetailId(null);
     setAgentDetailChild(null);
   };
-  const openTangent = (selection: TangentSelection) => {
+  const openTangent = useMemoizedFn((selection: TangentSelection) => {
     closeOtherTakeovers();
     setTangentDiscoveryOpen(false);
     tangent.open(selection, target);
-  };
+  });
+  // useMemoizedFn: stable identity so the memoized panelFooter below does not churn per render.
+  const openTangentDiscovery = useMemoizedFn(() => {
+    closeOtherTakeovers();
+    tangent.close();
+    setTangentDiscoveryOpen(true);
+  });
   // Explicit fold-back (M8): place the chosen tangent content into THIS (parent) composer for review via
   // the same quote-into-composer path, and record the durable marker on the tangent. It never auto-submits
   // and never injects hidden parent context - the folded text is plainly visible, editable composer text.
@@ -1506,7 +1626,6 @@ export function App() {
     <TangentDiscovery
       className="h-full"
       tangents={tangentsOf(modal.inventory.sessions, target)}
-      nowMs={now}
       onOpen={(summary) => {
         setTangentDiscoveryOpen(false);
         tangent.openExisting(summary);
@@ -1516,260 +1635,460 @@ export function App() {
   ) : undefined;
 
   // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the session id
-  // for orientation. `restart` is a temporary debug surface.
-  const panelFooter = (
-    <>
-      {/* TEMP dev affordance (remove later): restart the host to pick up code changes. The typed
+  // for orientation. `restart` is a temporary debug surface. Memoized (Tier 1) for the panel binding.
+  const panelFooter = useMemo(
+    () => (
+      <>
+        {/* TEMP dev affordance (remove later): restart the host to pick up code changes. The typed
           `/restart` is debug-gated, but this explicit button sends `force` so a click restarts
           straight away regardless of debug mode (the click is its own confirmation). */}
-      <button
-        type="button"
-        onClick={() => void command("/restart", "force")}
-        title="Restart the host with fresh code"
-        aria-label="Restart the host"
-        className="flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
-      >
-        <RotateCcw className="size-3" />
-        restart
-      </button>
-      <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
-        {target}
-      </div>
-    </>
+        <button
+          type="button"
+          onClick={() => void command("/restart", "force")}
+          title="Restart the host with fresh code"
+          aria-label="Restart the host"
+          className="flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+        >
+          <RotateCcw className="size-3" />
+          restart
+        </button>
+        <button
+          type="button"
+          onClick={openTangentDiscovery}
+          title="Tangents branched from this session"
+          aria-label="Tangents from this session"
+          className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
+        >
+          <GitBranch className="size-3" />
+          tangents
+        </button>
+        <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
+          {target}
+        </div>
+      </>
+    ),
+    [command, target, openTangentDiscovery],
   );
 
-  // Host/connection status, moved out of the footer into the panel header.
-  const statusNode =
-    replayed && sessionId ? (
-      host.leaderId ? (
-        <span className="text-smui-green">
-          ● host active
-          {host.standbyCount > 0 ? ` · ${host.standbyCount} standby` : ""}
-        </span>
-      ) : host.present ? (
-        <span className="text-smui-yellow">● host starting…</span>
-      ) : selectedResumeAction?.kind === "manual" ||
-        selectedResumeAction?.kind === "auto-start" ||
-        selectedResumeAction?.kind === "unlaunchable" ? (
-        <span className="text-smui-yellow">● host offline</span>
-      ) : (
-        // No live host: the 44.3 recovery affordances. A launch in flight reads "restarting host…" when
-        // a host was here before (a stale/dead host - `announcement !== null`) and "starting host…" for
-        // a never-hosted session; a failed launch shows the error + Retry; an idle no-host session with a
-        // resolvable root offers "Start host"; with no resolvable root it keeps the shell-command hint.
-        <HostLaunchStatus
-          state={
-            sessionLaunch.launchState === "starting"
-              ? { phase: "starting", restarting: announcement !== null }
-              : sessionLaunch.launchState === "failed"
-                ? {
-                    phase: "failed",
-                    error: sessionLaunch.error ?? "The host could not be started.",
-                    onRetry: sessionLaunch.retry,
-                  }
-                : knownRoot !== null
-                  ? { phase: "startable", onStart: onStartHost, error: sessionLaunch.error }
-                  : { phase: "hint", command: hostCommand }
+  // Host/connection status, moved out of the footer into the panel header. Memoized (Tier 1) on its
+  // real inputs so the panel binding below only churns when the status actually moved.
+  const statusNode = useMemo(
+    () =>
+      replayed && sessionId ? (
+        host.leaderId ? (
+          <span className="text-smui-green">
+            ● host active
+            {host.standbyCount > 0 ? ` · ${host.standbyCount} standby` : ""}
+          </span>
+        ) : host.present ? (
+          <span className="text-smui-yellow">● host starting…</span>
+        ) : selectedResumeAction?.kind === "manual" ||
+          selectedResumeAction?.kind === "auto-start" ||
+          selectedResumeAction?.kind === "unlaunchable" ? (
+          <span className="text-smui-yellow">● host offline</span>
+        ) : (
+          // No live host: the 44.3 recovery affordances. A launch in flight reads "restarting host…" when
+          // a host was here before (a stale/dead host - `announcement !== null`) and "starting host…" for
+          // a never-hosted session; a failed launch shows the error + Retry; an idle no-host session with a
+          // resolvable root offers "Start host"; with no resolvable root it keeps the shell-command hint.
+          <HostLaunchStatus
+            state={
+              sessionLaunch.launchState === "starting"
+                ? { phase: "starting", restarting: announcement !== null }
+                : sessionLaunch.launchState === "failed"
+                  ? {
+                      phase: "failed",
+                      error: sessionLaunch.error ?? "The host could not be started.",
+                      onRetry: sessionLaunch.retry,
+                    }
+                  : knownRoot !== null
+                    ? { phase: "startable", onStart: onStartHost, error: sessionLaunch.error }
+                    : { phase: "hint", command: hostCommand }
+            }
+          />
+        )
+      ) : null,
+    [
+      replayed,
+      sessionId,
+      host.leaderId,
+      host.standbyCount,
+      host.present,
+      selectedResumeAction,
+      sessionLaunch.launchState,
+      sessionLaunch.error,
+      sessionLaunch.retry,
+      announcement,
+      knownRoot,
+      onStartHost,
+      hostCommand,
+    ],
+  );
+
+  // ---- The PanelHost prop groups (Tier 1) ----
+  // Each group is one useMemo keyed on its REAL data deps; the callbacks inside are all useMemoizedFn
+  // (identity-stable), so a group's identity moves exactly when its data does. Together with the
+  // PanelHost/VirtualTranscript/TranscriptRowView memos this is what turns Tier 0's stable row
+  // identity into skipped renders.
+
+  // Open the current draft in the full-surface prompt editor (02.12).
+  const onExpandDraft = useMemoizedFn(() => editor.open({ text: draft, onConfirm: setDraft }));
+  const composeWiring = useMemo<ComposeWiring>(
+    () => ({
+      onSubmit,
+      onInputKeyDown,
+      menuOpen: slashMenu.menuOpen,
+      menuMatches: slashMenu.menuMatches,
+      menuIndex: slashMenu.menuIndex,
+      slashQuery: slashMenu.slashQuery,
+      acceptCommand: slashMenu.acceptCommand,
+      commandPreview: slashMenu.preview,
+      fileMenu: {
+        open: fileMenu.menuOpen,
+        matches: fileMenu.matches,
+        index: fileMenu.menuIndex,
+        query: fileMenu.query ?? "",
+        truncated: fileMenu.truncated,
+        loading: fileMenu.menuOpen && !fileIndex.ready,
+        onPick: fileMenu.acceptFile,
+      },
+      caret: composerCaret,
+      onCaretChange: setComposerCaret,
+      disabled: !sessionId,
+      disabledReason: "Resume host to continue",
+      placeholder: `message ${activeLabel}… (/ for commands, @ for files, ! for shell)`,
+      onExpand: onExpandDraft,
+      vimEnabled,
+    }),
+    [
+      onSubmit,
+      onInputKeyDown,
+      slashMenu.menuOpen,
+      slashMenu.menuMatches,
+      slashMenu.menuIndex,
+      slashMenu.slashQuery,
+      slashMenu.acceptCommand,
+      slashMenu.preview,
+      fileMenu.menuOpen,
+      fileMenu.matches,
+      fileMenu.menuIndex,
+      fileMenu.query,
+      fileMenu.truncated,
+      fileMenu.acceptFile,
+      fileIndex.ready,
+      composerCaret,
+      sessionId,
+      activeLabel,
+      onExpandDraft,
+      vimEnabled,
+    ],
+  );
+
+  const transcriptView = useMemo<TranscriptView>(
+    () => ({
+      transcript,
+      toolBatches,
+      rowConfig,
+      // The pinned live turn-status header (plan 50) replaces the scrolling "Working" row. It is
+      // already suppressed for a host-stranded prompt (turnStatusHeaderFrom is gated on
+      // `awaitingResponse && !hostlessPending`), so the no-host status line still carries that
+      // affordance; `busy`/the send queue are unchanged, so follow-ups still queue and catch up.
+      turnStatusHeader,
+      queue: visibleQueue,
+      onUnqueue: unqueue,
+    }),
+    [transcript, toolBatches, rowConfig, turnStatusHeader, visibleQueue, unqueue],
+  );
+
+  const openPanel = useMemoizedFn(() => modal.setPanelOpen(true));
+  const closePanel = useMemoizedFn(() => modal.setPanelOpen(false));
+  const panelBinding = useMemo<PanelBinding>(
+    () => ({
+      // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
+      // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.
+      open: modal.panelOpen,
+      onOpen: openPanel,
+      onClose: closePanel,
+      title: target,
+      subtitle: `${status}${replayed ? " · replayed" : ""} · ${events.length} events`,
+      statusNode,
+      workspace: host.cwd ?? host.workspace ?? undefined,
+      git: host.git,
+      model: panel,
+      controls: panelControls,
+      footer: panelFooter,
+      ready: replayed,
+    }),
+    [
+      modal.panelOpen,
+      openPanel,
+      closePanel,
+      target,
+      status,
+      replayed,
+      events.length,
+      statusNode,
+      host.cwd,
+      host.workspace,
+      host.git,
+      panel,
+      panelControls,
+      panelFooter,
+    ],
+  );
+
+  const closeArtifactPanelCb = useMemoizedFn(() =>
+    setArtifactPanel((state) => {
+      requestAnimationFrame(() => inputRef.current?.focus());
+      return closeArtifactPanel(state ?? createArtifactPanelState());
+    }),
+  );
+  const resetArtifactWidth = useMemoizedFn(() =>
+    setArtifactPanel((state) => resetArtifactPanelPreference(state ?? createArtifactPanelState())),
+  );
+  const changeArtifactWidth = useMemoizedFn((width: number) =>
+    setArtifactPanel((state) => resizeArtifactPanel(state ?? createArtifactPanelState(), width)),
+  );
+  const artifactPanelBinding = useMemo<ArtifactPanelBinding | undefined>(
+    () =>
+      artifactPanel?.open
+        ? {
+            artifact: selectedPanelArtifact,
+            lucid: selectedLucidWiring,
+            layout: artifactPanel.preference.layout,
+            width: artifactPanel.preference.width,
+            onClose: closeArtifactPanelCb,
+            onResetWidth: resetArtifactWidth,
+            onWidthChange: changeArtifactWidth,
           }
-        />
-      )
-    ) : null;
+        : undefined,
+    [
+      artifactPanel,
+      selectedPanelArtifact,
+      selectedLucidWiring,
+      closeArtifactPanelCb,
+      resetArtifactWidth,
+      changeArtifactWidth,
+    ],
+  );
+
+  const onSwitchWorktree = useMemoizedFn((id: string) => void command("/worktree-switch", id));
+  // The resume chooser's relative-time clock (Tier 2.3): its rows are projected from a context OBJECT
+  // (not a component that could own a leaf clock), so App ticks one for it - armed only while the
+  // modal is open, which is the only time the labels are on screen.
+  const resumeNow = useNow(RELATIVE_TIME_TICK_MS, { enabled: modal.resumeOpen });
+  const choosersBinding = useMemo<ChooserBinding>(
+    () => ({
+      resumeOpen: modal.resumeOpen,
+      setResumeOpen: modal.setResumeOpen,
+      worktreeOpen: modal.worktreeOpen,
+      setWorktreeOpen: modal.setWorktreeOpen,
+      inventory: modal.inventory,
+      resumeContext: {
+        currentSessionId: sessionId,
+        currentProject: modal.currentProject,
+        busy,
+        nowMs: resumeNow,
+      },
+      onResume: navigateToSession,
+      worktrees: modal.worktrees,
+      worktreeContext: { activityBySession: modal.worktreeActivity, busy },
+      onSwitchWorktree,
+    }),
+    [
+      modal.resumeOpen,
+      modal.setResumeOpen,
+      modal.worktreeOpen,
+      modal.setWorktreeOpen,
+      modal.inventory,
+      modal.currentProject,
+      modal.worktrees,
+      modal.worktreeActivity,
+      sessionId,
+      busy,
+      resumeNow,
+      navigateToSession,
+      onSwitchWorktree,
+    ],
+  );
+
+  const openSidebar = useMemoizedFn(() => modal.setSidebarOpen(true));
+  const closeSidebar = useMemoizedFn(() => modal.setSidebarOpen(false));
+  const onRenameSessionCb = useMemoizedFn(
+    (renameSessionId: string, title: string) => void renameSession(renameSessionId, title),
+  );
+  const onMergeWorktree = useMemoizedFn(
+    (worktreeId: string) => void command("/worktree-merge", worktreeId),
+  );
+  const onDeleteWorktree = useMemoizedFn(
+    (worktreeId: string, deleteSessionId: string, force: boolean) => {
+      void command("/worktree-delete", force ? `${worktreeId} force` : worktreeId);
+      void archiveSession(deleteSessionId);
+    },
+  );
+  const onViewArchive = useMemoizedFn((projectKey: string) => {
+    setArchiveProjectFilter(projectKey);
+    modal.setArchiveOpen(true);
+  });
+  const onViewArchived = useMemoizedFn(() => {
+    setChooserOpen(false);
+    setArchiveProjectFilter(null);
+    modal.setArchiveOpen(true);
+  });
+  const sidebarBinding = useMemo<SidebarBinding>(
+    () => ({
+      open: modal.sidebarOpen,
+      onOpen: openSidebar,
+      onClose: closeSidebar,
+      width: modal.sidebarWidth,
+      onResize: modal.setSidebarWidth,
+      groups: projectSidebar.groups,
+      searchQuery: projectSidebar.searchQuery,
+      onSearch: projectSidebar.onSearch,
+      onToggleProject: projectSidebar.onToggleProject,
+      // Same safe switch path as `/resume` (D-093 M4): navigateToSession syncs `?session=` and
+      // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
+      // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
+      // the durable log and replay on return); the row's activity bar shows it from the other view.
+      onSelect: onSelectSidebarSession,
+      onShowMore: projectSidebar.onShowMore,
+      onAddProject: projectSidebar.onAddProject,
+      onNewSession: projectSidebar.onNewSession,
+      onArchiveSession: projectSidebar.onArchiveSession,
+      onRenameSession: onRenameSessionCb,
+      onRenameProject: projectSidebar.onRenameProject,
+      onRemoveProject: projectSidebar.onRemoveProject,
+      onMergeWorktree,
+      onDeleteWorktree,
+      onViewArchive,
+      onViewArchived,
+      currentSessionId: target,
+      liveActivity: modal.sidebarLiveActivity,
+    }),
+    [
+      modal.sidebarOpen,
+      openSidebar,
+      closeSidebar,
+      modal.sidebarWidth,
+      modal.setSidebarWidth,
+      projectSidebar.groups,
+      projectSidebar.searchQuery,
+      projectSidebar.onSearch,
+      projectSidebar.onToggleProject,
+      onSelectSidebarSession,
+      projectSidebar.onShowMore,
+      projectSidebar.onAddProject,
+      projectSidebar.onNewSession,
+      projectSidebar.onArchiveSession,
+      onRenameSessionCb,
+      projectSidebar.onRenameProject,
+      projectSidebar.onRemoveProject,
+      onMergeWorktree,
+      onDeleteWorktree,
+      onViewArchive,
+      onViewArchived,
+      target,
+      modal.sidebarLiveActivity,
+    ],
+  );
+
+  const loopInventoryBinding = useMemo(
+    () => ({ rows: loopInventoryRows, onControl: onLoopControl }),
+    [loopInventoryRows, onLoopControl],
+  );
+
+  const resumeHostBinding = useMemo(
+    () =>
+      selectedResumeAction?.kind === "manual" || selectedResumeAction?.kind === "auto-start"
+        ? sessionLaunch.launchState === "starting"
+          ? ({ phase: "starting", label: "Starting host..." } as const)
+          : sessionLaunch.launchState === "failed" || sessionLaunch.error
+            ? ({
+                phase: "failed",
+                error: sessionLaunch.error ?? "The host could not be started.",
+                onRetry:
+                  selectedResumeAction.kind === "manual"
+                    ? () => onResumeSelectedSession(selectedResumeAction)
+                    : () =>
+                        launchExactSession(
+                          selectedResumeAction.root,
+                          selectedResumeAction.sessionId,
+                        ),
+              } as const)
+            : selectedResumeAction.kind === "manual"
+              ? ({
+                  phase: "manual",
+                  updatedAt: selectedResumeAction.updatedAt,
+                  onResume: () => onResumeSelectedSession(selectedResumeAction),
+                } as const)
+              : null
+        : selectedResumeAction?.kind === "unlaunchable"
+          ? ({
+              phase: "unlaunchable",
+              updatedAt: selectedResumeAction.updatedAt,
+            } as const)
+          : null,
+    [
+      selectedResumeAction,
+      sessionLaunch.launchState,
+      sessionLaunch.error,
+      onResumeSelectedSession,
+      launchExactSession,
+    ],
+  );
+
+  const onUnarchive = useMemoizedFn(() => void unarchive());
+  const onAnswerQuestion = useMemoizedFn((answer: ProviderQuestionAnswer) => {
+    if (pendingQuestion) {
+      void answerQuestion(pendingQuestion.questionId, answer);
+    }
+  });
+  const questionBinding = useMemo(
+    () => ({ pending: pendingQuestion, onAnswer: onAnswerQuestion }),
+    [pendingQuestion, onAnswerQuestion],
+  );
+
+  const onApproveHandoff = useMemoizedFn((handoffId: string) => void approveHandoff(handoffId));
+  const onRejectHandoff = useMemoizedFn((handoffId: string) => void rejectHandoff(handoffId));
+  const onEditHandoff = useMemoizedFn((handoffId: string, prompt: string) =>
+    editor.open({
+      text: prompt,
+      title: "Edit handoff prompt",
+      onConfirm: (edited) => void approveHandoff(handoffId, edited),
+    }),
+  );
+  const handoffBinding = useMemo(
+    () => ({
+      pending: pendingHandoff,
+      onApprove: onApproveHandoff,
+      onReject: onRejectHandoff,
+      onEdit: onEditHandoff,
+    }),
+    [pendingHandoff, onApproveHandoff, onRejectHandoff, onEditHandoff],
+  );
 
   return (
     <>
       <PanelHost
         composer={composer}
-        compose={{
-          onSubmit,
-          onInputKeyDown,
-          menuOpen: slashMenu.menuOpen,
-          menuMatches: slashMenu.menuMatches,
-          menuIndex: slashMenu.menuIndex,
-          slashQuery: slashMenu.slashQuery,
-          acceptCommand: slashMenu.acceptCommand,
-          commandPreview: slashMenu.preview,
-          fileMenu: {
-            open: fileMenu.menuOpen,
-            matches: fileMenu.matches,
-            index: fileMenu.menuIndex,
-            query: fileMenu.query ?? "",
-            truncated: fileMenu.truncated,
-            loading: fileMenu.menuOpen && !fileIndex.ready,
-            onPick: fileMenu.acceptFile,
-          },
-          caret: composerCaret,
-          onCaretChange: setComposerCaret,
-          disabled: !sessionId,
-          disabledReason: "Resume host to continue",
-          placeholder: `message ${activeLabel}… (/ for commands, @ for files, ! for shell)`,
-          onExpand: () => editor.open({ text: draft, onConfirm: setDraft }),
-          vimEnabled,
-        }}
+        compose={composeWiring}
         stream={stream}
         host={host}
-        transcript={{
-          transcript,
-          toolBatches,
-          rowConfig: {
-            onOpenPath: (path) => void openInEditor(path),
-            onOpenArtifact: (artifact) => {
-              setChooserOpen(false);
-              modal.setArchiveOpen(false);
-              setDetailId(null);
-              setJobDetailId(null);
-              setArtifactPanel((state) =>
-                openArtifactPanel(state ?? createArtifactPanelState(), { artifact }),
-              );
-            },
-            onDoctorRefresh: () => void command("/doctor", "refresh"),
-            onMenuAction: (cmd: string, args: string) => void command(cmd, args),
-            onOpenDetail,
-            onOpenAgent,
-            showThinking: showThinkingOn,
-            compact,
-          },
-          // The pinned live turn-status header (plan 50) replaces the scrolling "Working" row. It is
-          // already suppressed for a host-stranded prompt (turnStatusHeaderFrom is gated on
-          // `awaitingResponse && !hostlessPending`), so the no-host status line still carries that
-          // affordance; `busy`/the send queue are unchanged, so follow-ups still queue and catch up.
-          turnStatusHeader,
-          queue: visibleQueue,
-          onUnqueue: unqueue,
-        }}
+        transcript={transcriptView}
         scroll={scroll}
         tasks={tasks}
-        loopInventory={{ rows: loopInventoryRows, onControl: onLoopControl }}
+        loopInventory={loopInventoryBinding}
         tasksStale={staleTasks}
         subagents={subagents}
         jobs={jobs}
         onOpenJobDetail={onOpenJobDetail}
         onKillJob={onKillJob}
         onDismissJob={onDismissJob}
-        panel={{
-          // Preserve the original truthiness gate verbatim: an unset (undefined) value renders the
-          // panel closed exactly as the prior `{panelOpen ? … }` / `{!panelOpen ? … }` checks did.
-          open: modal.panelOpen,
-          onOpen: () => modal.setPanelOpen(true),
-          onClose: () => modal.setPanelOpen(false),
-          title: target,
-          subtitle: `${status}${replayed ? " · replayed" : ""} · ${events.length} events`,
-          statusNode,
-          workspace: host.cwd ?? host.workspace ?? undefined,
-          git: host.git,
-          model: panel,
-          controls: panelControls,
-          footer: panelFooter,
-          ready: replayed,
-        }}
-        artifactPanel={
-          artifactPanel?.open
-            ? {
-                artifact: selectedPanelArtifact,
-                lucid: selectedLucidWiring,
-                layout: artifactPanel.preference.layout,
-                width: artifactPanel.preference.width,
-                onClose: () =>
-                  setArtifactPanel((state) => {
-                    requestAnimationFrame(() => inputRef.current?.focus());
-                    return closeArtifactPanel(state ?? createArtifactPanelState());
-                  }),
-                onResetWidth: () =>
-                  setArtifactPanel((state) =>
-                    resetArtifactPanelPreference(state ?? createArtifactPanelState()),
-                  ),
-                onWidthChange: (width) =>
-                  setArtifactPanel((state) =>
-                    resizeArtifactPanel(state ?? createArtifactPanelState(), width),
-                  ),
-              }
-            : undefined
-        }
-        choosers={{
-          resumeOpen: modal.resumeOpen,
-          setResumeOpen: modal.setResumeOpen,
-          worktreeOpen: modal.worktreeOpen,
-          setWorktreeOpen: modal.setWorktreeOpen,
-          inventory: modal.inventory,
-          resumeContext: {
-            currentSessionId: sessionId,
-            currentProject: modal.currentProject,
-            busy,
-            nowMs: now,
-          },
-          onResume: navigateToSession,
-          worktrees: modal.worktrees,
-          worktreeContext: { activityBySession: modal.worktreeActivity, busy },
-          onSwitchWorktree: (id) => void command("/worktree-switch", id),
-        }}
-        sidebar={{
-          open: modal.sidebarOpen,
-          onOpen: () => modal.setSidebarOpen(true),
-          onClose: () => modal.setSidebarOpen(false),
-          width: modal.sidebarWidth,
-          onResize: modal.setSidebarWidth,
-          groups: projectSidebar.groups,
-          searchQuery: projectSidebar.searchQuery,
-          onSearch: projectSidebar.onSearch,
-          onToggleProject: projectSidebar.onToggleProject,
-          // Same safe switch path as `/resume` (D-093 M4): navigateToSession syncs `?session=` and
-          // resets the per-session draft/queue/history via the sessionId-keyed hooks. Switching is
-          // ALWAYS allowed, even while a turn runs - the run keeps going on the host (its events stay in
-          // the durable log and replay on return); the row's activity bar shows it from the other view.
-          onSelect: onSelectSidebarSession,
-          onShowMore: projectSidebar.onShowMore,
-          onAddProject: projectSidebar.onAddProject,
-          onNewSession: projectSidebar.onNewSession,
-          onArchiveSession: projectSidebar.onArchiveSession,
-          onRenameSession: (sessionId, title) => void renameSession(sessionId, title),
-          onRenameProject: projectSidebar.onRenameProject,
-          onRemoveProject: projectSidebar.onRemoveProject,
-          onMergeWorktree: (worktreeId) => void command("/worktree-merge", worktreeId),
-          onDeleteWorktree: (worktreeId, sessionId, force) => {
-            void command("/worktree-delete", force ? `${worktreeId} force` : worktreeId);
-            void archiveSession(sessionId);
-          },
-          onViewArchive: (projectKey) => {
-            setArchiveProjectFilter(projectKey);
-            modal.setArchiveOpen(true);
-          },
-          onViewArchived: () => {
-            setChooserOpen(false);
-            setArchiveProjectFilter(null);
-            modal.setArchiveOpen(true);
-          },
-          currentSessionId: target,
-          liveActivity: modal.sidebarLiveActivity,
-          nowMs: now,
-        }}
-        resumeHost={
-          selectedResumeAction?.kind === "manual" || selectedResumeAction?.kind === "auto-start"
-            ? sessionLaunch.launchState === "starting"
-              ? { phase: "starting", label: "Starting host..." }
-              : sessionLaunch.launchState === "failed" || sessionLaunch.error
-                ? {
-                    phase: "failed",
-                    error: sessionLaunch.error ?? "The host could not be started.",
-                    onRetry:
-                      selectedResumeAction.kind === "manual"
-                        ? () => onResumeSelectedSession(selectedResumeAction)
-                        : () =>
-                            launchExactSession(
-                              selectedResumeAction.root,
-                              selectedResumeAction.sessionId,
-                            ),
-                  }
-                : selectedResumeAction.kind === "manual"
-                  ? {
-                      phase: "manual",
-                      updatedAt: selectedResumeAction.updatedAt,
-                      nowMs: now,
-                      onResume: () => onResumeSelectedSession(selectedResumeAction),
-                    }
-                  : null
-            : selectedResumeAction?.kind === "unlaunchable"
-              ? { phase: "unlaunchable", updatedAt: selectedResumeAction.updatedAt, nowMs: now }
-              : null
-        }
+        panel={panelBinding}
+        artifactPanel={artifactPanelBinding}
+        choosers={choosersBinding}
+        sidebar={sidebarBinding}
+        resumeHost={resumeHostBinding}
         sessionName={sessionName}
         onTangent={openTangent}
         chooser={
@@ -1792,26 +2111,9 @@ export function App() {
           )
         }
         archived={archived}
-        onUnarchive={() => void unarchive()}
-        question={{
-          pending: pendingQuestion,
-          onAnswer: (answer) => {
-            if (pendingQuestion) {
-              void answerQuestion(pendingQuestion.questionId, answer);
-            }
-          },
-        }}
-        handoff={{
-          pending: pendingHandoff,
-          onApprove: (handoffId) => void approveHandoff(handoffId),
-          onReject: (handoffId) => void rejectHandoff(handoffId),
-          onEdit: (handoffId, prompt) =>
-            editor.open({
-              text: prompt,
-              title: "Edit handoff prompt",
-              onConfirm: (edited) => void approveHandoff(handoffId, edited),
-            }),
-        }}
+        onUnarchive={onUnarchive}
+        question={questionBinding}
+        handoff={handoffBinding}
       />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} commands={paletteCommands} />
       <ShortcutsHelp open={helpOpen} onOpenChange={setHelpOpen} />
@@ -1829,7 +2131,6 @@ export function App() {
         onPathChange={supervisor.onPathChange}
         onCreate={supervisor.onCreate}
         onRetry={supervisor.onRetry}
-        nowMs={now}
       />
     </>
   );

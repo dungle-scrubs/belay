@@ -1,7 +1,13 @@
 import DOMPurify from "dompurify";
 import { marked, type Tokens } from "marked";
-import { useEffect, useMemo, useRef } from "react";
-import { type HighlightResult, highlightCode, isFenceClosed } from "./code-highlight";
+import { useDeferredValue, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import {
+  type HighlightResult,
+  highlightCode,
+  isFenceClosed,
+  isHighlightEngineReady,
+  subscribeHighlightEngine,
+} from "./code-highlight";
 import { MermaidBlock } from "./mermaid-block";
 import "./markdown.css";
 
@@ -162,7 +168,25 @@ export function Markdown({
   /** Render explicit fenced Mermaid diagrams as transcript diagrams instead of plain code. */
   readonly mermaid?: boolean;
 }) {
-  const parts = useMemo(() => markdownParts(text, mermaid), [mermaid, text]);
+  // A streaming turn re-renders this component once per delta, and re-lexing + re-sanitizing the
+  // WHOLE message every time is O(len^2) over the turn. Deferring the parse input keeps the urgent
+  // per-token render cheap - the memo below is keyed on the deferred text, so it reuses the previous
+  // parse - while React re-parses in a background render at its own cadence, coalescing bursts of
+  // deltas into far fewer lexer/DOMPurify passes. useDeferredValue always converges to the latest
+  // text: the mount render parses immediately (the deferred value IS the value on first render), and
+  // once the stream settles the final background render parses the complete text, so a done message
+  // never sticks on stale content.
+  const deferredText = useDeferredValue(text);
+  // The hljs engine (core + grammars) lazy-loads on the first closed fence (Tier 5.2), so a settled
+  // block can render plain while the chunk is in flight. Subscribing to engine readiness re-renders
+  // this surface exactly once when it lands, and the readiness flag below invalidates the parse memo
+  // so that render re-tokenizes - without it the memo would pin the plain markup forever.
+  const highlightReady = useSyncExternalStore(subscribeHighlightEngine, isHighlightEngineReady);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: highlightReady is read by highlightCode through module state (not through this closure), and must invalidate the memo when the engine loads.
+  const parts = useMemo(
+    () => markdownParts(deferredText, mermaid),
+    [mermaid, deferredText, highlightReady],
+  );
   const className = muted ? "trevor-md trevor-md--muted" : "trevor-md";
   const containerRef = useRef<HTMLDivElement>(null);
 

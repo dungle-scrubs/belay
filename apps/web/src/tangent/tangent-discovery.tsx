@@ -1,6 +1,7 @@
 import { relativeTime, type SessionSummary } from "@trevor/session";
 import { GitBranch } from "lucide-react";
 import { BackToChat } from "@/components/panel/back-to-chat";
+import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 
 /**
@@ -13,7 +14,9 @@ import { cn } from "@/lib/utils";
  */
 export interface TangentDiscoveryProps {
   readonly tangents: readonly SessionSummary[];
-  readonly nowMs: number;
+  /** Wall clock for the recency labels. Pass a fixed value for deterministic stories/tests; omitted
+   *  (the live default), the list ticks its OWN leaf clock (Tier 2.3). */
+  readonly nowMs?: number;
   readonly onOpen: (tangent: SessionSummary) => void;
   readonly onBack: () => void;
   readonly className?: string;
@@ -39,6 +42,9 @@ export function TangentDiscovery({
   onBack,
   className,
 }: TangentDiscoveryProps) {
+  // The list's own relative-time clock (Tier 2.3); a provided nowMs pauses it for determinism.
+  const clockNow = useNow(RELATIVE_TIME_TICK_MS, { enabled: nowMs === undefined });
+  const rowNowMs = nowMs ?? clockNow;
   return (
     <section
       aria-label="Tangents"
@@ -76,7 +82,7 @@ export function TangentDiscovery({
                     <span className="flex items-center gap-2 text-xs text-muted-foreground">
                       <span className={status.tone}>{status.label}</span>
                       <span aria-hidden="true">·</span>
-                      <span>{relativeTime(tangent.updatedAt, nowMs)}</span>
+                      <span>{relativeTime(tangent.updatedAt, rowNowMs)}</span>
                     </span>
                   </button>
                 </li>

@@ -50,17 +50,27 @@ export interface UseSendQueue {
 export function useSendQueue({
   events,
   selfProducerId,
+  projectedQueue,
   publish,
   supersede,
 }: {
-  /** The durable event log the queue is projected from (resets on session switch, so no reset hook). */
+  /** The durable event log the queue is projected from (resets on session switch, so no reset hook).
+   *  Only read when `projectedQueue` is absent - the live app passes the projector's precomputed queue. */
   readonly events: readonly SessionEvent[];
   /** This client's producerId, so the host's own echoes are excluded from the queue. */
   readonly selfProducerId?: string;
+  /** The still-queued follow-ups already projected by the incremental transcript projector (Tier 0.2).
+   *  When present the hook consumes it directly instead of re-scanning `events` on every render (which,
+   *  keyed on the per-token-churning event array, re-ran `queuedPromptsFrom` on every streamed token). */
+  readonly projectedQueue?: readonly QueuedPrompt[];
   readonly publish: (prompt: UserTurnInput) => Promise<void>;
   readonly supersede: (supersedes: readonly string[], reason: SupersedeReason) => Promise<void>;
 }): UseSendQueue {
-  const queue = useMemo(() => queuedPromptsFrom(events, selfProducerId), [events, selfProducerId]);
+  const derived = useMemo(
+    () => (projectedQueue ? null : queuedPromptsFrom(events, selfProducerId)),
+    [projectedQueue, events, selfProducerId],
+  );
+  const queue = projectedQueue ?? derived ?? [];
 
   const submit = useCallback(
     (prompt: UserTurnInput) => {

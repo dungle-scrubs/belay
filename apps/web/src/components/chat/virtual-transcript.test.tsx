@@ -348,7 +348,9 @@ describe("VirtualTranscript", () => {
     const controller = createScrollFollowController();
     controller.gesture("up"); // the user has scrolled up
     const follows = trackApprovedWrites(controller);
-    const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
+    // 200 rows: above the full-render row limit, so the append exercises the VIRTUALIZED path the
+    // test was written for (100 single-row turns virtualized under the old turn-count gate).
+    const rows = Array.from({ length: 200 }, (_, index) => userRow(index));
     const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
 
     await waitFor(() => {
@@ -357,7 +359,7 @@ describe("VirtualTranscript", () => {
     follows.follow = 0; // ignore any writes during the initial reveal; count only post-append
 
     await act(async () => {
-      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} />);
+      rerender(<Harness rows={[...rows, userRow(200)]} controller={controller} />);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     });
@@ -373,7 +375,8 @@ describe("VirtualTranscript", () => {
     const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const controller = createScrollFollowController(); // starts pinned
     const follows = trackApprovedWrites(controller);
-    const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
+    // 200 rows keeps this on the virtualized path now that the full-render gate counts rows.
+    const rows = Array.from({ length: 200 }, (_, index) => userRow(index));
     const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
 
     // Let the initial reveal fully settle (it follows the live edge across several frames while pinned).
@@ -396,10 +399,10 @@ describe("VirtualTranscript", () => {
     controller.gesture("up");
     follows.follow = 0;
     await act(async () => {
-      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} />);
+      rerender(<Harness rows={[...rows, userRow(200)]} controller={controller} />);
       await raf();
       await raf();
-      rerender(<Harness rows={[...rows, userRow(100), userRow(101)]} controller={controller} />);
+      rerender(<Harness rows={[...rows, userRow(200), userRow(201)]} controller={controller} />);
       await raf();
       await raf();
     });
@@ -410,7 +413,8 @@ describe("VirtualTranscript", () => {
   test("while pinned, an appended row DOES approve a follow write (stick-to-bottom)", async () => {
     const controller = createScrollFollowController(); // pinned
     const follows = trackApprovedWrites(controller);
-    const rows = Array.from({ length: 100 }, (_, index) => userRow(index));
+    // 200 rows keeps this on the virtualized path now that the full-render gate counts rows.
+    const rows = Array.from({ length: 200 }, (_, index) => userRow(index));
     const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
     await waitFor(() => {
       assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
@@ -418,7 +422,7 @@ describe("VirtualTranscript", () => {
     follows.follow = 0;
 
     await act(async () => {
-      rerender(<Harness rows={[...rows, userRow(100)]} controller={controller} />);
+      rerender(<Harness rows={[...rows, userRow(200)]} controller={controller} />);
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     });
@@ -744,5 +748,136 @@ graph TD
       writes.follow > 0,
       "a compact toggle while pinned re-anchors to the live edge as heights change",
     );
+  });
+
+  test("the full-render gate counts rows, not turns: one 200-row turn is virtualized", async () => {
+    // Regression for the Tier 4.1 gate: under the old 64-TURN limit this transcript - a single
+    // preface turn holding every row - disabled windowing and mounted all 200 subtrees at once.
+    const rows = Array.from({ length: 200 }, (_, index) => toolRow(index, false));
+    const { container } = render(<Harness rows={rows} />);
+
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+
+    const list = container.querySelector<HTMLElement>("[data-transcript-virtual-list]");
+    assert.ok(list);
+    assert.equal(list.getAttribute("data-transcript-turn-count"), "1", "sanity: a single turn");
+    assert.ok(
+      Number.parseFloat(list.style.height) > 0,
+      "a row count above the limit must virtualize even inside one turn",
+    );
+    const turnItems = Array.from(
+      container.querySelectorAll<HTMLElement>("[data-transcript-virtual-turn]"),
+    );
+    assert.ok(turnItems.length >= 2, "the oversized turn is split into multiple virtual items");
+    for (const item of turnItems) {
+      assert.equal(item.classList.contains("absolute"), true);
+    }
+  });
+
+  test("a transcript at the row limit still renders fully, without absolute positioning", async () => {
+    const rows = Array.from({ length: 128 }, (_, index) => userRow(index));
+    const { container } = render(<Harness rows={rows} />);
+
+    await waitFor(() => {
+      assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
+    });
+
+    const list = container.querySelector<HTMLElement>("[data-transcript-virtual-list]");
+    assert.ok(list);
+    assert.equal(list.style.height, "", "full render leaves layout to normal flow");
+    for (const item of container.querySelectorAll<HTMLElement>("[data-transcript-virtual-turn]")) {
+      assert.equal(item.classList.contains("absolute"), false);
+      assert.equal(item.style.transform, "");
+    }
+  });
+
+  test("a single tool-storm turn mounts a bounded row window, not its whole subtree", async () => {
+    // Give virtual items real-ish height (every measured element reports it in jsdom, including the
+    // 32-row block wrappers) so the virtualizer can window WITHIN the storm turn. The controller is
+    // unpinned: jsdom's zero scroll geometry makes pinned live-edge settling racy, and the reading
+    // window at the top is the same bounded-mount property this test is about.
+    Object.defineProperty(HTMLElement.prototype, "offsetHeight", {
+      configurable: true,
+      get() {
+        return 720;
+      },
+    });
+    const controller = createScrollFollowController();
+    controller.gesture("up");
+    const rows = [userRow(0), ...Array.from({ length: 500 }, (_, index) => toolRow(index))];
+    const { container } = render(<Harness rows={rows} controller={controller} />);
+
+    await waitFor(() => {
+      assert.equal(
+        container
+          .querySelector("[data-transcript-virtual-list]")
+          ?.getAttribute("data-transcript-ready"),
+        "true",
+      );
+    });
+
+    const list = container.querySelector<HTMLElement>("[data-transcript-virtual-list]");
+    assert.ok(list);
+    assert.equal(list.getAttribute("data-transcript-row-count"), "501");
+    assert.equal(
+      list.getAttribute("data-transcript-turn-count"),
+      "1",
+      "sanity: one turn holds every row",
+    );
+    const mounted = container.querySelectorAll("[data-transcript-virtual-row]").length;
+    assert.ok(mounted > 0);
+    assert.ok(mounted < 260, `a tool storm must not mount its whole subtree, saw ${mounted} rows`);
+    assert.ok(
+      container.querySelectorAll("[data-transcript-virtual-turn]").length >= 2,
+      "the storm turn is split across multiple mounted virtual items",
+    );
+  });
+
+  test("a re-render with unchanged rows and measurements skips the anchor measurement pass", async () => {
+    // Tier 4.2: the dependency-less layout effect observes every commit, but its DOM reads
+    // (visibleAnchorIn's querySelectorAll + getBoundingClientRect sweep) forced a reflow per render.
+    // When neither the rows identity nor the virtualizer total size changed, it must not read at all.
+    const raf = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const controller = createScrollFollowController();
+    controller.gesture("up"); // unpinned - the anchor-snapshot path is the one that reads row geometry
+    const rows = Array.from({ length: 200 }, (_, index) => userRow(index));
+    const { container, rerender } = render(<Harness rows={rows} controller={controller} />);
+    await waitFor(() => {
+      assert.equal(
+        container
+          .querySelector("[data-transcript-virtual-list]")
+          ?.getAttribute("data-transcript-ready"),
+        "true",
+      );
+    });
+    await act(async () => {
+      for (let i = 0; i < 4; i += 1) {
+        await raf(); // drain the reveal/settle frames so measurements are quiescent
+      }
+    });
+    const scroll = container.querySelector<HTMLElement>('[data-testid="scroll"]');
+    assert.ok(scroll);
+    const reads = vi.spyOn(scroll, "querySelectorAll");
+
+    // Same rows identity, no measurement change (the Harness's inline rowConfig defeats the memo, so
+    // the component itself DOES re-render - the gate inside the effect is what must skip).
+    await act(async () => {
+      rerender(<Harness rows={rows} controller={controller} />);
+      await raf();
+    });
+    assert.equal(
+      reads.mock.calls.length,
+      0,
+      "no row-geometry read may happen when neither rows nor measurements changed",
+    );
+
+    // Sanity: a real rows change still runs the measurement pass - the gate must not disable it.
+    await act(async () => {
+      rerender(<Harness rows={[...rows, userRow(200)]} controller={controller} />);
+      await raf();
+    });
+    assert.ok(reads.mock.calls.length > 0, "a rows change must still refresh the reading anchor");
   });
 });

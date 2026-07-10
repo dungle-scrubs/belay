@@ -116,6 +116,9 @@ const UNROUTED: readonly string[] = [
   "session.project",
   "session.switch",
   "session.title",
+  // The durable worktree identity marker (plan 58.7): session-switch.ts stamps it on a worktree
+  // target before spawn; the inventory projection reads it. handleEvent never consumes it.
+  "session.worktree",
   "shell.result",
   "tool.guardrail",
   // Workflow journal events are host-emitted by the workflow engine and consumed by resume/projection

@@ -1,6 +1,6 @@
 import { type ArtifactRef, estimateTokens, isContextOverflowText } from "@trevor/session";
 import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { RECOVERY_ACTION_LABEL, reconnectActionLabel } from "@/action-label";
 import { compactDisplayFor } from "@/components/chat/compact-display";
 import { CompactRow } from "@/components/chat/compact-row";
@@ -148,7 +148,7 @@ export interface TranscriptRowViewProps {
   readonly suppressCompactPrimary?: boolean;
 }
 
-export function TranscriptRowView({
+function TranscriptRowViewImpl({
   row,
   showThinking,
   onOpenPath,
@@ -612,3 +612,59 @@ export function TranscriptRowView({
     </div>
   );
 }
+
+/**
+ * Row equality one level deep (Tier 1): `buildTranscriptRows` mints FRESH wrapper objects on every
+ * fold (any appended event), but the projector guarantees the underlying Message objects keep
+ * identity for untouched rows. Comparing the wrapper's fields - and, for a tool batch, its tool
+ * messages element-wise (the batch arrays are also rebuilt per fold) - recovers that stability, so
+ * the memo below skips exactly the rows a batch of events did not mutate.
+ */
+function sameTranscriptRow(a: TranscriptRow, b: TranscriptRow): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a.kind !== b.kind || a.id !== b.id || a.compactAbove !== b.compactAbove) {
+    return false;
+  }
+  if (a.kind === "message" && b.kind === "message") {
+    return a.message === b.message;
+  }
+  if (a.kind === "tool_batch" && b.kind === "tool_batch") {
+    return (
+      a.tools === b.tools ||
+      (a.tools.length === b.tools.length && a.tools.every((tool, i) => tool === b.tools[i]))
+    );
+  }
+  return false;
+}
+
+/** Shallow-compare every prop except `row`, which gets the structural one-level compare above. Keyed
+ *  off the prop NAMES at call time (not a hardcoded list), so adding a prop can never silently skip
+ *  its comparison. */
+function transcriptRowViewPropsEqual(
+  prev: TranscriptRowViewProps,
+  next: TranscriptRowViewProps,
+): boolean {
+  const keys = Object.keys(next) as readonly (keyof TranscriptRowViewProps)[];
+  if (keys.length !== Object.keys(prev).length) {
+    return false;
+  }
+  for (const key of keys) {
+    if (key === "row") {
+      continue;
+    }
+    if (!Object.is(prev[key], next[key])) {
+      return false;
+    }
+  }
+  return sameTranscriptRow(prev.row, next.row);
+}
+
+/**
+ * The per-row memo boundary (Tier 1): during a streaming turn only the mutated row(s) re-render;
+ * every untouched row is skipped here, cutting the per-token render cost from O(transcript) to O(1)
+ * rows. Effective because Tier 0's projector keeps untouched Message identity and App passes stable
+ * (useMemoizedFn) callbacks through rowConfig.
+ */
+export const TranscriptRowView = memo(TranscriptRowViewImpl, transcriptRowViewPropsEqual);
