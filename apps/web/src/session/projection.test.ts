@@ -12,7 +12,7 @@ import {
   tasksFrom,
   tasksStale,
 } from "../derive";
-import { toTranscript } from "../transcript";
+import { TranscriptProjector, toTranscript } from "../transcript";
 import { createSessionReadModel } from "./projection";
 import {
   selectHostStatus,
@@ -116,6 +116,31 @@ test("SessionReadModel reproduces the existing web folds from the event log", ()
   assert.deepEqual(model.tasks, tasksFrom(events));
   assert.equal(model.staleTasks, tasksStale(events));
   assert.deepEqual(model.pendingQuestion, pendingQuestionFrom(events));
+});
+
+test("a session-bound read model ignores a foreign log during a session switch", () => {
+  // The switch render: the app's sessionId flips A->B (a revisited session resolves synchronously
+  // from the query cache) while the event state still holds A's log - useSession only clears it in
+  // its effect, AFTER that render. The freshly-minted projector for B must not fold A's events:
+  // seq is per-session, so A's seqs would advance the projector's cursor past B's, and B's entire
+  // replay would then be skipped, leaving A's transcript rendered under B's id permanently.
+  const eventIn = (sessionId: string, seq: number, text: string): SessionEvent =>
+    storedEvent(
+      { type: "user.message", payload: { text, provider: "lmstudio" } },
+      { createdAt: "2026-01-01T00:00:00.000Z", producerId: "web", seq, sessionId },
+    );
+  const logA = [eventIn("a", 1, "from A"), eventIn("a", 2, "still A")];
+  const projector = new TranscriptProjector({ selfProducerId: "host" });
+
+  const contaminated = createSessionReadModel(logA, { replayed: true, projector, sessionId: "b" });
+  assert.deepEqual(contaminated.transcript, []);
+  assert.deepEqual(contaminated.events, []);
+
+  // B's replay lands on the next render with seqs restarting at 1: it must fold normally.
+  const logB = [eventIn("b", 1, "from B")];
+  const model = createSessionReadModel(logB, { replayed: true, projector, sessionId: "b" });
+  assert.deepEqual(model.transcript, toTranscript(logB, { selfProducerId: "host" }));
+  assert.equal(model.transcript.length, 1);
 });
 
 test("selectors derive host, title, session name, and turn status from the read model", () => {

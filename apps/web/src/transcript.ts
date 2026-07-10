@@ -1,5 +1,6 @@
 import {
   type ArtifactRef,
+  activeTurnRunId,
   addBreakdown,
   type CommandMenuPayload,
   decodeTrevorEvent,
@@ -25,6 +26,7 @@ import {
   type UsageBreakdown,
 } from "@trevor/session";
 import { type QuestionOutcome, summarizeProviderQuestion } from "./derive";
+import { type QueuedPrompt, queuedPromptsFrom } from "./send-queue";
 
 export type { ArtifactRef, PastePayload, Usage, UsageBreakdown };
 
@@ -512,12 +514,27 @@ export function queuedOrSupersededUserIds(
  * published-but-not-yet-run follow-up never double-renders. `selfProducerId` excludes the host's own
  * echoes from that queue view.
  */
-export function toTranscript(
-  events: readonly SessionEvent[],
-  options: { readonly selfProducerId?: string } = {},
-): Message[] {
-  const hiddenUserIds = queuedOrSupersededUserIds(events, options.selfProducerId);
+/** The mutable working state of the transcript fold: the message list plus the per-run/-tool/-fold
+ *  bookkeeping the reducer threads across events, and `apply` to fold one more event into it. `dirty`
+ *  records which already-emitted messages a batch mutated, so the incremental {@link TranscriptProjector}
+ *  can give changed rows a fresh identity while unchanged rows keep theirs (structural sharing). It is
+ *  inert for the one-shot {@link toTranscript}. */
+export interface TranscriptFold {
+  readonly messages: Message[];
+  readonly dirty: Set<Message>;
+  readonly apply: (event: SessionEvent) => void;
+}
+
+function createTranscriptFold(): TranscriptFold {
   const messages: Message[] = [];
+  // The messages a batch mutated in place (streaming segment, a tool completing, an in-flight block
+  // advancing). The projector re-clones exactly these so their row re-renders while every untouched row
+  // keeps its object identity - the precondition for the per-row React.memo boundaries.
+  const dirty = new Set<Message>();
+  const touch = <T extends Message>(message: T): T => {
+    dirty.add(message);
+    return message;
+  };
   const runMeta = new Map<string, { model: string; warm: boolean; provider?: string }>();
   const openByRun = new Map<string, AssistantMessage>();
   const lastByRun = new Map<string, AssistantMessage>();
@@ -599,10 +616,10 @@ export function toTranscript(
     }
     return segment;
   };
-  for (const event of events) {
+  const apply = (event: SessionEvent): void => {
     const decoded = decodeTrevorEvent(event);
     if (!decoded) {
-      continue;
+      return;
     }
     switch (decoded.type) {
       case "user.cancel":
@@ -614,10 +631,8 @@ export function toTranscript(
         // A new prompt means any still-open fold bar was orphaned by a mid-fold reset - reap it.
         reapCompacting();
         // A superseded (folded/unqueued) prompt, or one still queued behind an in-flight turn, is
-        // rendered by the queue panel, not the main flow (plan 47) - skip it here so it never doubles.
-        if (hiddenUserIds.has(event.eventId)) {
-          break;
-        }
+        // rendered by the queue panel, not the main flow (plan 47). A LATER event can supersede or claim
+        // it, so the fold keeps it and the projection filters the hidden set at materialize time.
         messages.push({
           kind: "user",
           id: event.eventId,
@@ -695,7 +710,7 @@ export function toTranscript(
         const existing = lucidCardById.get(decoded.lucidId);
         if (existing) {
           // A new version: update the same card in place (latest version + fresh artifact ref).
-          existing.version = decoded.version;
+          touch(existing).version = decoded.version;
           existing.title = title;
           existing.artifact = artifact;
         } else {
@@ -734,7 +749,7 @@ export function toTranscript(
         // result's own copy when the request is gone.
         const existing = shellByRequest.get(decoded.requestId);
         if (existing) {
-          existing.done = true;
+          touch(existing).done = true;
           existing.output = decoded.output;
           existing.ok = decoded.ok;
         } else {
@@ -763,13 +778,13 @@ export function toTranscript(
         });
         break;
       case "assistant.delta":
-        openSegment(decoded.runId).text += decoded.text;
+        touch(openSegment(decoded.runId)).text += decoded.text;
         break;
       case "assistant.thinking":
-        openSegment(decoded.runId).thinking += decoded.text;
+        touch(openSegment(decoded.runId)).thinking += decoded.text;
         break;
       case "assistant.overflow":
-        openSegment(decoded.runId).overflow = decoded.reason;
+        touch(openSegment(decoded.runId)).overflow = decoded.reason;
         break;
       case "assistant.progress":
         // Remember the turn's latest live usage/breakdown, so a cancel (whose completion carries
@@ -785,7 +800,7 @@ export function toTranscript(
         // Finalize the open segment so the retry's output starts fresh below the marker.
         const open = openByRun.get(decoded.runId);
         if (open) {
-          open.done = true;
+          touch(open).done = true;
           openByRun.delete(decoded.runId);
         }
         messages.push({
@@ -802,7 +817,7 @@ export function toTranscript(
         // continued output starts fresh below the quiet breadcrumb.
         const open = openByRun.get(decoded.runId);
         if (open) {
-          open.done = true;
+          touch(open).done = true;
           openByRun.delete(decoded.runId);
         }
         messages.push({
@@ -819,7 +834,7 @@ export function toTranscript(
         // the open segment so the post-switch output starts fresh below the inline breadcrumb.
         const open = openByRun.get(decoded.runId);
         if (open) {
-          open.done = true;
+          touch(open).done = true;
           openByRun.delete(decoded.runId);
         }
         messages.push({
@@ -851,13 +866,13 @@ export function toTranscript(
         // marker (a reconnect fires before any token, so usually nothing is open).
         const open = openByRun.get(decoded.runId);
         if (open) {
-          open.done = true;
+          touch(open).done = true;
           openByRun.delete(decoded.runId);
         }
         const marker = reconnectingByRun.get(decoded.runId);
         const detail = reconnectDisplayDetail(decoded.detail);
         if (marker) {
-          marker.attempt = decoded.attempt;
+          touch(marker).attempt = decoded.attempt;
           if (decoded.maxAttempts != null) {
             marker.maxAttempts = decoded.maxAttempts;
           }
@@ -891,6 +906,11 @@ export function toTranscript(
             ) {
               break;
             }
+            // The entry lives inside the parent group's `agents`; touch the group so the row re-clones.
+            const parentGroup = inlineAgentByParent.get(decoded.runId);
+            if (parentGroup) {
+              touch(parentGroup);
+            }
             entry.status = asInlineAgentStatus(decoded.status);
             if (decoded.model !== undefined) {
               entry.model = decoded.model;
@@ -919,7 +939,7 @@ export function toTranscript(
             inlineAgentEntryByChild.set(decoded.childSessionId, fresh);
             const group = inlineAgentByParent.get(decoded.runId);
             if (group) {
-              group.agents.push(fresh);
+              touch(group).agents.push(fresh);
             } else {
               const block: InlineAgentMessage = {
                 kind: "inlineAgent",
@@ -937,7 +957,7 @@ export function toTranscript(
         // result) advance the same block in place, so the UI shows one linked card per delegation.
         const existing = delegationByChild.get(decoded.childSessionId);
         if (existing) {
-          existing.status = decoded.status;
+          touch(existing).status = decoded.status;
           if (decoded.result !== undefined) {
             existing.result = decoded.result;
           }
@@ -965,7 +985,7 @@ export function toTranscript(
         }
         const existing = compactingByFold.get(decoded.foldId);
         if (existing) {
-          existing.tokens = Math.max(existing.tokens, decoded.tokens);
+          touch(existing).tokens = Math.max(existing.tokens, decoded.tokens);
           existing.budget = decoded.budget;
         } else {
           // Singleton: a new fold supersedes any still-open (orphaned) bar from a prior fold, so
@@ -1004,7 +1024,7 @@ export function toTranscript(
         // Finalize the open segment so the next thinking/text starts a new one below the tool.
         const open = openByRun.get(decoded.runId);
         if (open) {
-          open.done = true;
+          touch(open).done = true;
           openByRun.delete(decoded.runId);
         }
         // ask_user (QuestionSurface) and the delegation tools (their delegated.to link) render as
@@ -1039,7 +1059,7 @@ export function toTranscript(
       case "tool.completed": {
         const tool = toolByCall.get(decoded.callId);
         if (tool) {
-          tool.done = true;
+          touch(tool).done = true;
           // A real completion wins over a prior abort (defensive; an interrupted tool emits none).
           tool.aborted = false;
           tool.result = decoded.result;
@@ -1087,17 +1107,18 @@ export function toTranscript(
         terminatedRuns.add(decoded.runId);
         for (const tool of toolsByRun.get(decoded.runId) ?? []) {
           if (!tool.done) {
-            tool.done = true;
+            touch(tool).done = true;
             tool.aborted = true;
           }
         }
         toolsByRun.delete(decoded.runId);
         // Land the final state on the run's last segment (or a fresh one if the turn
         // produced nothing visible, so an error still has somewhere to show).
-        const segment =
+        const segment = touch(
           openByRun.get(decoded.runId) ??
-          lastByRun.get(decoded.runId) ??
-          openSegment(decoded.runId);
+            lastByRun.get(decoded.runId) ??
+            openSegment(decoded.runId),
+        );
         segment.done = true;
         openByRun.delete(decoded.runId);
         if (decoded.error) {
@@ -1163,7 +1184,7 @@ export function toTranscript(
         });
         const existing = questionMsgById.get(decoded.questionId);
         if (existing) {
-          existing.outcome = view.outcome;
+          touch(existing).outcome = view.outcome;
           existing.items = view.items;
           existing.summary = view.summary;
         } else {
@@ -1184,8 +1205,148 @@ export function toTranscript(
       default:
         break;
     }
+  };
+  return { messages, dirty, apply };
+}
+
+/**
+ * Coalesces the raw event log into a transcript in arrival order (one-shot). The incremental live path
+ * folds through the same {@link createTranscriptFold} via {@link TranscriptProjector}; this wrapper folds
+ * every event then filters the follow-up-queue / superseded prompts, so the output matches the durable-
+ * queue projection. `selfProducerId` excludes the host's own echoes from that queue view.
+ */
+export function toTranscript(
+  events: readonly SessionEvent[],
+  options: { readonly selfProducerId?: string } = {},
+): Message[] {
+  const fold = createTranscriptFold();
+  for (const event of events) {
+    fold.apply(event);
   }
-  return messages;
+  const hidden = queuedOrSupersededUserIds(events, options.selfProducerId);
+  return fold.messages.filter((m) => !(m.kind === "user" && hidden.has(m.id)));
+}
+
+/** A shallow copy for structural sharing: every message mutates only top-level fields EXCEPT the
+ *  inline-agent block, whose `agents` entries advance in place - so that one array (and its entries) is
+ *  copied too. Everything else replaces nested objects (usage/breakdown/stop/artifacts) wholesale. */
+function cloneMessage(message: Message): Message {
+  if (message.kind === "inlineAgent") {
+    return { ...message, agents: message.agents.map((agent) => ({ ...agent })) };
+  }
+  return { ...message };
+}
+
+/** The event types that can change the follow-up queue / active-run / superseded projection. Streaming
+ *  deltas (the overwhelming majority of tail events) are NOT here, so the projector's O(scan) queue
+ *  recompute is skipped on every token - the whole point of centralizing it. `handoff.accepted` rides so
+ *  {@link queuedPromptsFrom}'s initial-handoff suppression stays correct. */
+const QUEUE_RELEVANT_EVENT_TYPES: ReadonlySet<string> = new Set([
+  "user.message",
+  "user.supersede",
+  "user.command",
+  "assistant.started",
+  "assistant.completed",
+  "handoff.accepted",
+]);
+
+function isQueueRelevant(event: SessionEvent): boolean {
+  const decoded = decodeTrevorEvent(event);
+  return decoded != null && QUEUE_RELEVANT_EVENT_TYPES.has(decoded.type);
+}
+
+/** The projector's per-render output: the transcript with structurally-shared row identity, plus the
+ *  queue/active-run state centralized out of the per-token re-scans (Tier 0.2). */
+export interface TranscriptProjection {
+  readonly transcript: Message[];
+  readonly activeRunId: string | null;
+  readonly awaitingResponse: boolean;
+  /** The still-queued follow-ups behind the active turn, projected once per queue change (not per token),
+   *  for the send-queue panel to consume without re-scanning the whole log. */
+  readonly queued: QueuedPrompt[];
+}
+
+/**
+ * The incremental transcript projector (Tier 0, the keystone). The eager {@link createSessionReadModel}
+ * rebuilt the whole transcript + queue folds on every appended event, so a streaming turn re-ran an
+ * O(n) fold per token - O(n^2) per turn - and handed React a brand-new object for every row each token,
+ * defeating any row-level memo. This holds the fold state across renders and:
+ *   - folds ONLY events past the last-seen seq (O(1) per streaming token), and
+ *   - re-clones ONLY the rows a batch actually mutated, so unchanged rows keep object identity and the
+ *     Tier 1 `React.memo` boundaries can skip them, while the streaming row still updates.
+ * The queue/active-run/superseded projection is recomputed only when a queue-relevant event arrives, so
+ * ordinary tokens never pay for it. One projector is bound per session (reset on session switch); the
+ * one-shot {@link toTranscript} stays the path for non-live surfaces (agent detail, tangent seed, tests).
+ */
+export class TranscriptProjector {
+  readonly #selfProducerId: string | undefined;
+  readonly #fold = createTranscriptFold();
+  #lastSeq = Number.NEGATIVE_INFINITY;
+  /** internal working message -> the object last handed to React, reused until the message is touched. */
+  #emitted = new Map<Message, Message>();
+  /** The queue-relevant slice of the log, folded lazily by the durable-queue selectors below. */
+  readonly #relevant: SessionEvent[] = [];
+  #relevantDirty = true;
+  #activeRunId: string | null = null;
+  #queued: QueuedPrompt[] = [];
+  #hiddenUserIds: Set<string> = new Set();
+
+  constructor(options: { readonly selfProducerId?: string } = {}) {
+    this.#selfProducerId = options.selfProducerId;
+  }
+
+  /** Folds every event past the last-seen seq. Idempotent: a re-render that passes the same (or a
+   *  prefix-stable) event array folds nothing new, so calling it in render is safe. */
+  applyAll(events: readonly SessionEvent[]): void {
+    for (const event of events) {
+      if (event.seq <= this.#lastSeq) {
+        continue;
+      }
+      this.#lastSeq = event.seq;
+      this.#fold.apply(event);
+      if (isQueueRelevant(event)) {
+        this.#relevant.push(event);
+        this.#relevantDirty = true;
+      }
+    }
+  }
+
+  /** Materializes the current projection: a fresh array whose entries share identity with the previous
+   *  projection except for the rows mutated since it, plus the queue/active state. */
+  project(): TranscriptProjection {
+    if (this.#relevantDirty) {
+      this.#activeRunId = activeTurnRunId(this.#relevant);
+      this.#queued = queuedPromptsFrom(this.#relevant, this.#selfProducerId);
+      this.#hiddenUserIds = queuedOrSupersededUserIds(this.#relevant, this.#selfProducerId);
+      this.#relevantDirty = false;
+    }
+    const transcript = this.#materialize();
+    return {
+      transcript,
+      activeRunId: this.#activeRunId,
+      awaitingResponse: transcript.at(-1)?.kind === "user",
+      queued: this.#queued,
+    };
+  }
+
+  #materialize(): Message[] {
+    const { messages, dirty } = this.#fold;
+    const hidden = this.#hiddenUserIds;
+    const out: Message[] = [];
+    const nextEmitted = new Map<Message, Message>();
+    for (const message of messages) {
+      if (message.kind === "user" && hidden.has(message.id)) {
+        continue;
+      }
+      const previous = this.#emitted.get(message);
+      const emitted = previous && !dirty.has(message) ? previous : cloneMessage(message);
+      nextEmitted.set(message, emitted);
+      out.push(emitted);
+    }
+    this.#emitted = nextEmitted;
+    dirty.clear();
+    return out;
+  }
 }
 
 /**
