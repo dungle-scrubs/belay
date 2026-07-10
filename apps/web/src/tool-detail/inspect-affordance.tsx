@@ -39,7 +39,7 @@ export function WithInspect({
         onClick={() => onOpenDetail(message)}
         aria-label="Inspect tool detail"
         title="Inspect"
-        className="absolute top-1 right-1 flex cursor-pointer items-center rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover/inspect:opacity-100"
+        className="absolute top-0 right-1 flex h-6 cursor-pointer items-center rounded px-1 text-muted-foreground opacity-0 transition-opacity hover:bg-accent hover:text-foreground focus-visible:opacity-100 group-hover/inspect:opacity-100"
       >
         <Maximize2 className="size-3.5" />
       </button>
