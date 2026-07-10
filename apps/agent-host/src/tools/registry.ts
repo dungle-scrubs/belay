@@ -1,7 +1,7 @@
 import { log, warn } from "@host/transport/log";
 import { Effect, Either, JSONSchema, ParseResult, Schema } from "effect";
 import type { ToolDef } from "../providers";
-import { ToolInputError } from "./errors";
+import { type ToolError, ToolInputError } from "./errors";
 import type { Tool, ToolContext } from "./types";
 import { currentLeafWorkspace } from "./workspace";
 
@@ -121,7 +121,7 @@ export function createToolRegistry(options: ToolRegistryOptions): ToolRegistry {
 
   function renderFailure(
     name: string,
-    error: { readonly message: string },
+    error: ToolError,
     runId: string | undefined,
     startedAt: number,
   ): Effect.Effect<string> {
@@ -129,6 +129,7 @@ export function createToolRegistry(options: ToolRegistryOptions): ToolRegistry {
       warn("tool", "failed", {
         run: runId,
         name,
+        kind: error._tag,
         ms: now() - startedAt,
         error: error.message,
       });

@@ -352,3 +352,24 @@ test("clear() on an already-empty checklist is a no-op (no emit, no rev bump)", 
   assert.equal(emits, 0, "no listeners fired");
   assert.equal(registry.revision(), revBefore, "revision unchanged");
 });
+
+test("task_create maps registry precondition failures to ToolInputError, not ToolExecutionError", async () => {
+  // "subject is required" / "blocked by" are bad-call failures (the model's arguments), so they
+  // belong to the taxonomy's input class; ToolExecutionError stays reserved for a delegated
+  // operation breaking.
+  const [create] = buildTaskTools(new TaskRegistry());
+  const blank = await Effect.runPromise(Effect.flip(create.execute({ subject: "   " })));
+  assert.equal(blank._tag, "ToolInputError");
+  assert.match(blank.detail, /subject is required/);
+
+  const registry = new TaskRegistry();
+  registry.create({ subject: "blocker" }); // task_1, pending
+  const [createBlocked] = buildTaskTools(registry);
+  const blocked = await Effect.runPromise(
+    Effect.flip(
+      createBlocked.execute({ subject: "dependent", status: "in_progress", blockedBy: ["1"] }),
+    ),
+  );
+  assert.equal(blocked._tag, "ToolInputError");
+  assert.match(blocked.detail, /blocked by 1 \(pending\)/);
+});
