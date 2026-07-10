@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "../src/event";
-import { decodeTrevorEvent } from "../src/protocol/decode";
+import { decodeTrevorEvent, REGISTERED_WIRE_TYPES } from "../src/protocol/decode";
 import { DECODE_SEEDS } from "./decode-seeds";
 
 /**
@@ -46,6 +46,12 @@ function mutations(seed: Record<string, unknown>): Record<string, unknown>[] {
         }
       }
     }
+    if (Array.isArray(value)) {
+      for (const junk of JUNK_VALUES) {
+        out.push({ ...seed, [key]: [junk] });
+        out.push({ ...seed, [key]: [...value, junk] });
+      }
+    }
   }
   return out;
 }
@@ -69,109 +75,23 @@ for (const seed of DECODE_SEEDS) {
       const clean = decodeTrevorEvent(envelope(seed.type, variant));
       assert.ok(clean !== null, `realistic payload decoded to null: ${JSON.stringify(variant)}`);
       assert.equal(clean.type, seed.type);
-      // Every mutation still decodes without throwing (null is acceptable, a throw is not).
+      // Every mutation of a REGISTERED type still decodes non-null and self-tagged: the
+      // table decode is total, so malformed known events degrade to safe values - they
+      // never throw and never silently drop to null.
       for (const payload of mutations(variant)) {
-        decodeTrevorEvent(envelope(seed.type, payload));
+        const decoded = decodeTrevorEvent(envelope(seed.type, payload));
+        assert.ok(decoded !== null, `mutation decoded to null: ${JSON.stringify(payload)}`);
+        assert.equal(decoded.type, seed.type);
       }
     }
   });
 }
 
-test("the decode corpus covers every registered wire type", () => {
-  // A wire type the registry knows but the corpus never feeds is silent non-coverage: the
-  // decoder could regress there without this suite noticing. Seeds must track the registry.
-  const seeded = new Set(DECODE_SEEDS.map((seed) => seed.type));
-  const missing: string[] = [];
-  for (const type of REGISTERED_WIRE_TYPES) {
-    if (!seeded.has(type)) {
-      missing.push(type);
-    }
-  }
-  assert.deepStrictEqual(missing, [], "registered wire types missing from DECODE_SEEDS");
+test("the decode corpus matches the registered wire types exactly", () => {
+  // A wire type the registry knows but the corpus never feeds is silent non-coverage; a
+  // seed for an unregistered type is dead weight; a duplicate seed hides a lost variant.
+  // The registered list is DERIVED from the decode tables, so this cannot drift.
+  const seedTypes = DECODE_SEEDS.map((seed) => seed.type);
+  assert.equal(new Set(seedTypes).size, seedTypes.length, "duplicate seed types");
+  assert.deepStrictEqual([...seedTypes].sort(), [...REGISTERED_WIRE_TYPES]);
 });
-
-/** Every wire name the decoder dispatches on (the wireEvent table names); the coverage
- *  test above keeps DECODE_SEEDS honest against it. */
-const REGISTERED_WIRE_TYPES: readonly string[] = [
-  "admission.status",
-  "assistant.completed",
-  "assistant.continued",
-  "assistant.delta",
-  "assistant.limit",
-  "assistant.overflow",
-  "assistant.progress",
-  "assistant.reconnecting",
-  "assistant.recovered",
-  "assistant.started",
-  "assistant.thinking",
-  "command.result",
-  "context.compacted",
-  "context.compacting",
-  "delegated.to",
-  "editor.open",
-  "file.index.requested",
-  "file.index.result",
-  "folder.pick.requested",
-  "folder.pick.result",
-  "handoff.accepted",
-  "handoff.approved",
-  "handoff.failed",
-  "handoff.generated",
-  "handoff.generating",
-  "handoff.rejected",
-  "handoff.requested",
-  "hook.decision",
-  "host.beat",
-  "host.hello",
-  "host.internet",
-  "host.online",
-  "host.role",
-  "host.sourceAuth",
-  "loop.status",
-  "lucid.feedback",
-  "lucid.published",
-  "lucid.review",
-  "model.switch.requested",
-  "model.switched",
-  "project.add.requested",
-  "project.add.result",
-  "project.collapse.requested",
-  "project.collapse.result",
-  "project.remove.requested",
-  "project.remove.result",
-  "project.rename.requested",
-  "project.rename.result",
-  "projects.list.requested",
-  "projects.list.result",
-  "provider.question.answer",
-  "provider.question.requested",
-  "provider.question.resolved",
-  "session.archived",
-  "session.deleted",
-  "session.forkedFrom",
-  "session.launch.requested",
-  "session.launch.result",
-  "session.project",
-  "session.switch",
-  "session.tangentOf",
-  "session.title",
-  "session.worktree",
-  "shell.result",
-  "tangent.created",
-  "tangent.foldedBack",
-  "tasks.current",
-  "tool.completed",
-  "tool.guardrail",
-  "tool.started",
-  "user.cancel",
-  "user.command",
-  "user.message",
-  "user.shell",
-  "user.supersede",
-  "workflow.agent",
-  "workflow.completed",
-  "workflow.leaf-failed",
-  "workflow.log",
-  "workflow.phase",
-  "workflow.started",
-];

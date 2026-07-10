@@ -1056,3 +1056,8 @@ const trevorEventRegistry = createProtocolRegistry([
 export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
   return trevorEventRegistry.decode(event);
 }
+
+/** Every wire type the decoder dispatches on, derived from the tables (sorted). The decode
+ *  robustness net asserts its seed corpus against this list, so corpus coverage cannot
+ *  silently drift from the registry. */
+export const REGISTERED_WIRE_TYPES: readonly string[] = trevorEventRegistry.wireNames();

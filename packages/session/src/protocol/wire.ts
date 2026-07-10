@@ -40,19 +40,24 @@ type WireFields = Record<string, WireField<unknown, WirePresence>>;
  *  hand-written unions these specs replace (decoded events are read-only wire views). */
 type WireValue<A> = A extends readonly (infer E)[] ? readonly E[] : A;
 
+/** Whether a field's decoded VALUE type forces an optional key: only when it genuinely may
+ *  be `undefined`. The `unknown extends A` guard keeps a raw passthrough field (`unknown`,
+ *  which trivially includes undefined) a REQUIRED key - the key itself is always set. */
+type OptionalValue<A> = unknown extends A ? false : undefined extends A ? true : false;
+
 /** The decoded shape one field-spec table derives: an `always` field whose decode can
  *  never yield `undefined` is a required key; everything else is an optional key (matching
  *  the hand-written unions these replace, where an always-present-but-maybe-undefined key
  *  was typed `k?: T`), holding the decoded value minus `undefined`. */
 export type WireShape<S extends WireFields> = {
   readonly [K in keyof S as S[K] extends WireField<infer A, "always">
-    ? undefined extends A
+    ? OptionalValue<A> extends true
       ? never
       : K
     : never]: S[K] extends WireField<infer A, WirePresence> ? WireValue<A> : never;
 } & {
   readonly [K in keyof S as S[K] extends WireField<infer A, "always">
-    ? undefined extends A
+    ? OptionalValue<A> extends true
       ? K
       : never
     : K]?: S[K] extends WireField<infer A, WirePresence> ? Exclude<WireValue<A>, undefined> : never;
@@ -77,13 +82,17 @@ export function wireEvent<T extends string, S extends WireFields>(
     event: SessionEvent,
   ) => { type: T } & Record<string, unknown>,
 ): WireEvent<T, S> {
+  // Field entries are captured once at table construction: decode runs for every replayed
+  // event, so the per-event loop must not re-enumerate the spec object.
+  const entries = Object.keys(fields).map(
+    (key) => [key, fields[key] as WireField<unknown, WirePresence>] as const,
+  );
   return {
     type,
     decode: (event) => {
       const payload = event.payload;
       const draft: { type: T } & Record<string, unknown> = { type };
-      for (const key of Object.keys(fields)) {
-        const spec = fields[key] as WireField<unknown, WirePresence>;
+      for (const [key, spec] of entries) {
         const value = spec.decode(payload[key], event);
         switch (spec.presence) {
           case "always":
