@@ -30,13 +30,15 @@ export function ResumeHostRow({ state }: { readonly state: ResumeHostRowState })
     ? `Last activity ${relativeTime(state.updatedAt, providedNow ?? clockNow)}`
     : null;
 
-  // The manual (parked) row: two centered rows - "[Resume] this session" over the recency line -
-  // instead of the icon-left/button-right bar the in-flight phases use.
+  // The manual (parked) row: one centered line - "[Resume] this session · Last activity ..." -
+  // instead of the boxed icon-left/button-right bar the in-flight phases use. No border/surface:
+  // the button + inline text carry the affordance on their own. The recency fragment wraps under
+  // the action only when the container gets too narrow for one line.
   if (state.phase === "manual") {
     return (
       <div
         data-resume-host-row
-        className="mb-2 flex flex-col items-center gap-1 rounded border border-border bg-card/60 px-3 py-2 text-ui"
+        className="mb-2 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 px-3 py-4 text-ui"
       >
         <span className="flex items-center gap-2 text-foreground">
           <button
@@ -50,7 +52,9 @@ export function ResumeHostRow({ state }: { readonly state: ResumeHostRowState })
           <span>this session</span>
         </span>
         {detail ? (
-          <span className="text-label tracking-wider text-muted-foreground">{detail}</span>
+          <span className="whitespace-nowrap text-label tracking-wider text-muted-foreground">
+            {detail}
+          </span>
         ) : null}
       </div>
     );
