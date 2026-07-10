@@ -134,7 +134,11 @@ export function simpleTool<A>(spec: {
           return Effect.fail(simpleToolError(spec.name, cause));
         }
         if (Effect.isEffect(body)) {
-          return body;
+          // Sandbox defects (a died Effect) into the typed envelope: the Promise path can never
+          // leak a defect (tryPromise catches every throw), so the Effect path must not either.
+          return Effect.catchAllDefect(body, (defect) =>
+            Effect.fail(simpleToolError(spec.name, defect)),
+          );
         }
         return Effect.tryPromise({
           try: () => Promise.resolve(body),

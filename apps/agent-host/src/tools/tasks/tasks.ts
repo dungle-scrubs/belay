@@ -509,14 +509,15 @@ export function buildTaskTools(
           const lines = [...outcomes, ...failures.map((f) => `error: ${f}`)];
           return lines.length > 0 ? lines.join("\n") : "no updates";
         },
+        // No TaskPreconditionError mapping here: updateMany applies entries independently and
+        // folds each entry's precondition failure into `failures` strings (batch semantics),
+        // so a precondition never escapes it as a throw - only genuinely unexpected errors do.
         catch: (cause) =>
-          cause instanceof TaskPreconditionError
-            ? new ToolInputError({ tool: "task_update", detail: msg(cause) })
-            : new ToolExecutionError({
-                tool: "task_update",
-                detail: msg(cause),
-                cause,
-              }),
+          new ToolExecutionError({
+            tool: "task_update",
+            detail: msg(cause),
+            cause,
+          }),
       }),
   };
 

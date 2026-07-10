@@ -135,3 +135,21 @@ test("simpleTool passes an Effect-returning body through the graph without a Pro
   assert.ok(out.length < big.length);
   assert.ok(out.endsWith(TRUNCATION_NOTICE));
 });
+
+test("simpleTool sandboxes a defect in an Effect body into the typed envelope", async () => {
+  // The Promise path can never leak a defect (tryPromise catches every throw); a died Effect
+  // body must be held to the same invariant so the executor's catchAll still sees ToolError.
+  const dying = simpleTool({
+    name: "effect_dying",
+    description: "d",
+    params: NameOnly,
+    execute: () =>
+      Effect.sync(() => {
+        throw new Error("deferred boom");
+      }),
+  });
+  const err = await Effect.runPromise(Effect.flip(dying.execute({})));
+  assert.ok(err instanceof ToolExecutionError);
+  assert.equal(err.tool, "effect_dying");
+  assert.equal(err.detail, "deferred boom");
+});

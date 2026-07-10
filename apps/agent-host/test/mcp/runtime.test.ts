@@ -176,6 +176,17 @@ describe("mcp runtime - cancellation", () => {
 });
 
 describe("mcp runtime - resources as context records", () => {
+  it("lists across all servers tolerantly: one unreachable server never hides the rest", async () => {
+    // The broken server points at a closed port; the every-server listing must still return the
+    // healthy server's records (the broken one contributes nothing, its failure is recorded on
+    // the transport for the status snapshot - not surfaced as a listing error).
+    const broken = httpFixtureConfig("broken", "http://127.0.0.1:1", { requestTimeoutMs: 500 });
+    await withRuntime([stdioFixtureConfig("alpha"), broken], async (runtime) => {
+      const resources = await Effect.runPromise(runtime.listResources());
+      expect(resources.map((r) => r.qualifiedName)).toEqual(["alpha:readme", "alpha:daily_log"]);
+    });
+  });
+
   it("lists resources with server provenance and qualified identity", async () => {
     await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       const resources = await Effect.runPromise(runtime.listResources("alpha"));
