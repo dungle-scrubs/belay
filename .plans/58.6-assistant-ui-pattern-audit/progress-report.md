@@ -84,7 +84,7 @@
 
 ### M6 - Final Report And Plan Closure (5/5)
 
-- [ ] RED: Add the final report at repo root as `ASSISTANT_UI_OPPORTUNITIES.md` with the full matrix,
+- [ ] RED: Add the final report at repo root as `assistant-ui-opportunities.md` with the full matrix,
       ranked recommendations, rejected patterns, deferred patterns, performance opportunities,
       source links, uncertainty notes, and contrarian-review prompts for later model passes.
 - [ ] GREEN: Cross-check the report against the assistant-ui docs index so every docs page is
@@ -99,7 +99,7 @@
 
 ## Current Cutoff Gate
 
-- [ ] The final report exists at repo root as `ASSISTANT_UI_OPPORTUNITIES.md`.
+- [ ] The final report exists at repo root as `assistant-ui-opportunities.md`.
 - [ ] The final report accounts for every assistant-ui docs page from `llms.txt` as compared,
       grouped, or explicitly out of scope.
 - [ ] The final report includes a dedicated performance opportunities section covering rendering,
@@ -121,7 +121,7 @@
 
 ## Accepted/Deferred Follow-Up
 
-Populated from `ASSISTANT_UI_OPPORTUNITIES.md` (repo root), section 3. Matrix: 107 rows
+Populated from `assistant-ui-opportunities.md` (repo root), section 3. Matrix: 107 rows
 (4 adopt / 14 adapt / 36 keep-trevor-owned / 27 defer / 26 reject); coverage ledger accounts
 for all 270 `llms.txt` pages (53 compare / 165 group / 52 out-of-scope). Plan numbers below are
 indicative; assign final numbers via the planner at creation time (several proposed numbers

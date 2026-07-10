@@ -21,7 +21,7 @@ Audit the complete assistant-ui documentation corpus in depth, not only the page
 familiar from Trevor. The research must perform a thorough comparison between assistant-ui's
 documented primitives, runtimes, adapters, tools, performance guidance, cloud/integration surfaces,
 and Trevor's current equivalents or intentional gaps. The final output is the repo-root document
-`ASSISTANT_UI_OPPORTUNITIES.md`, written so later model passes can challenge it with contrarian
+`assistant-ui-opportunities.md`, written so later model passes can challenge it with contrarian
 opinions.
 
 For each pattern, recommend one of:
@@ -239,7 +239,7 @@ Goal: verify recommendations against the product as it exists, not only source n
 
 Goal: leave a reusable research deliverable that future implementation plans can consume.
 
-1. RED: Add the final report at repo root as `ASSISTANT_UI_OPPORTUNITIES.md` with the full matrix,
+1. RED: Add the final report at repo root as `assistant-ui-opportunities.md` with the full matrix,
    ranked recommendations, rejected patterns, deferred patterns, performance opportunities, source
    links, uncertainty notes, and contrarian-review prompts for later model passes.
 2. GREEN: Cross-check the report against the assistant-ui docs index so every docs page is accounted
@@ -258,7 +258,7 @@ Goal: leave a reusable research deliverable that future implementation plans can
   assistant-ui runtime state during this plan.
 - No Assistant Cloud adoption.
 - No thread virtualization adoption recommendation beyond pointing to plan 58.4; non-virtualization
-  performance lessons from assistant-ui docs still belong in `ASSISTANT_UI_OPPORTUNITIES.md`.
+  performance lessons from assistant-ui docs still belong in `assistant-ui-opportunities.md`.
 - No broad redesign of Trevor's chat UI.
 - No dependency upgrades unless the research proves the currently installed assistant-ui version blocks
   accurate evaluation.
@@ -273,7 +273,7 @@ Goal: leave a reusable research deliverable that future implementation plans can
 | assistant-ui unstable APIs churn after adoption | medium | medium | M3 includes stability as a rubric and M6 records API maturity | research |
 | The matrix misses a relevant docs area | high | medium | M1 treats `llms.txt` as a coverage ledger and M6 requires every docs page to be compared, grouped, or explicitly out of scope | research |
 | Performance opportunities stay too abstract to act on | high | medium | M3 requires each performance claim to name the Trevor surface, expected effect, evidence, and follow-up plan slice | research |
-| Later contrarian reviews lack enough context to challenge the report | medium | medium | M6 requires uncertainty notes and contrarian-review prompts in `ASSISTANT_UI_OPPORTUNITIES.md` | research |
+| Later contrarian reviews lack enough context to challenge the report | medium | medium | M6 requires uncertainty notes and contrarian-review prompts in `assistant-ui-opportunities.md` | research |
 
 ## 7. Validation Commands
 
@@ -287,7 +287,7 @@ pnpm test:web
 
 For the research-only plan, `pnpm lint`, `pnpm typecheck`, and `pnpm test:web` are final confidence
 checks only if implementation or docs-link edits touch source or shared docs. The required completion
-gate is the repo-root `ASSISTANT_UI_OPPORTUNITIES.md` report plus planner convergence.
+gate is the repo-root `assistant-ui-opportunities.md` report plus planner convergence.
 
 ## 8. Decisions
 
