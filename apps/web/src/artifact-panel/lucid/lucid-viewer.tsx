@@ -1,4 +1,5 @@
 import type { ArtifactRef, LucidFeedbackBatch, LucidReviewState } from "@trevor/session";
+import { useMemoizedFn } from "ahooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { artifactSrc } from "@/blob";
 import { LucidChrome } from "./lucid-chrome";
@@ -82,20 +83,17 @@ export function LucidArtifactViewer(props: LucidViewerProps) {
   const [error, setError] = useState<string | null>(null);
   const loadingRef = useRef<Set<string>>(new Set());
 
-  const load = useCallback(
-    (ref: ArtifactRef) => {
-      if (loadingRef.current.has(ref.hash) || htmlByHash[ref.hash] !== undefined) {
-        return;
-      }
-      loadingRef.current.add(ref.hash);
-      const loader = lucid?.loadHtml ? lucid.loadHtml(ref) : defaultLoadHtml(ref, srcOf);
-      loader
-        .then((html) => setHtmlByHash((prev) => ({ ...prev, [ref.hash]: html })))
-        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
-        .finally(() => loadingRef.current.delete(ref.hash));
-    },
-    [htmlByHash, lucid, srcOf],
-  );
+  const load = useMemoizedFn((ref: ArtifactRef) => {
+    if (loadingRef.current.has(ref.hash) || htmlByHash[ref.hash] !== undefined) {
+      return;
+    }
+    loadingRef.current.add(ref.hash);
+    const loader = lucid?.loadHtml ? lucid.loadHtml(ref) : defaultLoadHtml(ref, srcOf);
+    loader
+      .then((html) => setHtmlByHash((prev) => ({ ...prev, [ref.hash]: html })))
+      .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : String(cause)))
+      .finally(() => loadingRef.current.delete(ref.hash));
+  });
 
   // Fetch the current artifact's bytes.
   useEffect(() => {
