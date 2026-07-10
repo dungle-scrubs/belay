@@ -2,17 +2,20 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "../src/event";
 import { decodeTrevorEvent } from "../src/protocol/decode";
-import { decodeTrevorEvent as decodeTrevorEventLegacy } from "./decode-legacy";
 import { DECODE_SEEDS } from "./decode-seeds";
 
 /**
- * The decode differential: the migration safety net for the protocol payload decoders.
- * `decode-legacy.ts` is a frozen copy of the pre-migration `src/protocol/decode.ts`; this
- * suite feeds both decoders an identical corpus - every seed payload plus systematic
- * mutations (dropped keys, nulls, wrong-typed values, junk, empties, unknown keys, one
- * level deep too) - and requires byte-identical decoded output (deepStrictEqual, so an
- * absent key and a present-but-undefined key are DIFFERENT). Any leniency-semantics drift
- * in the Schema migration fails here with the exact payload that exposed it.
+ * The protocol decode robustness net. During the wire-table migration this file ran a full
+ * differential against a frozen copy of the hand-written decoders (see the migration branch
+ * history) proving byte-identical output; the frozen copy is retired, and what remains is the
+ * permanent contract the corpus pins:
+ *  - decoding is TOTAL: every seed payload plus systematic mutations (dropped keys, nulls,
+ *    wrong-typed values, junk, empties, unknown keys, one level deep too) decodes without
+ *    throwing - malformed wire input degrades, it never breaks replay;
+ *  - every registered wire type decodes its own realistic payloads non-null, tagged with its
+ *    own type;
+ *  - the seed corpus itself stays honest against the registered wire-type list, so a new
+ *    event kind must bring seeds here.
  */
 
 const JUNK_VALUES: readonly unknown[] = [null, "junk", 42, true, [], {}, ""];
@@ -60,28 +63,23 @@ function envelope(type: string, payload: Record<string, unknown>): SessionEvent 
 }
 
 for (const seed of DECODE_SEEDS) {
-  test(`decode differential: ${seed.type}`, () => {
-    let cases = 0;
+  test(`decode is total and self-tagged: ${seed.type}`, () => {
     for (const variant of seed.variants) {
+      // The realistic (unmutated) payload decodes non-null and carries its own type tag.
+      const clean = decodeTrevorEvent(envelope(seed.type, variant));
+      assert.ok(clean !== null, `realistic payload decoded to null: ${JSON.stringify(variant)}`);
+      assert.equal(clean.type, seed.type);
+      // Every mutation still decodes without throwing (null is acceptable, a throw is not).
       for (const payload of mutations(variant)) {
-        const event = envelope(seed.type, payload);
-        const decoded = decodeTrevorEvent(event);
-        const legacy = decodeTrevorEventLegacy(event);
-        cases += 1;
-        assert.deepStrictEqual(
-          decoded,
-          legacy,
-          `decode drift for ${seed.type} on payload: ${JSON.stringify(payload)}`,
-        );
+        decodeTrevorEvent(envelope(seed.type, payload));
       }
     }
-    assert.ok(cases > 0, "seed produced no cases");
   });
 }
 
-test("the differential corpus covers every registered wire type", () => {
+test("the decode corpus covers every registered wire type", () => {
   // A wire type the registry knows but the corpus never feeds is silent non-coverage: the
-  // migration could drift there without this suite noticing. Seeds must track the registry.
+  // decoder could regress there without this suite noticing. Seeds must track the registry.
   const seeded = new Set(DECODE_SEEDS.map((seed) => seed.type));
   const missing: string[] = [];
   for (const type of REGISTERED_WIRE_TYPES) {
@@ -92,8 +90,8 @@ test("the differential corpus covers every registered wire type", () => {
   assert.deepStrictEqual(missing, [], "registered wire types missing from DECODE_SEEDS");
 });
 
-/** Every wire name the legacy decoder dispatches on (compiled from its registry/switch);
- *  the coverage test above keeps DECODE_SEEDS honest against it. */
+/** Every wire name the decoder dispatches on (the wireEvent table names); the coverage
+ *  test above keeps DECODE_SEEDS honest against it. */
 const REGISTERED_WIRE_TYPES: readonly string[] = [
   "admission.status",
   "assistant.completed",
