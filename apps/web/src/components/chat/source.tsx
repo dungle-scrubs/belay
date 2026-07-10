@@ -51,9 +51,11 @@ const FAVICON_SIZE = 14;
  * renders the globe directly.
  */
 export function SourceFavicon({ url, className }: { url: string; className?: string }) {
-  const [broken, setBroken] = useState(false);
+  // Track the src that failed rather than a bare boolean, so a new `url` prop (same instance, no
+  // remount) auto-clears the fallback: `failedSrc === src` is false the moment src changes.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const src = faviconUrl(url);
-  if (!src || broken) {
+  if (!src || failedSrc === src) {
     return (
       <Globe
         aria-hidden
@@ -69,7 +71,7 @@ export function SourceFavicon({ url, className }: { url: string; className?: str
       aria-hidden
       loading="lazy"
       referrerPolicy="no-referrer"
-      onError={() => setBroken(true)}
+      onError={() => setFailedSrc(src)}
       width={FAVICON_SIZE}
       height={FAVICON_SIZE}
       className={className}
