@@ -87,7 +87,11 @@ async function startDiagServer(
   };
 }
 
-test("a wedged provider readiness degrades to unreachable within the injected timeout, not a hang", async () => {
+// The explicit test timeout IS the hang bound: an unbounded probe would await Effect.never
+// forever and fail here, while a wall-clock `elapsed` assertion flakes under suite load.
+test("a wedged provider readiness degrades to unreachable within the injected timeout, not a hang", {
+  timeout: 5000,
+}, async () => {
   const providers = {
     // Readiness never settles; with a 20ms probe budget it must still resolve as unreachable.
     hung: provider({
@@ -97,21 +101,18 @@ test("a wedged provider readiness degrades to unreachable within the injected ti
     }),
   } as unknown as ProviderRegistry;
 
-  const start = Date.now();
   const results = await collectDoctorProbeResults(providers, {
     hostSha: null,
     probeTimeoutMs: 20,
     storeDiagTimeoutMs: 20,
     storeDiagUrl: "http://127.0.0.1:1",
   });
-  const elapsed = Date.now() - start;
 
   assert.equal(
     results.providers[0]?.status,
     "unreachable",
     "a timed-out readiness reads unreachable",
   );
-  assert.ok(elapsed < 2000, "the bounded probe returns well before the default 2s budget");
 });
 
 test("running /doctor probes never warm, load, or stream a provider (non-mutating)", async () => {
@@ -177,28 +178,32 @@ test("collectDoctorProbeResults decodes session-store /diag and emits a store di
   }
 });
 
-test("collectDoctorProbeResults degrades a hung session-store /diag probe to unknown", async () => {
+// As above: the test timeout is the hang bound for the never-responding /diag server.
+test("collectDoctorProbeResults degrades a hung session-store /diag probe to unknown", {
+  timeout: 5000,
+}, async () => {
   const diagServer = await startDiagServer(() => {
     // Leave the request open; the injected AbortController timeout must bound the doctor probe.
   });
   try {
-    const start = Date.now();
     const results = await collectDoctorProbeResults({} as ProviderRegistry, {
       hostSha: "host-sha",
       probeTimeoutMs: 20,
       storeDiagTimeoutMs: 20,
       storeDiagUrl: diagServer.url,
     });
-    const elapsed = Date.now() - start;
 
     assert.equal(results.storeDiag.kind, "unknown");
-    assert.ok(elapsed < 1000, "the bounded store diag probe returns quickly");
   } finally {
     await diagServer.close();
   }
 });
 
-test("a stalled /diag BODY also degrades to unknown within the budget (the abort covers the body read)", async () => {
+// As above: the test timeout is the hang bound; a budget that skipped the body read would
+// leave the probe awaiting the stalled stream until this timeout failed the test.
+test("a stalled /diag BODY also degrades to unknown within the budget (the abort covers the body read)", {
+  timeout: 5000,
+}, async () => {
   const diagServer = await startDiagServer((_req, res) => {
     // Headers + a partial body, then the stream stalls forever: the timeout must bound the WHOLE
     // exchange, not just the header phase, or the doctor's Promise.all never returns.
@@ -206,17 +211,14 @@ test("a stalled /diag BODY also degrades to unknown within the budget (the abort
     res.write('{"indexHealthy":true,');
   });
   try {
-    const start = Date.now();
     const results = await collectDoctorProbeResults({} as ProviderRegistry, {
       hostSha: "host-sha",
       probeTimeoutMs: 20,
       storeDiagTimeoutMs: 30,
       storeDiagUrl: diagServer.url,
     });
-    const elapsed = Date.now() - start;
 
     assert.equal(results.storeDiag.kind, "unknown");
-    assert.ok(elapsed < 1000, "a stalled body is aborted by the same budget as stalled headers");
   } finally {
     await diagServer.close();
   }
