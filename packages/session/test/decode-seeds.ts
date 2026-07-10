@@ -632,6 +632,10 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
             sessionId: "sess_trevor_1",
             updatedAt: "2026-07-09T10:00:00.000Z",
             missing: false,
+            displayPath: "~/dev/trevor",
+            displayName: "Trevor",
+            collapsed: true,
+            createdAt: "2026-07-01T09:00:00.000Z",
           },
           {
             root: "/Users/kevin/dev/opchain",

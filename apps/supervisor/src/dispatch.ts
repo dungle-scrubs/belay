@@ -190,6 +190,13 @@ async function handleProjectsList(requestId: string, deps: SupervisorDeps): Prom
         root: r.path,
         sessionId: projectSessionId(r.path),
         updatedAt: r.updatedAt,
+        // The full registry metadata rides along (additive) so the sidebar renders the durable
+        // values - createdAt in particular is its stable ordering key (a stand-in derived from
+        // updatedAt made projects re-order whenever a launch touched their record).
+        displayPath: r.displayPath,
+        displayName: r.displayName,
+        collapsed: r.collapsed,
+        createdAt: r.createdAt,
       }))
     : deps.listProjects();
   const rootExists = deps.rootExists;

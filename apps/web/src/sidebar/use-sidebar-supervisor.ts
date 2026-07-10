@@ -19,11 +19,12 @@ import type { ProjectAction } from "@/sidebar/use-project-sidebar";
  * and owns the launch machine) because the sidebar needs the project list whenever it is open, not
  * just during a launch.
  *
- * The project list is mapped from {@link SupervisorProject} (the wire type, which carries only
- * root/sessionId/updatedAt) to {@link ProjectSidebarRecord} (the read-model type, which also needs
- * displayPath/displayName/collapsed/createdAt). The supervisor's `projects.list.result` does not yet
- * carry the full registry fields, so displayPath/displayName are derived browser-side (basename) and
- * collapsed defaults to false; a future protocol change can carry the full record.
+ * The project list is mapped from {@link SupervisorProject} (the wire type) to
+ * {@link ProjectSidebarRecord} (the read-model type). A current supervisor reports the full
+ * registry metadata (displayPath/displayName/collapsed/createdAt), which maps through verbatim -
+ * createdAt is the sidebar's STABLE ordering key, so it must be the durable registry value, never
+ * an updatedAt stand-in (that made projects re-order whenever a launch touched their record). The
+ * derived fallbacks below only serve an older supervisor that omits the metadata.
  */
 
 /** Maps a supervisor project (wire type) to the sidebar read-model record. */
@@ -31,12 +32,10 @@ function toSidebarRecord(p: SupervisorProject): ProjectSidebarRecord {
   const basename = p.root.split("/").filter(Boolean).pop() ?? p.root;
   return {
     path: p.root,
-    // displayPath: the raw root; the read model will canonicalize for grouping but display
-    // should show what the user expects (the raw supervisor value).
-    displayPath: p.root,
-    displayName: basename,
-    collapsed: false,
-    createdAt: p.updatedAt,
+    displayPath: p.displayPath ?? p.root,
+    displayName: p.displayName ?? basename,
+    collapsed: p.collapsed ?? false,
+    createdAt: p.createdAt ?? p.updatedAt,
     updatedAt: p.updatedAt,
     // The supervisor's stat-marking (plan 58.8); absent from older supervisors reads as present.
     missing: p.missing ?? false,

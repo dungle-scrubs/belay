@@ -467,6 +467,18 @@ export interface SupervisorProject {
    *  record while serving the list. Additive - absent from older supervisors, and a missing record
    *  is never auto-pruned (removal stays the user's explicit action). */
   readonly missing?: boolean;
+  // The full registry-record metadata (additive): a supervisor with the canonical project registry
+  // reports these so the sidebar can render the durable values instead of deriving stand-ins. In
+  // particular `createdAt` is the sidebar's stable creation-order sort key - deriving it from
+  // `updatedAt` made projects re-order whenever a launch touched their record.
+  /** User-friendly (home-abbreviated) path for display. */
+  readonly displayPath?: string;
+  /** Defaults to the root's basename; user-renamable. */
+  readonly displayName?: string;
+  /** Whether the project is collapsed in the sidebar (persisted registry state). */
+  readonly collapsed?: boolean;
+  /** ISO timestamp of first registration - the sidebar's stable ordering key. */
+  readonly createdAt?: string;
 }
 
 // --- emit side: typed constructors (single source of names + payload shapes) ---
@@ -1213,8 +1225,14 @@ export const events = {
         root: proj.root,
         sessionId: proj.sessionId,
         updatedAt: proj.updatedAt,
-        // Additive (plan 58.8): omitted when the serving supervisor did not stat the record.
+        // Additive fields, omitted when the serving supervisor does not know them: the stat-marked
+        // `missing` (plan 58.8) and the full registry metadata (displayPath/displayName/collapsed/
+        // createdAt - the sidebar's durable display + ordering values).
         ...(proj.missing !== undefined ? { missing: proj.missing } : {}),
+        ...(proj.displayPath !== undefined ? { displayPath: proj.displayPath } : {}),
+        ...(proj.displayName !== undefined ? { displayName: proj.displayName } : {}),
+        ...(proj.collapsed !== undefined ? { collapsed: proj.collapsed } : {}),
+        ...(proj.createdAt !== undefined ? { createdAt: proj.createdAt } : {}),
       })),
     },
   }),

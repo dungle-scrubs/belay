@@ -317,6 +317,30 @@ test("projects.list.result marks dead-path records missing (live ones not) witho
         { root: "/Users/me/deleted", missing: true },
       ],
     );
+    // The full registry metadata rides the result so the sidebar renders durable values - in
+    // particular createdAt, its stable ordering key (it must never fall back to updatedAt).
+    assert.deepEqual(
+      decoded.projects.map((p) => ({
+        displayPath: p.displayPath,
+        displayName: p.displayName,
+        collapsed: p.collapsed,
+        createdAt: p.createdAt,
+      })),
+      [
+        {
+          displayPath: "/Users/me/live",
+          displayName: "live",
+          collapsed: false,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          displayPath: "/Users/me/deleted",
+          displayName: "deleted",
+          collapsed: false,
+          createdAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+    );
   }
   // Marking is passive: the dead record stays in the registry (removal is the user's explicit action).
   assert.equal(registry.list().length, 2);

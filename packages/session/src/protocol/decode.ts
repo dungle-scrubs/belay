@@ -84,13 +84,21 @@ function decodeSupervisorProjects(value: unknown): SupervisorProject[] {
     if (!root || !sessionId) {
       continue;
     }
+    // The registry-metadata fields and `missing` are additive: only well-typed values ride
+    // through; anything else (absent, malformed) reads as "not reported" so older supervisors
+    // decode unchanged and the sidebar falls back to derived stand-ins.
+    const displayPath = optStr(rec.displayPath);
+    const displayName = optStr(rec.displayName);
+    const createdAt = optStr(rec.createdAt);
     out.push({
       root,
       sessionId,
       updatedAt: asString(rec.updatedAt),
-      // `missing` is additive (plan 58.8): only a literal boolean rides through; anything else
-      // (absent, malformed) reads as "not reported" so older supervisors decode unchanged.
       ...(typeof rec.missing === "boolean" ? { missing: rec.missing } : {}),
+      ...(displayPath !== undefined ? { displayPath } : {}),
+      ...(displayName !== undefined ? { displayName } : {}),
+      ...(typeof rec.collapsed === "boolean" ? { collapsed: rec.collapsed } : {}),
+      ...(createdAt !== undefined ? { createdAt } : {}),
     });
   }
   return out;
