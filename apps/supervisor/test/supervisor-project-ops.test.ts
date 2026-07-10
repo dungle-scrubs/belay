@@ -283,6 +283,59 @@ test("project.remove.requested publishes result with removed: true", async () =>
   });
 });
 
+/** Awaits the first `projects.list.result` matching `requestId` (the project-op filter above only
+ *  matches `project.*.result`). */
+function awaitListResult(requestId: string) {
+  return transport.awaitEvent(
+    SUPERVISOR_SESSION_ID,
+    viewerIdentity({ displayName: "reader", instanceId: "reader-2", participantId: "reader-2" }),
+    (event) => {
+      const decoded = decodeTrevorEvent(event);
+      return decoded?.type === "projects.list.result" && decoded.requestId === requestId;
+    },
+    { timeoutMs: 5000 },
+  );
+}
+
+test("projects.list.result marks dead-path records missing (live ones not) without removing any record", async () => {
+  const record = (path: string, updatedAt: string): FakeRecord => ({
+    path,
+    displayName: path.split("/").pop() ?? path,
+    collapsed: false,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt,
+  });
+  const registry = fakeRegistry([
+    record("/Users/me/live", "2026-01-02T00:00:00.000Z"),
+    record("/Users/me/deleted", "2026-01-01T00:00:00.000Z"),
+  ]);
+  await subscribe(
+    baseDeps({
+      projectRegistry: registry,
+      rootExists: (path) => path === "/Users/me/live",
+    }),
+  );
+
+  await transport.publishEvent(SUPERVISOR_SESSION_ID, {
+    ...events.projectsListRequested({ requestId: "pl-1" }),
+    producerId: PRODUCER_IDS.web,
+  });
+
+  const decoded = decodeTrevorEvent((await awaitListResult("pl-1")) ?? throwUnresolved());
+  assert.equal(decoded?.type, "projects.list.result");
+  if (decoded?.type === "projects.list.result") {
+    assert.deepEqual(
+      decoded.projects.map((p) => ({ root: p.root, missing: p.missing })),
+      [
+        { root: "/Users/me/live", missing: false },
+        { root: "/Users/me/deleted", missing: true },
+      ],
+    );
+  }
+  // Marking is passive: the dead record stays in the registry (removal is the user's explicit action).
+  assert.equal(registry.list().length, 2);
+});
+
 function throwUnresolved(): never {
   throw new Error("expected a supervisor result on the control session, got none");
 }

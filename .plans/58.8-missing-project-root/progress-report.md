@@ -2,15 +2,15 @@
 
 **Plan:** `58.8-missing-project-root`
 **Stage:** ready
-**Current focus:** M2 - Supervisor failed result + `missing` flag on projects.list (0/6)
+**Current focus:** M3 - Web result-wait timeout (0/6)
 
 ## Summary
 
 | Bucket | Count |
 |--------|-------|
 | Current-cutoff tasks (total) | 23 |
-| Checked (done) | 6 |
-| Current-cutoff blockers (unchecked) | 17 |
+| Checked (done) | 12 |
+| Current-cutoff blockers (unchecked) | 11 |
 | Accepted/deferred follow-up | 0 |
 | Superseded/obsolete | 0 |
 
@@ -30,18 +30,18 @@
 - [x] REFACTOR: consolidate the launcher failure taxonomy into one typed error surface shared by
       CLI and supervisor callers.
 
-### M2 - Supervisor failed result + `missing` flag on projects.list (0/6)
+### M2 - Supervisor failed result + `missing` flag on projects.list (6/6)
 
-- [ ] Seams under test: `handleLaunch` / projects-list handling in
+- [x] Seams under test: `handleLaunch` / projects-list handling in
       `apps/supervisor/src/dispatch.ts`.
-- [ ] RED: `session.launch.requested` with a dead root yields
+- [x] RED: `session.launch.requested` with a dead root yields
       `session.launch.result { status: "failed" }` with the "project folder no longer exists:
       \<path\>" reason, and the supervisor keeps serving subsequent requests.
-- [ ] GREEN: map the M1 typed error into the failed result reason.
-- [ ] RED: `projects.list.result` marks dead-path records `missing: true` (live ones `false`)
+- [x] GREEN: map the M1 typed error into the failed result reason.
+- [x] RED: `projects.list.result` marks dead-path records `missing: true` (live ones `false`)
       without removing any record.
-- [ ] GREEN: stat each record while serving the list; extend the result type additively.
-- [ ] REFACTOR: one owner for the path-existence check shared by the launch gate and list marking.
+- [x] GREEN: stat each record while serving the list; extend the result type additively.
+- [x] REFACTOR: one owner for the path-existence check shared by the launch gate and list marking.
 
 ### M3 - Web result-wait timeout (0/6)
 

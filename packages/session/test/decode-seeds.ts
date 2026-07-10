@@ -631,11 +631,18 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
             root: "/Users/kevin/dev/trevor",
             sessionId: "sess_trevor_1",
             updatedAt: "2026-07-09T10:00:00.000Z",
+            missing: false,
           },
           {
             root: "/Users/kevin/dev/opchain",
             sessionId: "sess_opchain_1",
             updatedAt: "2026-07-08T15:30:00.000Z",
+            missing: true,
+          },
+          {
+            root: "/Users/kevin/dev/legacy",
+            sessionId: "sess_legacy_1",
+            updatedAt: "2026-07-07T15:30:00.000Z",
           },
         ],
       },

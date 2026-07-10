@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { missingRootError } from "@trevor/launcher";
 import {
   decodeTrevorEvent,
   events,
@@ -67,6 +68,10 @@ function awaitResult(requestId: string) {
   );
 }
 
+function throwUnresolved(): never {
+  throw new Error("expected a session.launch.result on the control session, got none");
+}
+
 test("a control-session launch request drives the launcher and returns the resolved session id", async () => {
   const launched: { sessionId: string; root: string }[] = [];
   const deps: SupervisorDeps = {
@@ -107,6 +112,47 @@ test("a control-session launch request drives the launcher and returns the resol
   }
   // The fake launcher ran exactly once (the self-produced request was suppressed), for the browser root.
   assert.deepEqual(launched, [{ sessionId: projectSessionId(root), root }]);
+});
+
+test("a dead-root launch yields a failed result with the missing-folder reason and the supervisor keeps serving", async () => {
+  // The launcher rejects with the M1 typed missing-root error for the dead root, resolves for live ones.
+  const deps: SupervisorDeps = {
+    selfProducerId: PRODUCER_IDS.supervisor,
+    emit: (event) =>
+      transport.publishEvent(SUPERVISOR_SESSION_ID, {
+        ...event,
+        producerId: PRODUCER_IDS.supervisor,
+      }),
+    launch: (input) =>
+      input.root === "/gone/dead"
+        ? Promise.reject(missingRootError(input.root))
+        : Promise.resolve("launched"),
+    pickFolder: () => Promise.resolve({ cancelled: true }),
+    listProjects: () => [],
+  };
+  await subscribe(deps);
+
+  await transport.publishEvent(SUPERVISOR_SESSION_ID, {
+    ...events.sessionLaunchRequested({ requestId: "req-dead", root: "/gone/dead" }),
+    producerId: PRODUCER_IDS.web,
+  });
+  const failed = decodeTrevorEvent((await awaitResult("req-dead")) ?? throwUnresolved());
+  assert.equal(failed?.type, "session.launch.result");
+  if (failed?.type === "session.launch.result") {
+    assert.equal(failed.status, "failed");
+    assert.equal(failed.error, "project folder no longer exists: /gone/dead");
+  }
+
+  // The supervisor survived the failure: the NEXT request on the same subscription is served.
+  await transport.publishEvent(SUPERVISOR_SESSION_ID, {
+    ...events.sessionLaunchRequested({ requestId: "req-after", root: "/work/alive" }),
+    producerId: PRODUCER_IDS.web,
+  });
+  const next = decodeTrevorEvent((await awaitResult("req-after")) ?? throwUnresolved());
+  assert.equal(next?.type, "session.launch.result");
+  if (next?.type === "session.launch.result") {
+    assert.equal(next.status, "launched");
+  }
 });
 
 test("a launcher failure becomes a failed result carrying the error, not a crash", async () => {

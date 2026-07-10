@@ -453,6 +453,10 @@ export interface SupervisorProject {
   readonly root: string;
   readonly sessionId: string;
   readonly updatedAt: string;
+  /** True when the project folder no longer exists on disk (plan 58.8): the supervisor stats each
+   *  record while serving the list. Additive - absent from older supervisors, and a missing record
+   *  is never auto-pruned (removal stays the user's explicit action). */
+  readonly missing?: boolean;
 }
 
 // --- emit side: typed constructors (single source of names + payload shapes) ---
@@ -1199,6 +1203,8 @@ export const events = {
         root: proj.root,
         sessionId: proj.sessionId,
         updatedAt: proj.updatedAt,
+        // Additive (plan 58.8): omitted when the serving supervisor did not stat the record.
+        ...(proj.missing !== undefined ? { missing: proj.missing } : {}),
       })),
     },
   }),

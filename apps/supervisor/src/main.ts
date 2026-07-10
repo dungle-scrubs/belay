@@ -89,6 +89,9 @@ const deps: SupervisorDeps = {
     remove: (path) => removeProject(nodeFs, TREVOR_STATE_HOME, path),
     list: () => listProjects(nodeFs, TREVOR_STATE_HOME),
   },
+  // The SAME existence check the launch gate uses (LauncherFs.directoryExists), so the sidebar's
+  // missing marking and a launch's missing-root failure can never disagree (plan 58.8).
+  rootExists: (path) => nodeFs.directoryExists(path),
   now: () => new Date().toISOString(),
   // MUST be the same identity `emit` stamps, or self-echo suppression breaks (the supervisor would act
   // on its own published results).

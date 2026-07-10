@@ -67,6 +67,11 @@ export interface SupervisorDeps {
       updatedAt: string;
     }[];
   };
+  /** Whether a project root still exists on disk (plan 58.8). Wired to the launcher's
+   *  `nodeFs.directoryExists` - the SAME check the launch missing-root gate uses - so the list's
+   *  `missing` marking and the launch failure can never disagree. When absent, records are
+   *  reported unmarked (legacy wiring). */
+  readonly rootExists?: (path: string) => boolean;
   /** ISO timestamp source for registry `updatedAt` stamps. */
   readonly now?: () => string;
   /** This supervisor's producer id, so it never acts on its own echoed results (self-echo suppression). */
@@ -174,16 +179,20 @@ async function handleFolderPick(requestId: string, deps: SupervisorDeps): Promis
 /**
  * Reads the project list and publishes `projects.list.result`. Prefers the canonical registry
  * (`deps.projectRegistry.list()`, plan 58) when wired; falls back to the legacy `listProjects`
- * reader for a supervisor still on the pre-registry wiring.
+ * reader for a supervisor still on the pre-registry wiring. When `rootExists` is wired, each
+ * record is stat-marked `missing` (plan 58.8) - a passive signal riding a read the sidebar
+ * already performs; records are NEVER auto-pruned here.
  */
 async function handleProjectsList(requestId: string, deps: SupervisorDeps): Promise<void> {
-  const projects = deps.projectRegistry
+  const base = deps.projectRegistry
     ? deps.projectRegistry.list().map((r) => ({
         root: r.path,
         sessionId: projectSessionId(r.path),
         updatedAt: r.updatedAt,
       }))
     : deps.listProjects();
+  const rootExists = deps.rootExists;
+  const projects = rootExists ? base.map((p) => ({ ...p, missing: !rootExists(p.root) })) : base;
   deps.log?.("projects list", { requestId, count: projects.length });
   await deps.emit(events.projectsListResult({ requestId, projects }));
 }

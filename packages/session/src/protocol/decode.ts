@@ -84,7 +84,14 @@ function decodeSupervisorProjects(value: unknown): SupervisorProject[] {
     if (!root || !sessionId) {
       continue;
     }
-    out.push({ root, sessionId, updatedAt: asString(rec.updatedAt) });
+    out.push({
+      root,
+      sessionId,
+      updatedAt: asString(rec.updatedAt),
+      // `missing` is additive (plan 58.8): only a literal boolean rides through; anything else
+      // (absent, malformed) reads as "not reported" so older supervisors decode unchanged.
+      ...(typeof rec.missing === "boolean" ? { missing: rec.missing } : {}),
+    });
   }
   return out;
 }
