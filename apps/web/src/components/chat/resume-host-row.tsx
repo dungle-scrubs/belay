@@ -27,8 +27,34 @@ export function ResumeHostRow({ state }: { readonly state: ResumeHostRowState })
     enabled: showsRecency && providedNow === undefined,
   });
   const detail = showsRecency
-    ? `Last active ${relativeTime(state.updatedAt, providedNow ?? clockNow)}`
+    ? `Last activity ${relativeTime(state.updatedAt, providedNow ?? clockNow)}`
     : null;
+
+  // The manual (parked) row: two centered rows - "[Resume] this session" over the recency line -
+  // instead of the icon-left/button-right bar the in-flight phases use.
+  if (state.phase === "manual") {
+    return (
+      <div
+        data-resume-host-row
+        className="mb-2 flex flex-col items-center gap-1 rounded border border-border bg-card/60 px-3 py-2 text-ui"
+      >
+        <span className="flex items-center gap-2 text-foreground">
+          <button
+            type="button"
+            onClick={state.onResume}
+            className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-foreground hover:bg-accent"
+          >
+            <Play className="size-3" />
+            Resume
+          </button>
+          <span>this session</span>
+        </span>
+        {detail ? (
+          <span className="text-label tracking-wider text-muted-foreground">{detail}</span>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -38,36 +64,23 @@ export function ResumeHostRow({ state }: { readonly state: ResumeHostRowState })
       <span className="flex size-7 shrink-0 items-center justify-center rounded bg-smui-surface-sunken text-muted-foreground">
         {state.phase === "starting" ? (
           <Loader2 className="size-3.5 animate-spin" />
-        ) : state.phase === "failed" || state.phase === "unlaunchable" ? (
-          <AlertTriangle className="size-3.5" />
         ) : (
-          <Play className="size-3.5" />
+          <AlertTriangle className="size-3.5" />
         )}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-foreground">
-          {state.phase === "manual"
-            ? "Resume this conversation"
-            : state.phase === "starting"
-              ? state.label
-              : state.phase === "failed"
-                ? state.error
-                : "No launch root is available"}
+          {state.phase === "starting"
+            ? state.label
+            : state.phase === "failed"
+              ? state.error
+              : "No launch root is available"}
         </span>
         {detail ? (
           <span className="block text-label tracking-wider text-muted-foreground">{detail}</span>
         ) : null}
       </span>
-      {state.phase === "manual" ? (
-        <button
-          type="button"
-          onClick={state.onResume}
-          className="inline-flex items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-foreground hover:bg-accent"
-        >
-          <Play className="size-3" />
-          Resume
-        </button>
-      ) : state.phase === "failed" ? (
+      {state.phase === "failed" ? (
         <button
           type="button"
           onClick={state.onRetry}

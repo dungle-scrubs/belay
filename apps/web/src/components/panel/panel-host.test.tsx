@@ -348,7 +348,8 @@ test("manual resume row appears above the composer without hiding transcript con
   );
 
   expect(screen.getByText("hello from history")).toBeTruthy();
-  expect(screen.getByText("Resume this conversation")).toBeTruthy();
+  expect(screen.getByText("this session")).toBeTruthy();
+  expect(screen.getByText(/^Last activity /)).toBeTruthy();
   expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
   expect(screen.getByRole("textbox").getAttribute("disabled")).not.toBeNull();
 });

@@ -13,6 +13,7 @@ import type {
   WorktreeSummary,
 } from "@trevor/session";
 import { useMemoizedFn } from "ahooks";
+import { Loader2 } from "lucide-react";
 import {
   memo,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -353,6 +354,20 @@ function PanelHostImpl(props: {
   const { replayed } = stream;
   const { transcript, toolBatches, rowConfig, queue, onUnqueue } = tv;
   const { turnStatusHeader } = tv;
+  // Whether the empty-transcript placeholder is what fills the center right now (replayed, nothing
+  // to show, no host). It decides both the placeholder's content and whether the bottom
+  // "Starting host..." bar is redundant (the placeholder already shows the launch).
+  const emptyPlaceholder = replayed && !host.leaderId && transcript.length === 0;
+  // Parked = a resume affordance exists and no launch is in flight: the center must say so instead
+  // of claiming a host is starting. The hint names the action the bottom row actually offers -
+  // "resume" (manual), "retry" (failed), or the no-root fact (unlaunchable has no button at all).
+  const sessionParked = props.resumeHost != null && props.resumeHost.phase !== "starting";
+  const parkedHint =
+    props.resumeHost?.phase === "failed"
+      ? "retry to continue"
+      : props.resumeHost?.phase === "unlaunchable"
+        ? "no launch root is available"
+        : "resume to continue";
   const rows = useMemo(
     () => buildTranscriptRows({ toolBatches, transcript }),
     [toolBatches, transcript],
@@ -512,20 +527,33 @@ function PanelHostImpl(props: {
           >
             {/* Three states, so the page never looks broken while things come up:
               1. still replaying the session stream -> a brief "connecting to session" state;
-              2. replayed + empty + no host joined yet (e.g. just opened via `trevor`, host booting)
-                 -> a clear "waiting for host" state that vanishes once the host announces online;
+              2. replayed + empty + no host joined yet -> EITHER a spinner + "Starting host..."
+                 (a launch is actually in flight / a fresh session's host is booting) OR a static
+                 "Session parked" (no launch is running - the session is waiting on an explicit
+                 Resume), so the placeholder never claims a start that is not happening;
               3. otherwise -> the full history (existing session pinned to bottom, empty at top), 150ms fade. */}
             {!replayed ? (
               <div className="flex flex-1 flex-col items-center justify-center gap-2">
                 <ActionShimmer label="connecting to session" />
               </div>
             ) : !host.leaderId && transcript.length === 0 ? (
-              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-                <ActionShimmer label={host.present ? "connecting to host" : "starting host"} />
-                <span className="text-label tracking-wider text-muted-foreground/70">
-                  waiting for the agent host to start and join this session…
-                </span>
-              </div>
+              sessionParked ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
+                  <span className="text-sm text-muted-foreground">Session parked</span>
+                  <span className="text-label tracking-wider text-muted-foreground/70">
+                    {parkedHint}
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-1 items-center justify-center gap-1.5 px-6 text-center">
+                  <span className="flex size-7 shrink-0 items-center justify-center rounded bg-smui-surface-sunken text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                  </span>
+                  <span className="text-ui text-foreground">
+                    {host.present ? "Connecting to host..." : "Starting host..."}
+                  </span>
+                </div>
+              )
             ) : (
               <VirtualTranscript
                 rows={rows}
@@ -579,7 +607,12 @@ function PanelHostImpl(props: {
 
         <QueuedPrompts queue={queue} onUnqueue={onUnqueue} />
 
-        {props.resumeHost ? <ResumeHostRow state={props.resumeHost} /> : null}
+        {/* The starting-phase bar is dropped while the empty placeholder already shows the launch
+          spinner (a fresh session has no transcript to pin progress under); it still renders for a
+          resume over an existing transcript, where the center is occupied by history. */}
+        {props.resumeHost && !(props.resumeHost.phase === "starting" && emptyPlaceholder) ? (
+          <ResumeHostRow state={props.resumeHost} />
+        ) : null}
 
         {/* Pinned bottom: composer, then a two-column footer (status + model controls).
           Files dropped anywhere here upload as attachments. */}
