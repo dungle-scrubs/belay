@@ -5,6 +5,7 @@ import {
   type ProviderUsage,
   type SessionUsage,
 } from "@trevor/session";
+import { useTimeout } from "ahooks";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { fmtCtx, fmtTokens, formatElapsed } from "@/derive";
@@ -152,11 +153,12 @@ export function UsageSummary({ usage, title = "Usage" }: UsageSummaryProps) {
   const [copied, setCopied] = useState(false);
   const { totals } = usage;
 
+  useTimeout(() => setCopied(false), copied ? 1500 : undefined);
+
   const copy = () => {
     void copyText(formatUsageReport(usage)).then((ok) => {
       if (ok) {
         setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
       }
     });
   };
