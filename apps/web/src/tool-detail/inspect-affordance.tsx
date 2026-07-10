@@ -25,7 +25,14 @@ export function WithInspect({
     return <>{children}</>;
   }
   return (
-    <div className={cn("group/inspect relative", className)}>
+    // The wrapper itself tints on hover (the queued-follow-ups tint), so a row that offers the
+    // inspect takeover reads as hoverable, not just its top-right icon.
+    <div
+      className={cn(
+        "group/inspect relative rounded-sm transition-colors hover:bg-muted/25",
+        className,
+      )}
+    >
       {children}
       <button
         type="button"

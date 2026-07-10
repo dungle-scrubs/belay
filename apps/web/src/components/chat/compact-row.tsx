@@ -63,7 +63,14 @@ export function CompactRow({
         <>
           <span className="min-w-0 truncate font-medium text-foreground">
             {suppressPrimary ? (
-              <span className="sr-only">{primary}</span>
+              // The invisible copy keeps the label column the same width as the visible first row
+              // (the column is content-sized), so consecutive same-tool rows stay aligned.
+              <>
+                <span className="sr-only">{primary}</span>
+                <span aria-hidden className="invisible">
+                  {primary}
+                </span>
+              </>
             ) : status === "running" ? (
               <ShimmerText>{primary}</ShimmerText>
             ) : (
@@ -81,8 +88,11 @@ export function CompactRow({
     </>
   );
 
+  // The label column is content-sized above a small floor, so the detail column starts close to
+  // short tool names (bash/read) instead of a wide fixed gutter; a longer tool name pushes its
+  // own detail right rather than truncating.
   const rowClassName =
-    "grid h-6 grid-cols-[0.875rem_minmax(7.5rem,9.5rem)_minmax(0,1fr)_1rem] items-center gap-2 px-1 text-left text-ui";
+    "grid h-6 grid-cols-[0.875rem_minmax(4.5rem,max-content)_minmax(0,1fr)_1rem] items-center gap-2 px-1 text-left text-ui";
 
   return (
     <div className={cn("flex flex-col", className)}>
@@ -92,7 +102,7 @@ export function CompactRow({
           onClick={onToggle ?? onAction}
           aria-expanded={interactive ? expanded : undefined}
           aria-label={buttonLabel}
-          className={cn(rowClassName, "rounded transition-colors hover:bg-accent/50")}
+          className={cn(rowClassName, "rounded-sm transition-colors hover:bg-muted/25")}
         >
           {line}
         </button>
