@@ -84,7 +84,7 @@
 
 ### M6 - Final Report And Plan Closure (5/5)
 
-- [ ] RED: Add the final report at repo root as `ASSISTANT_UI_OPPORTUNITIES.md` with the full matrix,
+- [ ] RED: Add the final report at repo root as `assistant-ui-opportunities.md` with the full matrix,
       ranked recommendations, rejected patterns, deferred patterns, performance opportunities,
       source links, uncertainty notes, and contrarian-review prompts for later model passes.
 - [ ] GREEN: Cross-check the report against the assistant-ui docs index so every docs page is
@@ -99,7 +99,7 @@
 
 ## Current Cutoff Gate
 
-- [ ] The final report exists at repo root as `ASSISTANT_UI_OPPORTUNITIES.md`.
+- [ ] The final report exists at repo root as `assistant-ui-opportunities.md`.
 - [ ] The final report accounts for every assistant-ui docs page from `llms.txt` as compared,
       grouped, or explicitly out of scope.
 - [ ] The final report includes a dedicated performance opportunities section covering rendering,
@@ -121,8 +121,54 @@
 
 ## Accepted/Deferred Follow-Up
 
-None yet. M4 and M6 will populate this section with concrete follow-up plan candidates discovered
-during research.
+Populated from `assistant-ui-opportunities.md` (repo root), section 3. Matrix: 107 rows
+(4 adopt / 14 adapt / 36 keep-trevor-owned / 27 defer / 26 reject); coverage ledger accounts
+for all 270 `llms.txt` pages (53 compare / 165 group / 52 out-of-scope). Plan numbers below are
+indicative; assign final numbers via the planner at creation time (several proposed numbers
+collide with already-used 58.x plans).
+
+### Accepted follow-up candidates (Track A - adopt/adapt UI patterns, ranked)
+
+1. assistant-ui dependency governance: stability ledger in CONTEXT.md + exact pins + vendored
+   component drift check (`assistant-ui add --dry`) + render smoke tests for
+   reasoning-trace/tool-diff/multi-edit-diff. Merges proposed 58.15/58.16/58.17. Live import
+   inventory verified: `useScrollLock` (use-collapsible-disclosure.ts:3), two type-only
+   imports, one idle-loaded markdown chunk. (Rows E10/G8/G9/D6/C7.)
+2. Prune the idle-fetched second markdown stack: remove `markdown-text-lazy.tsx` preloadOnIdle
+   + dead `Reasoning` export (reasoning.tsx:315); shrink @assistant-ui/react-markdown to the
+   one type import. Never renders live; fetched on every load. (Row D1, from the Verify pass.)
+3. Running-tool elapsed clock: pass the tool.started seq timestamp into the existing
+   `use-elapsed-label.ts` leaf clock on running tool rows. Wiring only. (Row F6.)
+4. Structured MCP result rows: TOOL_RENDERERS arm for the `mcp` tool (per-server status table,
+   resource uri/mime provenance) decoding the host's existing structured records. (Row F16.)
+5. Transcript paint-skipping via content-visibility:auto + per-kind contain-intrinsic-size on
+   non-anchor rows, behind a flag, measured on a 500-row session. CONFLICT FLAG: must
+   coordinate with the shipped 58.4 virtual transcript (ed835a97) to avoid double-hiding; mine
+   size estimates from dead thread.tsx:317/:446. (Rows A5/G10.)
+
+Second tier (accepted as candidates, not shortlisted): ToolFallback catch-all for lsp_*/mcp
+rows with Approval + useToolCallElapsed couplings stripped (F7); unify composer trigger
+popovers Trevor-owned (B6); keyboard-navigable sidebar session menu (A10); expandable
+delegation/workflow rows via Trevor projector (F13); null-until-complete audit across
+TOOL_RENDERERS arms (F5).
+
+### Deferred follow-up candidates (Track B - protocol/runtime, research only per D-002)
+
+1. ExternalStore read-only adapter spike: Storybook-only, one session's toTranscript through
+   assistant-ui Thread/Message primitives, no intents, to measure render cost and the
+   thread-id-sync footgun. (Rows E4/A14.)
+2. Persistence/thread-adapter mapping study: lossiness of projecting Trevor's event taxonomy
+   into `{id,parent_id,format,content}`; verify the initialize-before-first-append race guard
+   on session create. (Rows A16/A17/E8.)
+
+Both must be sequenced against live plan 50 (cli-headless-agent-surface) if any
+transport-visible contract is proposed. Track A and Track B must never share an
+implementation plan (different risk classes).
+
+### Dropped by the Verify pass
+
+- Port resolveModelEffort sticky-effort rule (D8): already implemented Trevor-owned with
+  per-model memory (`model-preferences.ts:19-131`, tested); follow-up deleted.
 
 ## Superseded/Obsolete Checklist Debt
 
