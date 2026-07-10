@@ -110,6 +110,19 @@ home-relative path. A drift test fails if a new `~/.trevor` literal appears
 outside that owner. This taxonomy is the single citation for storage placement;
 see `.plans/03-filesystem-root-taxonomy` for the detailed model and rationale.
 
+## Web UI: prefer optimistic updates
+
+In `apps/web`, a user action that mutates durable state (archive, rename,
+delete, collapse, and the like) must reflect in the UI immediately, not after
+the next poll or round trip. The pattern: apply the change to the local read
+model at click time, run the publish behind it, revert that local change if the
+publish fails, and drop the local override once the durable data (poll or
+stream) confirms it - so durable state becomes the single source again as soon
+as it agrees. Waiting out a poll interval before reflecting a user action reads
+as broken. The sidebar's archive/rename overlay
+(`apps/web/src/sidebar/use-project-sidebar.ts`) is the reference
+implementation.
+
 ## Testing
 
 Tests are organized by **scope, not by one global placement rule**. "Where does

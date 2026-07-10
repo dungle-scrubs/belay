@@ -550,9 +550,11 @@ export function App() {
   // The sidebar's read model: groups sessions under projects, owns local collapsed/show-more/search
   // state, and exposes the project/session action callbacks. Session selection navigates; New Session
   // per-project reuses the M4 fresh-session launch; Archive publishes session.archived.
-  // Stable wrappers (Tier 1) so the sidebar binding memo below holds across renders.
-  const onSidebarArchiveSession = useMemoizedFn(
-    (sessionId: string) => void archiveSession(sessionId),
+  // Stable wrappers (Tier 1) so the sidebar binding memo below holds across renders. Archive/rename
+  // return the publish promise so the hook's optimistic overlay can revert on failure.
+  const onSidebarArchiveSession = useMemoizedFn((sessionId: string) => archiveSession(sessionId));
+  const onSidebarRenameSession = useMemoizedFn((sessionId: string, title: string) =>
+    renameSession(sessionId, title),
   );
   const projectSidebar = useProjectSidebar({
     sessions: modal.inventory.sessions,
@@ -563,6 +565,7 @@ export function App() {
     onProjectAction: sidebarSupervisor.onProjectAction,
     onNewSession: startFreshProjectSession,
     onArchiveSession: onSidebarArchiveSession,
+    onRenameSession: onSidebarRenameSession,
   });
   const selectedResumeAction = useMemo(
     () => (selectedSummary ? resumeActionForSession(selectedSummary, now) : null),
@@ -1914,9 +1917,6 @@ export function App() {
 
   const openSidebar = useMemoizedFn(() => modal.setSidebarOpen(true));
   const closeSidebar = useMemoizedFn(() => modal.setSidebarOpen(false));
-  const onRenameSessionCb = useMemoizedFn(
-    (renameSessionId: string, title: string) => void renameSession(renameSessionId, title),
-  );
   const onMergeWorktree = useMemoizedFn(
     (worktreeId: string) => void command("/worktree-merge", worktreeId),
   );
@@ -1955,7 +1955,7 @@ export function App() {
       onAddProject: projectSidebar.onAddProject,
       onNewSession: projectSidebar.onNewSession,
       onArchiveSession: projectSidebar.onArchiveSession,
-      onRenameSession: onRenameSessionCb,
+      onRenameSession: projectSidebar.onRenameSession,
       onRenameProject: projectSidebar.onRenameProject,
       onRemoveProject: projectSidebar.onRemoveProject,
       onMergeWorktree,
@@ -1980,7 +1980,7 @@ export function App() {
       projectSidebar.onAddProject,
       projectSidebar.onNewSession,
       projectSidebar.onArchiveSession,
-      onRenameSessionCb,
+      projectSidebar.onRenameSession,
       projectSidebar.onRenameProject,
       projectSidebar.onRemoveProject,
       onMergeWorktree,
