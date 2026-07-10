@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
-import { test } from "vitest";
-import { highlightCode, isFenceClosed, resolveHighlightLanguage } from "./code-highlight";
+import { beforeAll, test } from "vitest";
+import {
+  highlightCode,
+  isFenceClosed,
+  preloadHighlightEngine,
+  resolveHighlightLanguage,
+} from "./code-highlight";
+
+// The hljs engine (core + grammars) lazy-loads behind the facade (Tier 5.2); these tests cover the
+// engine's behavior, so load it up front. The not-yet-loaded window is covered by
+// code-highlight-lazy.test.ts, which must NOT share this file's module registry.
+beforeAll(() => preloadHighlightEngine());
 
 test("resolves explicit fenced languages and their aliases to a grammar id", () => {
   // The normalized token is returned when hljs recognizes it (case-folded, whitespace-trimmed).

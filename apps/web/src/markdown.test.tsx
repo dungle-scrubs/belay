@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, test, vi } from "vitest";
+import { afterEach, beforeAll, test, vi } from "vitest";
+import { preloadHighlightEngine } from "./code-highlight";
 import { Markdown } from "./markdown";
+
+// The hljs engine lazy-loads behind the code-highlight facade (Tier 5.2); these tests assert
+// loaded-engine rendering, so warm it up front. The plain-then-upgrade window is covered by
+// markdown-highlight-upgrade.test.tsx, which needs its own (unwarmed) module registry.
+beforeAll(() => preloadHighlightEngine());
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -203,6 +209,27 @@ test("escapes dangerous code content through highlighting and DOMPurify", () => 
     container.querySelector("pre code")?.textContent?.includes("<img src=x onerror=alert(1)>"),
     "the payload survives only as literal text",
   );
+});
+
+test("streaming rerenders converge to a parse of the complete final text", () => {
+  // Simulates a streamed turn: each rerender is one delta of the same growing message. The parse is
+  // deferred while streaming (useDeferredValue coalesces re-lex/re-sanitize passes), but the settled
+  // message must always show the full text - including the syntax highlight that only becomes legal
+  // once the closing fence arrives - never deferred/stale content.
+  const chunks = [
+    "Fib",
+    "Fibonacci:\n\n```ts",
+    "Fibonacci:\n\n```ts\nconst fib = (n: number): number =>",
+    "Fibonacci:\n\n```ts\nconst fib = (n: number): number => (n < 2 ? n : fib(n - 1) + fib(n - 2));\n```\n\nDone.",
+  ];
+  const { container, rerender } = render(<Markdown text={chunks[0] ?? ""} />);
+  for (const chunk of chunks.slice(1)) {
+    rerender(<Markdown text={chunk} />);
+  }
+  const code = container.querySelector("code.hljs.language-ts");
+  assert.ok(code, "closed fence from the final delta is highlighted");
+  assert.ok(code?.textContent?.includes("fib(n - 1) + fib(n - 2)"), "full code body rendered");
+  assert.ok(container.textContent?.includes("Done."), "text after the fence rendered");
 });
 
 test("defers highlighting for a still-streaming (unterminated) code fence", () => {
