@@ -35,7 +35,7 @@ import {
   type TelemetrySink,
 } from "@trevor/session/telemetry";
 import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
-import { Cause, Effect, Exit, Fiber, FiberRef, Option, Stream } from "effect";
+import { Cause, Effect, Exit, Fiber, FiberRef, Option, Runtime, Stream } from "effect";
 import { interpretFiberExit } from "../effect/fiber-exit";
 import { withHookDecisionEvents } from "./hook-events";
 import type { HistoryImageResolver } from "./image-resolution";
@@ -123,11 +123,14 @@ export function publishTurn(
 
     // Carry the per-turn admission reporter on the fiber (plan 11 M7): the local provider reads it when
     // it acquires a generation lease, so a queued turn emits "waiting for LM Studio" attributed to this
-    // run. Fire-and-forget emit (advisory status), so admission never blocks the turn loop.
+    // run. Fire-and-forget emit (advisory status), so admission never blocks the turn loop. The callback
+    // fires from plain admission-runtime code (no fiber to fork in), so it bridges onto THIS turn's
+    // runtime rather than spinning a root fiber on the detached default runtime.
+    const turnRuntime = yield* Effect.runtime<never>();
     const admissionReporter: AdmissionTurnReporter = {
       context: { priority: options.priority ?? "foreground", runId },
       onStatus: (status) => {
-        Effect.runFork(emit.publish(admissionStatusEvent(runId, status)));
+        Runtime.runFork(turnRuntime)(emit.publish(admissionStatusEvent(runId, status)));
       },
     };
     yield* FiberRef.set(AdmissionTurnRef, admissionReporter);

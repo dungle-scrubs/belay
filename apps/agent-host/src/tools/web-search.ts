@@ -12,6 +12,7 @@ import {
   type WebSearchResponse,
   webSearch,
 } from "web-search";
+import { ToolExecutionError } from "./errors";
 import { simpleTool } from "./shared";
 
 // web-search resolves credentials from process.env (BRAVE_API_KEY, then
@@ -57,21 +58,26 @@ function renderResponse(
   });
 }
 
-/**
- * Runs the web_search path and returns the serialized envelope. Exported so a sibling tool (docs)
- * can reuse the real search reader through `runWebSearch(...)` without re-deriving the provider keys
- * or the Effect layers, mirroring web_fetch's `runWebFetch`/`webFetchLiveDeps` reuse seam.
- */
-export async function runWebSearch(input: {
+interface WebSearchInput {
   readonly query: string;
   readonly count?: number;
   readonly freshness?: Freshness;
-}): Promise<string> {
+}
+
+/** The one search pipeline both consumers share: run the search with its layers provided. */
+function searchResponse(input: WebSearchInput) {
+  return webSearch(input).pipe(Effect.provide(PROVIDED));
+}
+
+/**
+ * Runs the web_search path and returns the serialized envelope. Exported so a sibling tool (docs)
+ * can reuse the real search reader through `runWebSearch(...)` without re-deriving the provider keys
+ * or the Effect layers, mirroring web_fetch's `runWebFetch`/`webFetchLiveDeps` reuse seam - a plain
+ * Promise on purpose, matching docs' injectable plain-reader deps.
+ */
+export async function runWebSearch(input: WebSearchInput): Promise<string> {
   const response = await Effect.runPromise(
-    webSearch(input).pipe(
-      Effect.provide(PROVIDED),
-      Effect.mapError((error) => new Error(formatError(error))),
-    ),
+    searchResponse(input).pipe(Effect.mapError((error) => new Error(formatError(error)))),
   );
   return renderResponse(input.query.trim(), input.freshness, response);
 }
@@ -87,5 +93,16 @@ export const webSearchTool = simpleTool({
   params: Params,
   readOnly: true,
   capped: true,
-  execute: (args) => runWebSearch(args),
+  execute: (args) =>
+    searchResponse(args).pipe(
+      Effect.map((response) => renderResponse(args.query.trim(), args.freshness, response)),
+      Effect.mapError(
+        (error) =>
+          new ToolExecutionError({
+            tool: "web_search",
+            detail: formatError(error),
+            cause: error,
+          }),
+      ),
+    ),
 });

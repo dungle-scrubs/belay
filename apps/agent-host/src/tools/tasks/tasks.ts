@@ -1,4 +1,4 @@
-import { ToolExecutionError } from "@host/tools/errors";
+import { ToolExecutionError, ToolInputError } from "@host/tools/errors";
 import type { Tool } from "@host/tools/types";
 import { msg } from "@host/transport/messages";
 import { type TaskSnapshot, type TaskStatus, taskSnapshotReplaces } from "@trevor/session";
@@ -59,6 +59,14 @@ export type UpdateResult =
   | { readonly kind: "cleared" }
   | { readonly kind: "updated"; readonly task: Task };
 
+/**
+ * A domain precondition on the model-supplied arguments failed (empty subject, unknown
+ * task id, starting a still-blocked task). The registry stays a plain class, so it throws
+ * this marker instead of failing an Effect; the tool boundary maps it to `ToolInputError`
+ * (bad call) rather than `ToolExecutionError` (delegated operation broke).
+ */
+export class TaskPreconditionError extends Error {}
+
 const STATUS_LABEL: Record<TaskStatus, string> = {
   pending: "pending",
   in_progress: "in progress",
@@ -116,7 +124,7 @@ export class TaskRegistry {
     for (const dep of blockedBy) {
       const blocker = this.tasks.get(this.resolveId(dep) ?? dep);
       if (blocker && blocker.status !== "completed") {
-        throw new Error(`cannot start: blocked by ${dep} (${blocker.status})`);
+        throw new TaskPreconditionError(`cannot start: blocked by ${dep} (${blocker.status})`);
       }
     }
   }
@@ -125,7 +133,7 @@ export class TaskRegistry {
     const subject = input.subject.trim();
 
     if (!subject) {
-      throw new Error("subject is required");
+      throw new TaskPreconditionError("subject is required");
     }
 
     const status = input.status ?? "pending";
@@ -169,7 +177,7 @@ export class TaskRegistry {
     const task = this.tasks.get(this.resolveId(id) ?? id);
 
     if (!task) {
-      throw new Error(`no such task "${id}"`);
+      throw new TaskPreconditionError(`no such task "${id}"`);
     }
 
     if (fields.status === "deleted") {
@@ -463,11 +471,13 @@ export function buildTaskTools(
           return `created ${task.id}: ${task.subject}`;
         },
         catch: (cause) =>
-          new ToolExecutionError({
-            tool: "task_create",
-            detail: msg(cause),
-            cause,
-          }),
+          cause instanceof TaskPreconditionError
+            ? new ToolInputError({ tool: "task_create", detail: msg(cause) })
+            : new ToolExecutionError({
+                tool: "task_create",
+                detail: msg(cause),
+                cause,
+              }),
       }),
   };
 
@@ -499,6 +509,9 @@ export function buildTaskTools(
           const lines = [...outcomes, ...failures.map((f) => `error: ${f}`)];
           return lines.length > 0 ? lines.join("\n") : "no updates";
         },
+        // No TaskPreconditionError mapping here: updateMany applies entries independently and
+        // folds each entry's precondition failure into `failures` strings (batch semantics),
+        // so a precondition never escapes it as a throw - only genuinely unexpected errors do.
         catch: (cause) =>
           new ToolExecutionError({
             tool: "task_update",

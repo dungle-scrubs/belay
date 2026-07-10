@@ -356,16 +356,19 @@ export function createMcpRuntime(
             catch: (cause) => classify(serverName, cause),
           });
         }
-        return Effect.promise(async () => {
-          const eligible = registry
-            .enabled()
-            .filter((config) => config.exposure[family])
-            .map((config) => config.name);
-          const listed = await Promise.all(
-            eligible.map((name) => discovered(name).catch((): readonly R[] => [])),
-          );
-          return listed.flat();
-        });
+        const eligible = registry
+          .enabled()
+          .filter((config) => config.exposure[family])
+          .map((config) => config.name);
+        return Effect.forEach(
+          eligible,
+          (name) =>
+            Effect.tryPromise({
+              try: () => discovered(name),
+              catch: (cause) => classify(name, cause),
+            }).pipe(Effect.orElseSucceed((): readonly R[] => [])),
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map((listed) => listed.flat()));
       });
 
   const listResources = listRecords<McpResourceRecord>("resources", (caps) => caps.resources);

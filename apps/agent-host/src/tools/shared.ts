@@ -104,10 +104,12 @@ function simpleToolError(tool: string, cause: unknown): ToolError {
 }
 
 /**
- * Defines a simple tool whose body is its core logic: return a string, throw/reject for operational
- * failures, and call `toolInput` / `toolExecution` for known domain or execution failures. The
- * builder owns the tool-name error envelope and output capping, so ordinary tools do not thread
- * shared execution helpers through their implementation.
+ * Defines a simple tool whose body is its core logic: return a string (or a Promise of one),
+ * throw/reject for operational failures, and call `toolInput` / `toolExecution` for known domain or
+ * execution failures. A body over an Effect-native service instead returns its
+ * `Effect<string, ToolError>` directly - it stays in the Effect graph (no `runPromise` round-trip)
+ * and owns its typed failures. The builder owns the tool-name error envelope for the throwing
+ * paths, and output capping for all of them.
  */
 export function simpleTool<A>(spec: {
   readonly name: string;
@@ -116,7 +118,7 @@ export function simpleTool<A>(spec: {
   readonly params: Schema.Schema<A, any>;
   readonly readOnly?: boolean;
   readonly capped?: boolean;
-  execute(args: A, ctx?: ToolContext): string | Promise<string>;
+  execute(args: A, ctx?: ToolContext): string | Promise<string> | Effect.Effect<string, ToolError>;
 }): Tool<A> {
   return {
     name: spec.name,
@@ -124,9 +126,24 @@ export function simpleTool<A>(spec: {
     params: spec.params,
     readOnly: spec.readOnly,
     execute: (args, ctx) => {
-      const result = Effect.tryPromise({
-        try: () => Promise.resolve(spec.execute(args, ctx)),
-        catch: (cause) => simpleToolError(spec.name, cause),
+      const result = Effect.suspend(() => {
+        let body: string | Promise<string> | Effect.Effect<string, ToolError>;
+        try {
+          body = spec.execute(args, ctx);
+        } catch (cause) {
+          return Effect.fail(simpleToolError(spec.name, cause));
+        }
+        if (Effect.isEffect(body)) {
+          // Sandbox defects (a died Effect) into the typed envelope: the Promise path can never
+          // leak a defect (tryPromise catches every throw), so the Effect path must not either.
+          return Effect.catchAllDefect(body, (defect) =>
+            Effect.fail(simpleToolError(spec.name, defect)),
+          );
+        }
+        return Effect.tryPromise({
+          try: () => Promise.resolve(body),
+          catch: (cause) => simpleToolError(spec.name, cause),
+        });
       });
       return spec.capped ? result.pipe(Effect.map(cap)) : result;
     },
