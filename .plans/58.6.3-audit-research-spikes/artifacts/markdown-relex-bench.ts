@@ -23,15 +23,14 @@
  * (Storybook story + Performance panel) on the dev machine - see the harness note in the findings.
  */
 
-import { JSDOM } from "jsdom";
 import createDOMPurify from "dompurify";
+import { JSDOM } from "jsdom";
 import { marked } from "marked";
 
 // Mirror markdown.tsx:16 exactly.
 marked.use({ gfm: true, breaks: true });
 
 const { window } = new JSDOM("");
-// biome-ignore lint: throwaway harness
 const DOMPurify = createDOMPurify(window as unknown as Window & typeof globalThis);
 
 function normalizeCodeLanguage(lang: string | undefined): string {
@@ -108,7 +107,7 @@ function streamingPrefixes(full: string, deltaBytes: number): string[] {
 function median(xs: number[]): number {
   const s = [...xs].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
+  return s.length % 2 ? (s[m] ?? 0) : ((s[m - 1] ?? 0) + (s[m] ?? 0)) / 2;
 }
 
 interface Row {
@@ -151,7 +150,7 @@ function benchOne(kb: number): Row {
     meanFrameMs: totalMs / prefixes.length,
     medianFrameMs: median(frameMs),
     maxFrameMs: Math.max(...frameMs),
-    finalFrameMs: frameMs[frameMs.length - 1]!,
+    finalFrameMs: frameMs[frameMs.length - 1] ?? 0,
   };
 }
 
@@ -165,7 +164,16 @@ function main(): void {
     benchOne(kb);
     rows.push(benchOne(kb));
   }
-  const header = ["size", "bytes", "frames", "turn total ms", "mean/frame ms", "median/frame ms", "max/frame ms", "final/frame ms"];
+  const header = [
+    "size",
+    "bytes",
+    "frames",
+    "turn total ms",
+    "mean/frame ms",
+    "median/frame ms",
+    "max/frame ms",
+    "final/frame ms",
+  ];
   console.log(header.join("\t"));
   for (const r of rows) {
     console.log(
@@ -184,7 +192,10 @@ function main(): void {
 
   // Scaling check: per-turn total should grow SUPER-linearly with length if re-lex is the cost.
   console.log("\nScaling (per-turn total vs the 2KB baseline):");
-  const base = rows[0]!;
+  const base = rows[0];
+  if (!base) {
+    return;
+  }
   for (const r of rows) {
     const lenX = r.bytes / base.bytes;
     const costX = r.totalMs / base.totalMs;

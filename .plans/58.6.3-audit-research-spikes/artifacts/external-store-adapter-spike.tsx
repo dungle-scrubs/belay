@@ -124,10 +124,38 @@ export function buildCapturedSession(): readonly SessionEvent[] {
     ev(2, events.assistantStarted({ runId: "r1", warm: true, model: "qwen", provider: "qwen" })),
     ev(3, events.assistantThinking({ runId: "r1", text: "The user wants the FIFO gate." })),
     ev(4, events.assistantDelta({ runId: "r1", text: "It runs **one turn at a time** behind a " })),
-    ev(5, events.toolStarted({ runId: "r1", callId: "c1", name: "read", arguments: '{"path":"turn.ts"}' })),
-    ev(6, events.toolCompleted({ runId: "r1", callId: "c1", name: "read", result: "export function runTurn() {}" })),
-    ev(7, events.assistantDelta({ runId: "r1", text: "deferred queue, folding older turns when over budget." })),
-    ev(8, events.assistantCompleted({ runId: "r1", text: "It runs **one turn at a time** behind a deferred queue, folding older turns when over budget." })),
+    ev(
+      5,
+      events.toolStarted({
+        runId: "r1",
+        callId: "c1",
+        name: "read",
+        arguments: '{"path":"turn.ts"}',
+      }),
+    ),
+    ev(
+      6,
+      events.toolCompleted({
+        runId: "r1",
+        callId: "c1",
+        name: "read",
+        result: "export function runTurn() {}",
+      }),
+    ),
+    ev(
+      7,
+      events.assistantDelta({
+        runId: "r1",
+        text: "deferred queue, folding older turns when over budget.",
+      }),
+    ),
+    ev(
+      8,
+      events.assistantCompleted({
+        runId: "r1",
+        text: "It runs **one turn at a time** behind a deferred queue, folding older turns when over budget.",
+      }),
+    ),
   ];
 }
 
