@@ -101,3 +101,37 @@ test("simpleTool caps output and surfaces readOnly only when set", async () => {
   });
   assert.equal(rw.readOnly, undefined);
 });
+
+test("simpleTool passes an Effect-returning body through the graph without a Promise round-trip", async () => {
+  const native = simpleTool({
+    name: "effect_native",
+    description: "d",
+    params: NameOnly,
+    execute: () => Effect.succeed("from effect"),
+  });
+  assert.equal(await Effect.runPromise(native.execute({})), "from effect");
+
+  // A typed failure in the body's E channel survives as-is - no re-wrapping into a new envelope.
+  const failing = simpleTool({
+    name: "effect_failing",
+    description: "d",
+    params: NameOnly,
+    execute: () => Effect.fail(new ToolInputError({ tool: "effect_failing", detail: "typed" })),
+  });
+  const err = await Effect.runPromise(Effect.flip(failing.execute({})));
+  assert.ok(err instanceof ToolInputError);
+  assert.equal(err.detail, "typed");
+
+  // Output capping still applies to an Effect body.
+  const big = "y".repeat(MAX_OUTPUT + 500);
+  const capped = simpleTool({
+    name: "effect_capped",
+    description: "d",
+    params: NameOnly,
+    capped: true,
+    execute: () => Effect.succeed(big),
+  });
+  const out = await Effect.runPromise(capped.execute({}));
+  assert.ok(out.length < big.length);
+  assert.ok(out.endsWith(TRUNCATION_NOTICE));
+});

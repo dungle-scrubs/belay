@@ -78,7 +78,7 @@ export function buildSourceRecallTools(
         ...(args.repo ? { repo: args.repo } : {}),
         ...(projectRootOf(ctx) ? { projectRoot: projectRootOf(ctx) as string } : {}),
       };
-      return Effect.runPromise(registry.query(input, args.provider)).then((r) => JSON.stringify(r));
+      return registry.query(input, args.provider).pipe(Effect.map((r) => JSON.stringify(r)));
     },
   });
 
@@ -92,7 +92,7 @@ export function buildSourceRecallTools(
     params: ScopeParams,
     readOnly: true,
     execute: (args) =>
-      Effect.runPromise(registry.status(args.repo, args.provider)).then((r) => JSON.stringify(r)),
+      registry.status(args.repo, args.provider).pipe(Effect.map((r) => JSON.stringify(r))),
   });
 
   const sourceIndexRefresh = simpleTool({
@@ -105,9 +105,9 @@ export function buildSourceRecallTools(
     params: ScopeParams,
     // Refresh mutates EXTERNAL index state (a side effect on the daemon), so it is a serial barrier.
     execute: (args, ctx) =>
-      Effect.runPromise(registry.refresh(args.repo, projectRootOf(ctx), args.provider)).then((r) =>
-        JSON.stringify(r),
-      ),
+      registry
+        .refresh(args.repo, projectRootOf(ctx), args.provider)
+        .pipe(Effect.map((r) => JSON.stringify(r))),
   });
 
   return [sourceRecall, sourceIndexStatus, sourceIndexRefresh];
