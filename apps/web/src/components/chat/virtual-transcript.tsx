@@ -427,6 +427,34 @@ function VirtualTranscriptImpl({
     },
     [controller, scrollToLiveEdge],
   );
+
+  // A single-frame follow scheduler: a burst of measured-height changes coalesces into ONE follow
+  // correction per animation frame instead of a snap per change. This breaks the widen-resize flicker
+  // loop - dragging the column wider re-wraps every row shorter, churning the measured height many
+  // times; the pinned follow scrolls to the edge, which mounts more now-shorter rows above whose stale
+  // (width-agnostic) estimates snap down, which re-fires the follow. Capping it at one correction per
+  // frame makes the transcript TRACK the settling edge smoothly rather than over-correct several times
+  // a frame. followLiveEdge still asks the controller at fire time, so a frame that fires after the
+  // user scrolls away is a no-op (never a tug).
+  const followFrameRef = useRef<number | null>(null);
+  const scheduleFollow = useCallback(() => {
+    if (followFrameRef.current !== null) {
+      return;
+    }
+    followFrameRef.current = requestAnimationFrame(() => {
+      followFrameRef.current = null;
+      followLiveEdge();
+    });
+  }, [followLiveEdge]);
+  useEffect(
+    () => () => {
+      if (followFrameRef.current !== null) {
+        cancelAnimationFrame(followFrameRef.current);
+      }
+    },
+    [],
+  );
+
   const totalSize = virtualizer.getTotalSize();
 
   useLayoutEffect(() => {
@@ -664,27 +692,19 @@ function VirtualTranscriptImpl({
     return () => cancelAnimationFrame(frame);
   }, [pinned, readyToReveal, followLiveEdge]);
 
-  // A measured-size growth (totalSize change) while pinned + streaming follows the live edge. The
-  // double rAF lets the virtualizer settle the new measurement before the second snap. Both frames
-  // ask the controller, so if the user scrolled away between this layout effect and the frames firing,
-  // the follow is denied rather than yanking them back down (this was the constant streaming "tug").
+  // A measured-size change (totalSize) while pinned follows the live edge, coalesced to one correction
+  // per frame via scheduleFollow. During streaming a row grows once and the single follow sticks to the
+  // bottom; during a widen-resize the measured height churns many times a frame, and coalescing is what
+  // stops the pinned follow from chasing the oscillating edge (the flicker). Deliberately no cleanup
+  // cancel here: cancelling and rescheduling on every measurement change is the per-change thrash the
+  // scheduler exists to avoid - a stale pending frame is harmless (followLiveEdge asks the controller).
   useLayoutEffect(() => {
     void totalSize;
     if (!readyToReveal || !pinned) {
       return;
     }
-    let secondFrame: number | null = null;
-    const frame = requestAnimationFrame(() => {
-      followLiveEdge();
-      secondFrame = requestAnimationFrame(() => followLiveEdge());
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      if (secondFrame !== null) {
-        cancelAnimationFrame(secondFrame);
-      }
-    };
-  }, [pinned, readyToReveal, followLiveEdge, totalSize]);
+    scheduleFollow();
+  }, [pinned, readyToReveal, scheduleFollow, totalSize]);
 
   const items = fullyRendered
     ? blocks.map((block, index) => ({
