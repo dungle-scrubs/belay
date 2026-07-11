@@ -80,11 +80,17 @@
 }
 .trevor-md ol > li {
   counter-increment: trevor-md-list;
+  /* A touch more room than the ul default so the two-character "N." marker below has its own column. */
+  padding-left: 1.8em;
 }
 .trevor-md ol > li::before {
   position: absolute;
   left: 0;
-  width: 1em;
+  /* Wide enough for "N." AND `white-space: nowrap`: the marker is a MONOSPACE digit + period (~1.2em
+     in JetBrains Mono), so in the old 1em box it overflowed and WRAPPED - the period dropped to a
+     second line and, on a list item that wrapped to two lines, appeared next to the wrapped text. */
+  width: 1.4em;
+  white-space: nowrap;
   color: hsl(var(--muted-foreground));
   content: counter(trevor-md-list) ".";
   text-align: right;
