@@ -39,7 +39,11 @@ export function incidentCategory(diagnostic: ProviderDiagnostic): ProviderIncide
   if (diagnostic.reason === "protocol_anomaly") {
     return "malformed_protocol";
   }
-  if (diagnostic.reason === "auth" || diagnostic.reason === "quota_billing") {
+  if (
+    diagnostic.reason === "auth" ||
+    diagnostic.reason === "quota_billing" ||
+    diagnostic.reason === "usage_limit"
+  ) {
     return "auth_quota";
   }
   const streamed = diagnostic.partials.textChars > 0 || diagnostic.partials.toolCalls > 0;

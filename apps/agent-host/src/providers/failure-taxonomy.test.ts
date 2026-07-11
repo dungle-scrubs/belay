@@ -94,6 +94,41 @@ describe("classifyProviderFailure", () => {
     expect(v.userAction).toBe("wait");
   });
 
+  it("classifies a subscription usage cap as usage_limit (terminal, wait) - not a retryable rate window", () => {
+    // The Codex streaming error text; and the code form. Both must be terminal so the loop does not
+    // auto-reconnect against a cap that won't clear for hours.
+    for (const detail of [
+      "Codex error: The usage limit has been reached",
+      "You have hit your ChatGPT usage limit (pro plan). Try again in ~42 min.",
+    ]) {
+      const v = classifyProviderFailure({ detail });
+      expect(v.class).toBe("usage_limit");
+      expect(v.retryable).toBe(false);
+      expect(v.userAction).toBe("wait");
+      expect(isRetryable(v.class)).toBe(false);
+    }
+    // A usage-limit 429 (code form) still classifies as usage_limit, beating the rate-window branch.
+    expect(
+      classOf({ detail: "usage limit reached", status: 429, code: "usage_limit_reached" }),
+    ).toBe("usage_limit");
+    // The explicit usage code wins over incidental quota prose (usage_limit is matched before quota).
+    expect(
+      classOf({
+        detail: "usage limit hit; contact billing to raise it",
+        code: "usage_not_included",
+      }),
+    ).toBe("usage_limit");
+  });
+
+  it("does not treat an informational 'usage limits' mention as a usage cap", () => {
+    // A bare mention without a reached/exceeded/hit signal is not a cap - it must fall through, not
+    // become a terminal usage_limit. A malformed-request text stays request_rejected.
+    expect(classOf({ detail: "your plan includes generous usage limits" })).not.toBe("usage_limit");
+    expect(
+      classOf({ detail: "400 Bad Request: parameter 'usage_limits' is invalid", status: 400 }),
+    ).toBe("request_rejected");
+  });
+
   it("classifies DeepSeek auth, quota, and rate-limit signals", () => {
     const auth = classifyProviderFailure({
       provider: "deepseek",

@@ -42,8 +42,8 @@ export function isContextOverflow(detail: string): boolean {
 
 /**
  * Classes Trevor may auto-retry for the current step before any output has streamed. Every other
- * class - auth, overflow, quota, model/runtime unavailable, request rejected, unknown - is terminal
- * for the outage-retry path and surfaces its own actionable failure instead.
+ * class - auth, overflow, quota, usage-limit, model/runtime unavailable, request rejected, unknown - is
+ * terminal for the outage-retry path and surfaces its own actionable failure instead.
  */
 const RETRYABLE_CLASSES: ReadonlySet<ProviderFailureClass> = new Set([
   "transient_transport",

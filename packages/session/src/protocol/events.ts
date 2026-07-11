@@ -48,6 +48,7 @@ export type ProviderIncidentReason =
   | "transport_loss"
   | "auth"
   | "rate_limited"
+  | "usage_limit"
   | "provider_overloaded"
   | "provider_unavailable"
   | "local_runtime_unavailable"

@@ -26,6 +26,7 @@ export type ProviderFailureClass =
   | "auth" // credential refused / re-auth needed (terminal)
   | "transient_transport" // dropped socket, reset, timeout, premature close (retryable)
   | "rate_limited" // 429 / rate window (retryable, honor retry-after)
+  | "usage_limit" // subscription usage cap reached, resets later (terminal, wait - NOT a billing stop)
   | "provider_overloaded" // capacity / overloaded (retryable)
   | "provider_unavailable" // 5xx / upstream down (retryable)
   | "local_runtime_unavailable" // LM Studio not running / unreachable (terminal, actionable)
@@ -80,6 +81,16 @@ export interface ProviderFailureClassification {
 
 const QUOTA_BILLING =
   /insufficient[\s_-]*quota|quota[\s_-]*exceeded|out of (credits?|quota)|billing|payment required|\b402\b|exceeded your current quota|hard limit|spending limit/i;
+
+// A subscription USAGE cap that resets on a rolling window (ChatGPT/Codex "usage limit reached",
+// `usage_limit_reached` / `usage_not_included`) - distinct from a hard billing/credit stop. Terminal
+// for this turn (retrying just re-hits the cap), so it is NOT in the retryable set; the user waits for
+// the reset. A "usage limit" needs an accompanying reached/exceeded/hit signal (or the explicit code
+// form) so an informational mention ("generous usage limits") never trips it. Matched before
+// quota_billing (an explicit usage code must beat quota PROSE) and before the 429/rate-window family
+// (so a usage-limit 429 is not read as a transient rate window the loop would auto-reconnect against).
+const USAGE_LIMIT =
+  /usage[\s_-]*limit\b[^.\n]*\b(?:reached|exceeded|hit)|(?:reached|hit)\b[^.\n]*\busage[\s_-]*limit|usage_limit_reached|usage_not_included/i;
 
 const MODEL_UNAVAILABLE =
   /model[\s_-]*not[\s_-]*found|unknown model|no such model|model.*(not (loaded|available)|does not exist)|model_not_found|no models loaded|failed to load model/i;
@@ -140,6 +151,13 @@ export function classifyProviderFailure(
   }
   if (isContextOverflow(text)) {
     return verdict("context_overflow", "compact");
+  }
+  // A subscription usage cap (resets later) is terminal for this turn but NOT a billing stop, so it is
+  // classified BEFORE quota_billing - an explicit usage code/phrase must win over incidental quota
+  // prose - and it stays out of the retryable set so the loop never auto-reconnects against a cap that
+  // won't clear for hours.
+  if (USAGE_LIMIT.test(text)) {
+    return verdict("usage_limit", "wait", retryAfterMs);
   }
   if (status === 402 || QUOTA_BILLING.test(text)) {
     return verdict("quota_billing", "check_billing");
