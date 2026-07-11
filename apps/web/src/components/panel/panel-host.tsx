@@ -277,6 +277,11 @@ export interface SidebarBinding {
  * useMemoizedFn callback, or intentionally-changing data (`stream` per event, `host` per live-clock
  * tick), so the shallow compare skips exactly the renders that carry nothing for the layout.
  */
+/** How near (px, pointer-to-button distance) the cursor must come before a header drawer-open toggle
+ *  fades in. Large enough that reaching for the corner reveals it well before arrival, small enough
+ *  that the toggles stay hidden while the pointer is anywhere near the transcript's center. */
+const DRAWER_TOGGLE_PROXIMITY_PX = 200;
+
 function PanelHostImpl(props: {
   composer: Composer;
   compose: ComposeWiring;
@@ -488,13 +493,19 @@ function PanelHostImpl(props: {
           that drops the selection into the composer as a markdown blockquote. */}
         <QuoteSelectionToolbar onQuote={composer.quoteSelection} onTangent={onTangent} />
         {/* Thin top header (D-093): a dedicated strip for the two drawer-open toggles + the session
-          name, so the toggles never sit over the transcript (they used to block text selection). The
-          icons are revealed by hovering anywhere in this strip (group-hover), not just the icon. The
-          left/right slots stay reserved so the centered name doesn't shift when a drawer opens. */}
+          name, so the toggles never sit over the transcript (they used to block text selection). Each
+          toggle stays hidden until the pointer comes within DRAWER_TOGGLE_PROXIMITY_PX of the button
+          itself (a pointer-position test, not element hover), so the corners stay clean until reached.
+          The left/right slots stay reserved so the centered name doesn't shift when a drawer opens. */}
         <header className="flex h-8 shrink-0 items-center gap-2">
           <span className="flex w-6 shrink-0 justify-start">
             {!sidebar.open ? (
-              <DrawerToggle side="left" onClick={sidebar.onOpen} label="Open project sidebar" />
+              <DrawerToggle
+                side="left"
+                onClick={sidebar.onOpen}
+                label="Open project sidebar"
+                proximityRadius={DRAWER_TOGGLE_PROXIMITY_PX}
+              />
             ) : null}
           </span>
           <span className="min-w-0 flex-1 truncate text-center text-label tracking-wider text-muted-foreground/70">
@@ -502,7 +513,12 @@ function PanelHostImpl(props: {
           </span>
           <span className="flex w-6 shrink-0 justify-end">
             {!panel.open ? (
-              <DrawerToggle side="right" onClick={panel.onOpen} label="Open panel" />
+              <DrawerToggle
+                side="right"
+                onClick={panel.onOpen}
+                label="Open panel"
+                proximityRadius={DRAWER_TOGGLE_PROXIMITY_PX}
+              />
             ) : null}
           </span>
         </header>
