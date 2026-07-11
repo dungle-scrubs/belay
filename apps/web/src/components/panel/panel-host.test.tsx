@@ -124,6 +124,7 @@ function PanelHostHarness(props: {
         onSubmit: (event) => event.preventDefault(),
         placeholder: "message",
         slashQuery: null,
+        controls: null,
         vimEnabled: false,
       }}
       composer={composer}

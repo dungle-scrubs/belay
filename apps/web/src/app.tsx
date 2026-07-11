@@ -35,6 +35,7 @@ import {
 } from "@/artifact-panel/artifact-panel-state";
 import type { LucidPanelWiring } from "@/artifact-panel/lucid/lucid-viewer";
 import type { TangentSelection } from "@/components/assistant-ui/quote-selection-toolbar";
+import { ComposerControls } from "@/components/chat/composer-controls";
 import { useLoopInventory } from "@/components/chat/loop/use-loop-inventory";
 import { loopPreviewForLine } from "@/components/chat/loop/use-loop-preview";
 import type { TranscriptRowConfig } from "@/components/chat/virtual-transcript";
@@ -1321,11 +1322,33 @@ export function App() {
     modal.setArchiveOpen(false);
     setChooserOpen((open) => !open);
   });
-  // Model + reasoning + thinking controls, moved out of the footer into the panel. Memoized (Tier 1)
-  // on the real model/display data so the panel binding below only churns when a control changed.
+  // The show-thinking + compact display toggles ride in the panel. Memoized (Tier 1) on the real
+  // state so the panel binding below only churns when a toggle changed. The model + reasoning
+  // controls moved to the composer footer (composerControls, below), next to the input they apply to.
   const panelControls = useMemo(
     () => (
       <ControlsPanel
+        config={{
+          thinking: {
+            show: showThinkingOn,
+            onShowChange: setShowThinking,
+          },
+          compact: {
+            show: compact,
+            onShowChange: setCompact,
+          },
+        }}
+      />
+    ),
+    [showThinkingOn, setShowThinking, compact],
+  );
+
+  // The model + reasoning controls at the bottom of the composer (the PromptInput footer row). Same
+  // selection data the panel used, now next to the input. Memoized (Tier 1) so the compose binding
+  // only churns when the model/display/reasoning data actually moves.
+  const composerControls = useMemo(
+    () => (
+      <ComposerControls
         config={{
           model: {
             activeLabel,
@@ -1341,14 +1364,6 @@ export function App() {
             selected: activeReasoning,
             onChange: setReasoning,
           },
-          thinking: {
-            show: showThinkingOn,
-            onShowChange: setShowThinking,
-          },
-          compact: {
-            show: compact,
-            onShowChange: setCompact,
-          },
         }}
       />
     ),
@@ -1363,9 +1378,6 @@ export function App() {
       activeReasoningLevels,
       activeReasoning,
       setReasoning,
-      showThinkingOn,
-      setShowThinking,
-      compact,
     ],
   );
 
@@ -1761,11 +1773,13 @@ export function App() {
       disabledReason: "Resume host to continue",
       placeholder: `message ${activeLabel}… (/ for commands, @ for files, ! for shell)`,
       onExpand: onExpandDraft,
+      controls: composerControls,
       vimEnabled,
     }),
     [
       onSubmit,
       onInputKeyDown,
+      composerControls,
       slashMenu.menuOpen,
       slashMenu.menuMatches,
       slashMenu.menuIndex,

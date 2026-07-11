@@ -158,6 +158,8 @@ export interface ComposeWiring {
   readonly placeholder: string;
   /** Open the current draft in the full-surface prompt editor (02.12). */
   readonly onExpand: () => void;
+  /** The model + reasoning controls rendered in the composer footer row (App owns the selection). */
+  readonly controls: ReactNode;
   /** Whether the host-owned Vim prompt mode is enabled (plan 06); gates the composer's Vim layer. */
   readonly vimEnabled: boolean;
 }
@@ -717,6 +719,7 @@ function PanelHostImpl(props: {
                     : compose.placeholder
                 }
                 onExpand={compose.onExpand}
+                controls={compose.controls}
                 vimEnabled={compose.vimEnabled}
                 // Either composer menu owning the keys suspends the Vim layer (arrows/Enter/Escape).
                 menuOpen={compose.menuOpen || compose.fileMenu.open}
