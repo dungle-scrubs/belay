@@ -160,6 +160,8 @@ export interface ComposeWiring {
   readonly onExpand: () => void;
   /** The model + reasoning controls rendered in the composer footer row (App owns the selection). */
   readonly controls: ReactNode;
+  /** The host connection status, rendered in the composer footer just left of the model controls. */
+  readonly statusSlot: ReactNode;
   /** Whether the host-owned Vim prompt mode is enabled (plan 06); gates the composer's Vim layer. */
   readonly vimEnabled: boolean;
 }
@@ -174,12 +176,9 @@ export interface PanelBinding {
   readonly onClose: () => void;
   readonly title: string;
   readonly subtitle: string;
-  readonly statusNode: ReactNode;
   readonly workspace?: string;
   readonly git?: GitStatus | null;
   readonly model: PanelModel;
-  readonly controls: ReactNode;
-  readonly footer: ReactNode;
   readonly ready: boolean;
 }
 
@@ -259,6 +258,8 @@ export interface SidebarBinding {
   readonly onViewArchive?: (projectKey: string) => void;
   /** Open the global archived-session browser from the pinned project sidebar footer. */
   readonly onViewArchived?: () => void;
+  /** Restart the host with fresh code, from the pinned project sidebar footer (dev affordance). */
+  readonly onRestartHost?: () => void;
   /** The currently selected session id (for row highlight). */
   readonly currentSessionId: string;
   /** Live run state per session, layered over each row's durable activity. */
@@ -474,6 +475,7 @@ function PanelHostImpl(props: {
             onDeleteWorktree={sidebar.onDeleteWorktree}
             onViewArchive={sidebar.onViewArchive}
             onViewArchived={sidebar.onViewArchived}
+            onRestartHost={sidebar.onRestartHost}
             liveActivity={sidebar.liveActivity}
             currentSessionId={sidebar.currentSessionId}
             className="h-full min-w-0 flex-1"
@@ -720,6 +722,7 @@ function PanelHostImpl(props: {
                 }
                 onExpand={compose.onExpand}
                 controls={compose.controls}
+                statusSlot={compose.statusSlot}
                 vimEnabled={compose.vimEnabled}
                 // Either composer menu owning the keys suspends the Vim layer (arrows/Enter/Escape).
                 menuOpen={compose.menuOpen || compose.fileMenu.open}
@@ -762,16 +765,10 @@ function PanelHostImpl(props: {
       ) : null}
 
       {panel.open ? (
-        <SidePanel
-          ready={panel.ready}
-          controls={panel.controls}
-          footer={panel.footer}
-          onClose={panel.onClose}
-        >
+        <SidePanel ready={panel.ready} onClose={panel.onClose}>
           <SidePanelHeader
             title={panel.title}
             subtitle={panel.subtitle}
-            statusNode={panel.statusNode}
             workspace={panel.workspace}
             git={panel.git}
             // Other managed worktrees for this project = switch targets beyond the current checkout.

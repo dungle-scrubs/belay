@@ -74,6 +74,9 @@ export interface PromptInputProps {
   /** The model + reasoning controls, rendered right-aligned in the composer footer row. App owns the
    *  selection state; this component just gives them a home next to the input they apply to. */
   readonly controls?: ReactNode;
+  /** The host connection status (● host active / offline / launch affordance), shown in the footer row
+   *  just left of the model controls so the host state sits next to the input it drives. */
+  readonly statusSlot?: ReactNode;
   /** Whether the host-owned Vim prompt mode is enabled (plan 06). When on, the composer gains the Vim
    *  layer + a mode indicator; when off it is exactly the plain composer. */
   readonly vimEnabled?: boolean;
@@ -96,6 +99,7 @@ export function PromptInput({
   placeholder,
   onExpand,
   controls,
+  statusSlot,
   vimEnabled = false,
   menuOpen = false,
   activeDescendantId,
@@ -310,9 +314,16 @@ export function PromptInput({
             {/* The Vim mode indicator sits left-aligned, immediately right of the composer controls
               (06.1); its stable width keeps the row from reflowing as the mode changes. */}
             {vim.enabled ? <VimModeIndicator mode={vim.mode} /> : null}
-            {/* Model + reasoning controls, pinned to the right of the footer row so the active
-              selection sits next to the input it applies to. */}
-            {controls ? <div className="ml-auto min-w-0">{controls}</div> : null}
+            {/* Right-aligned footer group: the host status sits just left of the model + reasoning
+              controls, so both the host state and the active selection ride next to the input. */}
+            {statusSlot || controls ? (
+              <div className="ml-auto flex min-w-0 items-center gap-2">
+                {statusSlot ? (
+                  <div className="min-w-0 truncate text-label tracking-wider">{statusSlot}</div>
+                ) : null}
+                {controls}
+              </div>
+            ) : null}
           </div>
         </div>
         {/* Auto-growing textarea: Enter submits, Shift+Enter inserts a newline. */}

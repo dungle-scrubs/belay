@@ -14,6 +14,7 @@ import {
   MoreVertical,
   Pencil,
   Plus,
+  RotateCcw,
   Search,
   Trash2,
 } from "lucide-react";
@@ -58,6 +59,8 @@ export interface ProjectSidebarProps {
   readonly onViewArchive?: (projectKey: string) => void;
   /** Open the global archived-session browser from the pinned sidebar footer. */
   readonly onViewArchived?: () => void;
+  /** Restart the host with fresh code (a dev affordance in the pinned footer). */
+  readonly onRestartHost?: () => void;
   /** Add a new project via the OS folder picker. */
   readonly onAddProject?: () => void;
   /** Collapse (hide) the sidebar - the same drawer toggle the right panel offers; the reopen
@@ -827,6 +830,7 @@ export function ProjectSidebar({
   onSearchChange,
   onViewArchive,
   onViewArchived,
+  onRestartHost,
   onAddProject,
   onCollapse,
   onNewSession,
@@ -1005,6 +1009,33 @@ export function ProjectSidebar({
           </div>
         )}
       </div>
+
+      {/* Host restart (dev affordance) + the active session id, pinned above the archived link so the
+        session controls sit at the foot of the projects rail rather than in the right panel. */}
+      {onRestartHost || currentSessionId ? (
+        <div className="flex shrink-0 flex-col gap-1.5 border-t border-border px-2.5 py-1.5">
+          {onRestartHost ? (
+            <button
+              type="button"
+              onClick={onRestartHost}
+              className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-label tracking-wider text-muted-foreground hover:text-foreground"
+              title="Restart the host with fresh code"
+              aria-label="Restart the host"
+            >
+              <RotateCcw className="size-3" />
+              <span>restart</span>
+            </button>
+          ) : null}
+          {currentSessionId ? (
+            <div
+              className="truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground"
+              title={currentSessionId}
+            >
+              {currentSessionId}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {onViewArchived ? (
         <footer className="shrink-0 border-t border-border px-2.5 py-1.5">

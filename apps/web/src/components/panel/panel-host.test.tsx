@@ -125,6 +125,7 @@ function PanelHostHarness(props: {
         placeholder: "message",
         slashQuery: null,
         controls: null,
+        statusSlot: null,
         vimEnabled: false,
       }}
       composer={composer}
@@ -138,15 +139,12 @@ function PanelHostHarness(props: {
       loopInventory={{ onControl: onLoopControl, rows: [loopRow] }}
       onUnarchive={vi.fn()}
       panel={{
-        controls: null,
-        footer: null,
         git: null,
         model: {},
         onClose: vi.fn(),
         onOpen: vi.fn(),
         open: false,
         ready: true,
-        statusNode: null,
         subtitle: "open",
         title: "s",
       }}

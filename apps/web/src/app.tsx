@@ -8,10 +8,8 @@ import {
   type ProviderQuestionAnswer,
   type SessionSummary,
   SUPERVISOR_SESSION_ID,
-  tangentsOf,
 } from "@trevor/session";
 import { useInterval, useLocalStorageState, useMemoizedFn } from "ahooks";
-import { GitBranch, RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type SubmitEvent,
@@ -44,7 +42,6 @@ import { sourceActionCommand } from "@/components/chooser/source-action";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import type { PaletteCommand } from "@/components/command-palette/palette-commands";
 import { BackToChat } from "@/components/panel/back-to-chat";
-import { ControlsPanel } from "@/components/panel/panel-controls";
 import {
   type ArtifactPanelBinding,
   type ChooserBinding,
@@ -77,7 +74,6 @@ import {
 } from "@/support-panel/support-panel";
 import { type FoldBackContent, foldBackPreview } from "@/tangent/foldback";
 import { LiveTangentShell } from "@/tangent/live-tangent-shell";
-import { TangentDiscovery } from "@/tangent/tangent-discovery";
 import { type ActiveTangent, useTangent } from "@/tangent/use-tangent";
 import { findDetailModel, isDetailEligible } from "@/tool-detail/detail-model";
 import { ToolDetailView } from "@/tool-detail/tool-detail-view";
@@ -885,10 +881,9 @@ export function App() {
   });
   const [chooserOpen, setChooserOpen] = useState(false);
   // Tangents (plan 37): a tangent is an isolated side conversation branched from a selected snapshot,
-  // shown in the center-column takeover. `tangent` owns its lifecycle; discovery lists this session's
-  // tangents. Both close the other center takeovers when opened (only one at a time).
+  // shown in the center-column takeover. `tangent` owns its lifecycle; it closes the other center
+  // takeovers when opened (only one at a time).
   const tangent = useTangent();
-  const [tangentDiscoveryOpen, setTangentDiscoveryOpen] = useState(false);
   // The tool detail takeover (plan 08): the id of the transcript row being inspected, or null when
   // closed. We hold the ID, not a snapshot, so the detail model is RE-DERIVED from the live transcript
   // each render (M6) - a running tool's detail updates in place through completion/error/abort, and the
@@ -1217,7 +1212,6 @@ export function App() {
     helpOpen ||
     detail !== null ||
     jobDetail !== null ||
-    tangentDiscoveryOpen ||
     artifactPanel?.open === true;
   const modalOpen = otherTakeoverOpen || tangent.active !== null;
   // The tangent owns Escape only when nothing is layered above it, so a higher overlay's Escape still wins.
@@ -1237,6 +1231,18 @@ export function App() {
   const paletteCommands: PaletteCommand[] = useMemo(
     () => [
       vimToggleCommand(vimEnabled, command),
+      {
+        id: "toggle-show-thinking",
+        label: "Toggle show thinking",
+        hint: showThinkingOn ? "on" : "off",
+        run: () => setShowThinking(!showThinkingOn),
+      },
+      {
+        id: "toggle-compact",
+        label: "Toggle compact layout",
+        hint: compact ? "on" : "off",
+        run: () => setCompact(!compact),
+      },
       shortcutCommand("toggle-sidebar", toggleSidebar),
       shortcutCommand("toggle-panel", togglePanel),
       shortcutCommand(
@@ -1246,7 +1252,19 @@ export function App() {
       ),
       shortcutCommand("shortcuts-help", openHelp),
     ],
-    [vimEnabled, command, busy, compacting, toggleSidebar, togglePanel, onStop, openHelp],
+    [
+      vimEnabled,
+      command,
+      busy,
+      compacting,
+      showThinkingOn,
+      setShowThinking,
+      compact,
+      toggleSidebar,
+      togglePanel,
+      onStop,
+      openHelp,
+    ],
   );
 
   // The latest Escape inputs + handlers, read by the router's window listener so it never goes stale.
@@ -1323,27 +1341,6 @@ export function App() {
     modal.setArchiveOpen(false);
     setChooserOpen((open) => !open);
   });
-  // The show-thinking + compact display toggles ride in the panel. Memoized (Tier 1) on the real
-  // state so the panel binding below only churns when a toggle changed. The model + reasoning
-  // controls moved to the composer footer (composerControls, below), next to the input they apply to.
-  const panelControls = useMemo(
-    () => (
-      <ControlsPanel
-        config={{
-          thinking: {
-            show: showThinkingOn,
-            onShowChange: setShowThinking,
-          },
-          compact: {
-            show: compact,
-            onShowChange: setCompact,
-          },
-        }}
-      />
-    ),
-    [showThinkingOn, setShowThinking, compact],
-  );
-
   // The model + reasoning controls at the bottom of the composer (the PromptInput footer row). Same
   // selection data the panel used, now next to the input. Memoized (Tier 1) so the compose binding
   // only churns when the model/display/reasoning data actually moves.
@@ -1612,14 +1609,7 @@ export function App() {
   };
   const openTangent = useMemoizedFn((selection: TangentSelection) => {
     closeOtherTakeovers();
-    setTangentDiscoveryOpen(false);
     tangent.open(selection, target);
-  });
-  // useMemoizedFn: stable identity so the memoized panelFooter below does not churn per render.
-  const openTangentDiscovery = useMemoizedFn(() => {
-    closeOtherTakeovers();
-    tangent.close();
-    setTangentDiscoveryOpen(true);
   });
   // Explicit fold-back (M8): place the chosen tangent content into THIS (parent) composer for review via
   // the same quote-into-composer path, and record the durable marker on the tangent. It never auto-submits
@@ -1650,53 +1640,11 @@ export function App() {
       vimEnabled={vimEnabled}
     />
   ) : undefined;
-  const tangentDiscoveryView = tangentDiscoveryOpen ? (
-    <TangentDiscovery
-      className="h-full"
-      tangents={tangentsOf(modal.inventory.sessions, target)}
-      onOpen={(summary) => {
-        setTangentDiscoveryOpen(false);
-        tangent.openExisting(summary);
-      }}
-      onBack={() => setTangentDiscoveryOpen(false)}
-    />
-  ) : undefined;
 
-  // Quick DEBUG-COMMAND buttons (trigger a /debug-mode command without typing it), plus the session id
-  // for orientation. `restart` is a temporary debug surface. Memoized (Tier 1) for the panel binding.
-  const panelFooter = useMemo(
-    () => (
-      <>
-        {/* TEMP dev affordance (remove later): restart the host to pick up code changes. The typed
-          `/restart` is debug-gated, but this explicit button sends `force` so a click restarts
-          straight away regardless of debug mode (the click is its own confirmation). */}
-        <button
-          type="button"
-          onClick={() => void command("/restart", "force")}
-          title="Restart the host with fresh code"
-          aria-label="Restart the host"
-          className="flex items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
-        >
-          <RotateCcw className="size-3" />
-          restart
-        </button>
-        <button
-          type="button"
-          onClick={openTangentDiscovery}
-          title="Tangents branched from this session"
-          aria-label="Tangents from this session"
-          className="flex cursor-pointer items-center gap-1 rounded border border-border bg-background px-2 py-1 text-label tracking-wider text-muted-foreground hover:text-foreground"
-        >
-          <GitBranch className="size-3" />
-          tangents
-        </button>
-        <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
-          {target}
-        </div>
-      </>
-    ),
-    [command, target, openTangentDiscovery],
-  );
+  // Restart the host to pick up code changes (a dev affordance now living at the foot of the projects
+  // rail, alongside the active session id). The typed `/restart` is debug-gated, but this explicit
+  // action sends `force` so a click restarts straight away regardless of debug mode.
+  const restartHost = useMemoizedFn(() => void command("/restart", "force"));
 
   // Host/connection status, moved out of the footer into the panel header. Memoized (Tier 1) on its
   // real inputs so the panel binding below only churns when the status actually moved.
@@ -1787,12 +1735,14 @@ export function App() {
       placeholder: `message ${activeLabel}… (/ for commands, @ for files, ! for shell)`,
       onExpand: onExpandDraft,
       controls: composerControls,
+      statusSlot: statusNode,
       vimEnabled,
     }),
     [
       onSubmit,
       onInputKeyDown,
       composerControls,
+      statusNode,
       slashMenu.menuOpen,
       slashMenu.menuMatches,
       slashMenu.menuIndex,
@@ -1841,12 +1791,9 @@ export function App() {
       onClose: closePanel,
       title: target,
       subtitle: `${status}${replayed ? " · replayed" : ""} · ${events.length} events`,
-      statusNode,
       workspace: host.cwd ?? host.workspace ?? undefined,
       git: host.git,
       model: panel,
-      controls: panelControls,
-      footer: panelFooter,
       ready: replayed,
     }),
     [
@@ -1857,13 +1804,10 @@ export function App() {
       status,
       replayed,
       events.length,
-      statusNode,
       host.cwd,
       host.workspace,
       host.git,
       panel,
-      panelControls,
-      panelFooter,
     ],
   );
 
@@ -1989,6 +1933,7 @@ export function App() {
       onDeleteWorktree,
       onViewArchive,
       onViewArchived,
+      onRestartHost: restartHost,
       currentSessionId: target,
       liveActivity: modal.sidebarLiveActivity,
     }),
@@ -2014,6 +1959,7 @@ export function App() {
       onDeleteWorktree,
       onViewArchive,
       onViewArchived,
+      restartHost,
       target,
       modal.sidebarLiveActivity,
     ],
@@ -2129,7 +2075,6 @@ export function App() {
             />
           ) : (
             (tangentTakeover ??
-            tangentDiscoveryView ??
             jobDetailView ??
             detailView ??
             agentDetailView ??
