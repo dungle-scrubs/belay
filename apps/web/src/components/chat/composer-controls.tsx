@@ -49,14 +49,14 @@ function ReasoningPicker({ levels, selected, onChange }: ComposerControlsConfig[
           aria-label={`Reasoning: ${selected}`}
           className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1.5 transition-colors hover:bg-card/60"
         >
-          <span className="text-label tracking-wider uppercase text-muted-foreground">
-            reasoning
-          </span>
           <span className="text-sm lowercase">{selected}</span>
           <ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" sideOffset={6} className="w-36 p-1">
+        <p className="px-2 py-1 text-label tracking-wider uppercase text-muted-foreground">
+          reasoning
+        </p>
         <div className="flex flex-col">
           {levels.map((level) => {
             const active = level === selected;
