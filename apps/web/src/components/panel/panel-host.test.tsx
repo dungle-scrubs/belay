@@ -309,11 +309,7 @@ test("the transcript well keeps its scroll identity and shows the themed (not hi
   expect(cls).not.toContain("scrollbar]:hidden");
 });
 
-test("sidebar drag is snap-on-release: layout stays frozen, a guide line follows, width commits on mouse-up", () => {
-  // Snap-on-release (perf): re-wrapping the ~160 mounted transcript rows on every drag frame pinned
-  // the main thread at ~5fps. So the sidebar (and the transcript beside it) keep their committed width
-  // during the drag - only a thin guide line follows the cursor - and the new width is applied once on
-  // release.
+test("sidebar drag previews width locally and persists once on release", () => {
   const onResize = vi.fn();
   const { container } = renderWithTooltip(
     <PanelHostHarness onLoopControl={vi.fn()} sidebar={{ open: true, width: 352, onResize }} />,
@@ -328,21 +324,13 @@ test("sidebar drag is snap-on-release: layout stays frozen, a guide line follows
   fireEvent.mouseMove(document, { clientX: 340 });
   fireEvent.mouseMove(document, { clientX: 390 });
 
-  // No commit yet, and the sidebar width has NOT changed (frozen layout) - only the guide line moved.
   expect(onResize).not.toHaveBeenCalled();
-  expect(sidebarShell?.getAttribute("style")).toContain("width: 352px");
-  const guide = container.querySelector("[aria-hidden].pointer-events-none.absolute.inset-y-0");
-  expect(guide).toBeTruthy();
-  expect(guide?.getAttribute("style")).toContain("left: 442px");
+  expect(sidebarShell?.getAttribute("style")).toContain("width: 442px");
 
   fireEvent.mouseUp(handle);
 
-  // Committed once, with the final width; the guide line is gone.
   expect(onResize).toHaveBeenCalledTimes(1);
   expect(onResize).toHaveBeenCalledWith(442);
-  expect(
-    container.querySelector("[aria-hidden].pointer-events-none.absolute.inset-y-0"),
-  ).toBeFalsy();
   expect(container.querySelector("[data-transcript-scroll]")).toBeTruthy();
 });
 

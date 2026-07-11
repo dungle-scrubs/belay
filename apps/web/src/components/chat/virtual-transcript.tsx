@@ -407,58 +407,6 @@ function VirtualTranscriptImpl({
     };
   }, [controller, scrollRef]);
 
-  // Synchronous viewport-WIDTH compensation. A one-shot width change (collapsing the right panel, the
-  // sidebar-resize commit) re-wraps the mounted rows in the same layout pass, but the virtualizer
-  // re-measures a frame LATER - so the content flashes at the wrong offset for one frame before that
-  // async correction lands. This ResizeObserver fires after the synchronous re-wrap and BEFORE paint,
-  // so snapping to the live edge (pinned) or holding the reading anchor (unpinned) HERE keeps the
-  // viewport steady in the very frame the width changed. Height-only changes (streaming growth, the
-  // composer) are left to the existing rAF machinery.
-  useEffect(() => {
-    const scrollElement = scrollRef.current;
-    if (!scrollElement || typeof ResizeObserver === "undefined") {
-      return;
-    }
-    let lastWidth = scrollElement.clientWidth;
-    const observer = new ResizeObserver(() => {
-      const width = scrollElement.clientWidth;
-      if (width === lastWidth) {
-        return;
-      }
-      lastWidth = width;
-      // Only the UNPINNED (reading) case is handled here. While pinned, the virtualizer's end-anchor
-      // owns the bottom, and a synchronous snap on the STALE pre-remeasure geometry would overshoot -
-      // so pinned is left to the existing machinery.
-      if (controller.isPinned()) {
-        return;
-      }
-      const anchor = visualAnchorRef.current;
-      if (!anchor) {
-        return;
-      }
-      const currentTop = anchorTop(scrollElement, anchor.id);
-      if (currentTop === null) {
-        return;
-      }
-      const delta = currentTop - anchor.top;
-      if (Math.abs(delta) <= ANCHOR_EPSILON_PX) {
-        return;
-      }
-      const nextTop = scrollElement.scrollTop + delta;
-      const decision = controller.requestWrite("anchor-compensation", {
-        writer: "virtualizer",
-        resultingOffset: nextTop,
-        scrollHeight: scrollElement.scrollHeight,
-        clientHeight: scrollElement.clientHeight,
-      });
-      if (decision.allowed) {
-        scrollElement.scrollTop = nextTop;
-      }
-    });
-    observer.observe(scrollElement);
-    return () => observer.disconnect();
-  }, [controller, scrollRef]);
-
   // Every AUTO-follow asks the controller at FIRE time (synchronously), so a follow scheduled a frame
   // ago becomes a no-op if the user has since scrolled away - the one gate that keeps manual upward
   // scrolling from being fought (D-001), now owned by the controller instead of a lagging ref. The
@@ -479,34 +427,6 @@ function VirtualTranscriptImpl({
     },
     [controller, scrollToLiveEdge],
   );
-
-  // A single-frame follow scheduler: a burst of measured-height changes coalesces into ONE follow
-  // correction per animation frame instead of a snap per change. This breaks the widen-resize flicker
-  // loop - dragging the column wider re-wraps every row shorter, churning the measured height many
-  // times; the pinned follow scrolls to the edge, which mounts more now-shorter rows above whose stale
-  // (width-agnostic) estimates snap down, which re-fires the follow. Capping it at one correction per
-  // frame makes the transcript TRACK the settling edge smoothly rather than over-correct several times
-  // a frame. followLiveEdge still asks the controller at fire time, so a frame that fires after the
-  // user scrolls away is a no-op (never a tug).
-  const followFrameRef = useRef<number | null>(null);
-  const scheduleFollow = useCallback(() => {
-    if (followFrameRef.current !== null) {
-      return;
-    }
-    followFrameRef.current = requestAnimationFrame(() => {
-      followFrameRef.current = null;
-      followLiveEdge();
-    });
-  }, [followLiveEdge]);
-  useEffect(
-    () => () => {
-      if (followFrameRef.current !== null) {
-        cancelAnimationFrame(followFrameRef.current);
-      }
-    },
-    [],
-  );
-
   const totalSize = virtualizer.getTotalSize();
 
   useLayoutEffect(() => {
@@ -542,13 +462,7 @@ function VirtualTranscriptImpl({
       rowsChangedUntilRef.current = performance.now() + 120;
     }
 
-    // Compensate on a pure MEASUREMENT change too (rows identity unchanged), not only on rowsChanged:
-    // a one-shot width change - collapsing the right panel, the sidebar resize commit, a Mermaid/image
-    // above the fold settling - re-wraps the mounted rows and shifts the reader's anchor. Without this,
-    // only the virtualizer's own anchorTo="start" correction runs, and it lands ONE FRAME LATE, so the
-    // content visibly jumps to the wrong offset for a frame and then snaps back. Running our synchronous
-    // compensation here holds the anchor in the same frame the layout changed.
-    if ((rowsChanged || virtualMeasurementsChanged) && !pinned && scrollElement) {
+    if (rowsChanged && !pinned && scrollElement) {
       const compensateReadingAnchor = () => {
         let nextTop: number | null = null;
         if (previousAnchor) {
@@ -750,19 +664,27 @@ function VirtualTranscriptImpl({
     return () => cancelAnimationFrame(frame);
   }, [pinned, readyToReveal, followLiveEdge]);
 
-  // A measured-size change (totalSize) while pinned follows the live edge, coalesced to one correction
-  // per frame via scheduleFollow. During streaming a row grows once and the single follow sticks to the
-  // bottom; during a widen-resize the measured height churns many times a frame, and coalescing is what
-  // stops the pinned follow from chasing the oscillating edge (the flicker). Deliberately no cleanup
-  // cancel here: cancelling and rescheduling on every measurement change is the per-change thrash the
-  // scheduler exists to avoid - a stale pending frame is harmless (followLiveEdge asks the controller).
+  // A measured-size growth (totalSize change) while pinned + streaming follows the live edge. The
+  // double rAF lets the virtualizer settle the new measurement before the second snap. Both frames
+  // ask the controller, so if the user scrolled away between this layout effect and the frames firing,
+  // the follow is denied rather than yanking them back down (this was the constant streaming "tug").
   useLayoutEffect(() => {
     void totalSize;
     if (!readyToReveal || !pinned) {
       return;
     }
-    scheduleFollow();
-  }, [pinned, readyToReveal, scheduleFollow, totalSize]);
+    let secondFrame: number | null = null;
+    const frame = requestAnimationFrame(() => {
+      followLiveEdge();
+      secondFrame = requestAnimationFrame(() => followLiveEdge());
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      if (secondFrame !== null) {
+        cancelAnimationFrame(secondFrame);
+      }
+    };
+  }, [pinned, readyToReveal, followLiveEdge, totalSize]);
 
   const items = fullyRendered
     ? blocks.map((block, index) => ({
