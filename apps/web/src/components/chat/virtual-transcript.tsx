@@ -407,6 +407,58 @@ function VirtualTranscriptImpl({
     };
   }, [controller, scrollRef]);
 
+  // Synchronous viewport-WIDTH compensation. A one-shot width change (collapsing the right panel, the
+  // sidebar-resize commit) re-wraps the mounted rows in the same layout pass, but the virtualizer
+  // re-measures a frame LATER - so the content flashes at the wrong offset for one frame before that
+  // async correction lands. This ResizeObserver fires after the synchronous re-wrap and BEFORE paint,
+  // so snapping to the live edge (pinned) or holding the reading anchor (unpinned) HERE keeps the
+  // viewport steady in the very frame the width changed. Height-only changes (streaming growth, the
+  // composer) are left to the existing rAF machinery.
+  useEffect(() => {
+    const scrollElement = scrollRef.current;
+    if (!scrollElement || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    let lastWidth = scrollElement.clientWidth;
+    const observer = new ResizeObserver(() => {
+      const width = scrollElement.clientWidth;
+      if (width === lastWidth) {
+        return;
+      }
+      lastWidth = width;
+      // Only the UNPINNED (reading) case is handled here. While pinned, the virtualizer's end-anchor
+      // owns the bottom, and a synchronous snap on the STALE pre-remeasure geometry would overshoot -
+      // so pinned is left to the existing machinery.
+      if (controller.isPinned()) {
+        return;
+      }
+      const anchor = visualAnchorRef.current;
+      if (!anchor) {
+        return;
+      }
+      const currentTop = anchorTop(scrollElement, anchor.id);
+      if (currentTop === null) {
+        return;
+      }
+      const delta = currentTop - anchor.top;
+      if (Math.abs(delta) <= ANCHOR_EPSILON_PX) {
+        return;
+      }
+      const nextTop = scrollElement.scrollTop + delta;
+      const decision = controller.requestWrite("anchor-compensation", {
+        writer: "virtualizer",
+        resultingOffset: nextTop,
+        scrollHeight: scrollElement.scrollHeight,
+        clientHeight: scrollElement.clientHeight,
+      });
+      if (decision.allowed) {
+        scrollElement.scrollTop = nextTop;
+      }
+    });
+    observer.observe(scrollElement);
+    return () => observer.disconnect();
+  }, [controller, scrollRef]);
+
   // Every AUTO-follow asks the controller at FIRE time (synchronously), so a follow scheduled a frame
   // ago becomes a no-op if the user has since scrolled away - the one gate that keeps manual upward
   // scrolling from being fought (D-001), now owned by the controller instead of a lagging ref. The
@@ -490,7 +542,13 @@ function VirtualTranscriptImpl({
       rowsChangedUntilRef.current = performance.now() + 120;
     }
 
-    if (rowsChanged && !pinned && scrollElement) {
+    // Compensate on a pure MEASUREMENT change too (rows identity unchanged), not only on rowsChanged:
+    // a one-shot width change - collapsing the right panel, the sidebar resize commit, a Mermaid/image
+    // above the fold settling - re-wraps the mounted rows and shifts the reader's anchor. Without this,
+    // only the virtualizer's own anchorTo="start" correction runs, and it lands ONE FRAME LATE, so the
+    // content visibly jumps to the wrong offset for a frame and then snaps back. Running our synchronous
+    // compensation here holds the anchor in the same frame the layout changed.
+    if ((rowsChanged || virtualMeasurementsChanged) && !pinned && scrollElement) {
       const compensateReadingAnchor = () => {
         let nextTop: number | null = null;
         if (previousAnchor) {
