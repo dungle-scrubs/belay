@@ -1,6 +1,7 @@
 import { relativeTime, type SessionSummary } from "@trevor/session";
 import { GitBranch } from "lucide-react";
 import { BackToChat } from "@/components/panel/back-to-chat";
+import { TakeoverSurface } from "@/components/panel/takeover-surface";
 import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
 
@@ -46,9 +47,10 @@ export function TangentDiscovery({
   const clockNow = useNow(RELATIVE_TIME_TICK_MS, { enabled: nowMs === undefined });
   const rowNowMs = nowMs ?? clockNow;
   return (
-    <section
-      aria-label="Tangents"
-      className={cn("@container flex min-h-0 flex-col bg-background text-foreground", className)}
+    <TakeoverSurface
+      label="Tangents"
+      onBack={onBack}
+      className={cn("bg-background text-foreground", className)}
     >
       <BackToChat onBack={onBack} />
       <div className="shrink-0 px-3 pb-2">
@@ -91,6 +93,6 @@ export function TangentDiscovery({
           </ul>
         )}
       </div>
-    </section>
+    </TakeoverSurface>
   );
 }

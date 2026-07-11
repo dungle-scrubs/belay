@@ -58,7 +58,7 @@ test("the back arrow returns to chat without mutating any session", () => {
       onDelete={() => mutations++}
     />,
   );
-  fireEvent.click(getByLabelText("Back to chat"));
+  fireEvent.click(getByLabelText("Back to conversation"));
   assert.equal(backed, 1);
   assert.equal(mutations, 0);
 });

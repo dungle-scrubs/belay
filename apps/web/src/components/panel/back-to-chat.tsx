@@ -11,11 +11,11 @@ export function BackToChat({ onBack }: { onBack: () => void }) {
       <button
         type="button"
         onClick={onBack}
-        aria-label="Back to chat"
+        aria-label="Back to conversation"
         className="flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-1 text-label tracking-wider uppercase text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="size-4" />
-        Back
+        Conversation
       </button>
     </div>
   );

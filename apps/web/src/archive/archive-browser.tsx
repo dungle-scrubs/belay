@@ -2,6 +2,7 @@ import { relativeTime } from "@trevor/session";
 import { AlertTriangle, ArchiveRestore, Loader2, ShieldAlert, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BackToChat } from "@/components/panel/back-to-chat";
+import { TakeoverSurface } from "@/components/panel/takeover-surface";
 import { Button } from "@/components/ui/button";
 import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 import { cn } from "@/lib/utils";
@@ -94,9 +95,10 @@ export function ArchiveBrowser({
   const hasRows = filteredRows.length > 0;
 
   return (
-    <section
-      aria-label="Archived sessions"
-      className={cn("@container flex min-h-0 flex-col bg-background text-foreground", className)}
+    <TakeoverSurface
+      label="Archived sessions"
+      onBack={onBack}
+      className={cn("bg-background text-foreground", className)}
     >
       {onBack ? <BackToChat onBack={onBack} /> : null}
 
@@ -162,7 +164,7 @@ export function ArchiveBrowser({
           </div>
         ) : null}
       </div>
-    </section>
+    </TakeoverSurface>
   );
 }
 

@@ -49,7 +49,7 @@ test("shows an empty state when the session has no tangents", () => {
 test("the back arrow returns to chat", () => {
   const onBack = vi.fn();
   render(<TangentDiscovery tangents={[tangent()]} nowMs={NOW} onOpen={vi.fn()} onBack={onBack} />);
-  fireEvent.click(screen.getByLabelText("Back to chat"));
+  fireEvent.click(screen.getByLabelText("Back to conversation"));
   assert.equal(onBack.mock.calls.length, 1);
 });
 

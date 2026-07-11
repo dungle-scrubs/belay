@@ -55,6 +55,7 @@ import {
   type TranscriptView,
 } from "@/components/panel/panel-host";
 import { PromptSurfaceEditor } from "@/components/panel/prompt-surface-editor";
+import { TakeoverSurface } from "@/components/panel/takeover-surface";
 import { ShortcutsHelp } from "@/components/shortcuts-help/shortcuts-help";
 import { sessionScopedKey } from "@/model-selection";
 import { HostLaunchStatus } from "@/new-session/host-launch-status";
@@ -1396,7 +1397,9 @@ export function App() {
   // browse; picking a model routes through the same onSelectModel the quick picker uses. Rendered only
   // while open so it never costs anything in the common case.
   const chooser = chooserOpen ? (
-    <div className="flex h-full flex-col">
+    // Escape returns to the conversation (owns it locally via TakeoverSurface's focus + Escape), matching
+    // the tool-detail/agent-detail takeovers; the global Escape is suppressed while a takeover is frontmost.
+    <TakeoverSurface label="Model chooser" onBack={() => setChooserOpen(false)} className="h-full">
       {/* A back arrow on the upper LEFT returns to the chat without changing the selection (the model
         button also toggles the chooser closed). The chooser's own "Choose a model" heading is the title. */}
       <BackToChat onBack={() => setChooserOpen(false)} />
@@ -1444,7 +1447,7 @@ export function App() {
           }
         }}
       />
-    </div>
+    </TakeoverSurface>
   ) : undefined;
 
   // The archive browser (plan 04): another takeover of the transcript/composer space (the sidebars stay

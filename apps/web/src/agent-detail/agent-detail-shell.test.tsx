@@ -62,7 +62,7 @@ test("the back button returns to the parent chat (M6)", () => {
       onOpenPath={NOOP}
     />,
   );
-  fireEvent.click(screen.getByRole("button", { name: "Back to chat" }));
+  fireEvent.click(screen.getByRole("button", { name: "Back to conversation" }));
   assert.equal(backed, 1);
 });
 

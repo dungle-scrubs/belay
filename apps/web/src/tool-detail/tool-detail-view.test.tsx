@@ -6,7 +6,7 @@ import { ToolDetailView } from "./tool-detail-view";
 
 /**
  * M2: the detail takeover shell. It renders the tool name, status, arguments, and output; the top-left
- * "Back to chat" arrow AND Escape both return to chat (Escape is owned locally because the view is a
+ * "Back to conversation" arrow AND Escape both return to chat (Escape is owned locally because the view is a
  * frontmost surface, so the global Escape is suppressed behind it).
  */
 
@@ -37,7 +37,7 @@ test("renders the header (tool name + status) and dispatches the per-tool body",
 test("the back arrow returns to chat", () => {
   const onBack = vi.fn();
   render(<ToolDetailView model={model()} onBack={onBack} />);
-  fireEvent.click(screen.getByLabelText("Back to chat"));
+  fireEvent.click(screen.getByLabelText("Back to conversation"));
   assert.equal(onBack.mock.calls.length, 1);
 });
 

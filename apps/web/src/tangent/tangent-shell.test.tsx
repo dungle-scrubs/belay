@@ -41,7 +41,7 @@ test("renders the source quote header so the takeover reads as a scoped side con
 
 test("the back arrow returns to the parent chat", () => {
   const { onBack } = renderShell();
-  fireEvent.click(screen.getByLabelText("Back to chat"));
+  fireEvent.click(screen.getByLabelText("Back to conversation"));
   assert.equal(onBack.mock.calls.length, 1);
 });
 
