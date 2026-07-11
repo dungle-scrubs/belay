@@ -24,6 +24,7 @@ import {
   type SubmitEvent,
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -377,8 +378,13 @@ function PanelHostImpl(props: {
     () => buildTranscriptRows({ toolBatches, transcript }),
     [toolBatches, transcript],
   );
-  const [sidebarPreviewWidth, setSidebarPreviewWidth] = useState<number | null>(null);
-  const sidebarWidth = sidebarPreviewWidth ?? sidebar.width;
+  // Sidebar resize is snap-on-release: the layout stays frozen while dragging and the new width is
+  // applied ONCE on mouse-up, because re-wrapping the ~160 mounted markdown rows on every drag frame
+  // pinned the main thread at ~5fps (measured: ~6.5s of long tasks per drag). During the drag only a
+  // thin GUIDE LINE follows the cursor, and it is moved by DIRECT DOM writes (the ref below) - not
+  // React state - so the drag triggers zero per-frame re-renders of this large subtree.
+  const [resizingSidebar, setResizingSidebar] = useState(false);
+  const resizeGuideRef = useRef<HTMLDivElement>(null);
   // Every scroll event reaches the controller, even before the list reveals (`data-transcript-ready`
   // false). The controller recognizes its own settle-loop writes as self-writes, so they no longer need
   // to be dropped here to avoid a false unpin (plan 12.2); dropping them was one of the flick-reset causes.
@@ -396,19 +402,27 @@ function PanelHostImpl(props: {
       scroll.onUserGesture(event.deltaY < 0 ? "up" : "down");
     }
   });
-  // The sidebar resize drag reads `sidebarWidth` at mousedown time; useMemoizedFn sees the latest
-  // value without re-creating the handler when the preview width changes mid-drag.
+  // The sidebar resize drag. The move handler only advances the guide-line position (a single moving
+  // div) - it never touches the sidebar's committed width, so `main` (and the virtualized transcript
+  // inside it) does not re-wrap while dragging. The new width is applied ONCE on release.
   const onSidebarResizeMouseDown = useMemoizedFn((e: ReactMouseEvent<HTMLButtonElement>) => {
     e.preventDefault();
     const handle = e.currentTarget;
     handle.style.backgroundColor = "rgb(255 255 255 / 0.2)";
     const startX = e.clientX;
-    const startWidth = sidebarWidth;
+    const startWidth = sidebar.width;
     let latestWidth = startWidth;
+    setResizingSidebar(true);
+    const moveGuide = (width: number) => {
+      const guide = resizeGuideRef.current;
+      if (guide) {
+        guide.style.left = `${width}px`;
+      }
+    };
     const onMove = (ev: MouseEvent) => {
       const delta = ev.clientX - startX;
       latestWidth = Math.max(180, Math.min(480, startWidth + delta));
-      setSidebarPreviewWidth(latestWidth);
+      moveGuide(latestWidth); // direct DOM write - no re-render, no transcript reflow
     };
     const onUp = () => {
       document.removeEventListener("mousemove", onMove);
@@ -416,8 +430,8 @@ function PanelHostImpl(props: {
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       handle.style.backgroundColor = "";
-      setSidebarPreviewWidth(null);
-      sidebar.onResize(latestWidth);
+      setResizingSidebar(false);
+      sidebar.onResize(latestWidth); // the single reflow, on release
     };
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
@@ -449,11 +463,23 @@ function PanelHostImpl(props: {
   }, [scroll.controller, scroll.transcriptRef]);
 
   return (
-    <div className="flex h-svh overflow-hidden">
+    <div className="relative flex h-svh overflow-hidden">
+      {/* Drag guide line (snap-on-release resize): a thin vertical line at the target sidebar edge,
+        shown only while dragging the handle and moved by direct DOM writes (resizeGuideRef). The
+        actual widths stay frozen until mouse-up, so the transcript reflows once on release instead of
+        every drag frame. */}
+      {resizingSidebar ? (
+        <div
+          ref={resizeGuideRef}
+          aria-hidden
+          className="pointer-events-none absolute inset-y-0 z-50 w-0.5 bg-foreground/40"
+          style={{ left: sidebar.width }}
+        />
+      ) : null}
       {/* The project sidebar (plan 58 M6): a collapsible left rail listing all projects and
         their sessions. Switching routes through the same safe path as `/resume`. */}
       {sidebar.open ? (
-        <div className="relative flex shrink-0 overflow-hidden" style={{ width: sidebarWidth }}>
+        <div className="relative flex shrink-0 overflow-hidden" style={{ width: sidebar.width }}>
           <ProjectSidebar
             groups={sidebar.groups}
             searchQuery={sidebar.searchQuery}
