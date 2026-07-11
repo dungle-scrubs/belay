@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { fireEvent, render } from "@testing-library/react";
 import type { ModelRef, QuickPickerGroup } from "@trevor/session";
 import { test } from "vitest";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { ComposerControls, type ComposerControlsConfig } from "./composer-controls";
 
 /**
@@ -21,6 +22,7 @@ const quickGroups: QuickPickerGroup[] = [
 type ConfigOverride = {
   readonly model?: Partial<ComposerControlsConfig["model"]>;
   readonly reasoning?: Partial<ComposerControlsConfig["reasoning"]>;
+  readonly context?: Partial<ComposerControlsConfig["context"]>;
 };
 
 function config(over: ConfigOverride = {}): ComposerControlsConfig {
@@ -41,11 +43,21 @@ function config(over: ConfigOverride = {}): ComposerControlsConfig {
       onChange: noop,
       ...over.reasoning,
     },
+    context: {
+      ctxUsed: 100_000,
+      ctxMax: 272_000,
+      ...over.context,
+    },
   };
 }
 
 function renderControls(over: ConfigOverride = {}) {
-  return render(<ComposerControls config={config(over)} />);
+  // Radix tooltips (the context gauge's hover card) require a TooltipProvider ancestor under jsdom.
+  return render(
+    <TooltipProvider>
+      <ComposerControls config={config(over)} />
+    </TooltipProvider>,
+  );
 }
 
 test("renders the split model control and the active reasoning level", () => {
@@ -87,4 +99,16 @@ test("the reasoning popover lists every level and a pick fires onChange", () => 
 test("reasoning is omitted when the model exposes no levels", () => {
   const { queryByLabelText } = renderControls({ reasoning: { levels: [] } });
   assert.equal(queryByLabelText("Reasoning: medium"), null, "no reasoning trigger renders");
+});
+
+test("the context gauge renders with a usage label derived from the shared policy", () => {
+  const { getByRole } = renderControls({ context: { ctxUsed: 100_000, ctxMax: 272_000 } });
+  const gauge = getByRole("img");
+  // 100k / 272k = 37% -> the shared contextPressureState label, carried on the gauge for a11y.
+  assert.match(gauge.getAttribute("aria-label") ?? "", /37%/);
+});
+
+test("the context gauge is omitted when usage cannot be derived", () => {
+  const { queryByRole } = renderControls({ context: { ctxUsed: undefined, ctxMax: undefined } });
+  assert.equal(queryByRole("img"), null, "no gauge renders without usage data");
 });

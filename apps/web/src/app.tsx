@@ -1364,6 +1364,12 @@ export function App() {
             selected: activeReasoning,
             onChange: setReasoning,
           },
+          context: {
+            ctxUsed: panel.ctxUsed,
+            ctxMax: panel.ctxMax,
+            breakdown: panel.contextBreakdown,
+            totalTokens: panel.contextTokens,
+          },
         }}
       />
     ),
@@ -1378,6 +1384,10 @@ export function App() {
       activeReasoningLevels,
       activeReasoning,
       setReasoning,
+      panel.ctxUsed,
+      panel.ctxMax,
+      panel.contextBreakdown,
+      panel.contextTokens,
     ],
   );
 

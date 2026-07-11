@@ -53,10 +53,10 @@ export function SplitModelControl({
         type="button"
         onClick={onOpenChooser}
         aria-label="Open model chooser"
-        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-card/60"
+        className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 px-1.5 py-1 text-left transition-colors hover:bg-card/60"
       >
         <Sparkles className="size-3.5 shrink-0 text-muted-foreground" />
-        <span className="truncate text-sm">{activeLabel}</span>
+        <span className="truncate text-xs">{activeLabel}</span>
       </button>
 
       {/* A visible vertical divider between the full-chooser region and the quick-picker chevron. */}
@@ -68,9 +68,9 @@ export function SplitModelControl({
           <button
             type="button"
             aria-label="Recent models"
-            className="flex shrink-0 cursor-pointer items-center px-2 transition-colors hover:bg-card/60"
+            className="flex shrink-0 cursor-pointer items-center px-1.5 transition-colors hover:bg-card/60"
           >
-            <ChevronDown className="size-4 text-muted-foreground" />
+            <ChevronDown className="size-3.5 text-muted-foreground" />
           </button>
         </PopoverTrigger>
         <PopoverContent align="end" sideOffset={6} className="w-64 p-1.5">
