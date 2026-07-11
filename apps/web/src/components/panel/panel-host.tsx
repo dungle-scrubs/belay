@@ -385,6 +385,11 @@ function PanelHostImpl(props: {
   // React state - so the drag triggers zero per-frame re-renders of this large subtree.
   const [resizingSidebar, setResizingSidebar] = useState(false);
   const resizeGuideRef = useRef<HTMLDivElement>(null);
+  // Teardown for an in-flight resize drag (remove the document listeners, restore body styles). Held
+  // so an unmount MID-DRAG can run it - otherwise the listeners + cursor/userSelect overrides would
+  // leak and a late mouseup could commit a width against a torn-down component.
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => () => dragCleanupRef.current?.(), []);
   // Every scroll event reaches the controller, even before the list reveals (`data-transcript-ready`
   // false). The controller recognizes its own settle-loop writes as self-writes, so they no longer need
   // to be dropped here to avoid a false unpin (plan 12.2); dropping them was one of the flick-reset causes.
@@ -424,15 +429,20 @@ function PanelHostImpl(props: {
       latestWidth = Math.max(180, Math.min(480, startWidth + delta));
       moveGuide(latestWidth); // direct DOM write - no re-render, no transcript reflow
     };
-    const onUp = () => {
+    function teardown() {
       document.removeEventListener("mousemove", onMove);
       document.removeEventListener("mouseup", onUp);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       handle.style.backgroundColor = "";
       setResizingSidebar(false);
+      dragCleanupRef.current = null;
+    }
+    function onUp() {
+      teardown();
       sidebar.onResize(latestWidth); // the single reflow, on release
-    };
+    }
+    dragCleanupRef.current = teardown;
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
     document.addEventListener("mousemove", onMove);
