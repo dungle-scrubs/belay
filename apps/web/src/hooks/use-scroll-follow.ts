@@ -123,7 +123,20 @@ export function useScrollFollow(itemCount: number): ScrollFollow {
 
   const onUserGesture = useCallback(
     (direction: "up" | "down") => {
-      controller.gesture(direction);
+      // Pass the live geometry so the controller can refuse to unpin a non-scrollable transcript (a
+      // wheel-up with nothing above the fold would otherwise strand the jump chevron - no scroll event
+      // can re-pin it).
+      const el = transcriptRef.current;
+      controller.gesture(
+        direction,
+        el
+          ? {
+              scrollHeight: el.scrollHeight,
+              clientHeight: el.clientHeight,
+              scrollTop: el.scrollTop,
+            }
+          : undefined,
+      );
     },
     [controller],
   );
@@ -151,6 +164,13 @@ export function useScrollFollow(itemCount: number): ScrollFollow {
     const pendingFrames = new Set<number>();
     const requestPinnedResizeFollow = () => {
       if (!controller.isPinned()) {
+        // A resize (window/composer grew, or the column re-measured shorter) can leave the transcript
+        // no longer scrollable; settle re-pins in that case so a stranded chevron can't linger.
+        controller.settle({
+          scrollHeight: el.scrollHeight,
+          clientHeight: el.clientHeight,
+          scrollTop: el.scrollTop,
+        });
         return;
       }
       controller.layoutShift();
@@ -177,6 +197,29 @@ export function useScrollFollow(itemCount: number): ScrollFollow {
       controller.clearLayoutShift();
     };
   }, [controller, uiHandle]);
+
+  // A conversation switch or a content re-measure changes the transcript height WITHOUT a scroll event,
+  // and the container's ResizeObserver does not fire on content-only changes. If that leaves a
+  // non-scrollable transcript while the session-long pin singleton is still unpinned (from a scroll-up
+  // in a previous, taller conversation), settle re-pins it so the jump-to-bottom chevron never strands
+  // over a transcript with nothing below. Post-layout via rAF so the measured geometry is settled.
+  // itemCount is the intentional re-trigger: it changes on a conversation switch / appended content,
+  // which is exactly when the transcript height (and thus scrollability) changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: itemCount re-triggers the re-measure (see above).
+  useEffect(() => {
+    const el = transcriptRef.current;
+    if (!el) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      controller.settle({
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        scrollTop: el.scrollTop,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [controller, itemCount]);
 
   // The unseen flag's two triggers, mirroring the retired [atBottom, itemCount] effect: content
   // appended while unpinned marks unseen (the owner re-renders per appended item, so the itemCount

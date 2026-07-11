@@ -350,3 +350,64 @@ describe("scroll-follow: subscription notifies on pin-state change", () => {
     assert.equal(calls, 2, "no notifications after unsubscribe");
   });
 });
+
+describe("scroll-follow: a non-scrollable transcript re-pins (never strands the jump chevron)", () => {
+  // Content that fits the viewport: scrollHeight within tolerance of clientHeight, scrollTop 0. The
+  // controller is a session-long singleton, so this stands in for switching to a short conversation.
+  const fits: ScrollGeometry = { scrollHeight: 800, clientHeight: 800, scrollTop: 0 };
+
+  test("settle() re-pins when the transcript can no longer scroll", () => {
+    const c = createScrollFollowController();
+    c.gesture("up"); // unpinned, as after a scroll-up in a previous, taller conversation
+    assert.equal(c.isPinned(), false);
+    c.settle(fits); // switching to / settling into a conversation that fits the viewport
+    assert.equal(c.isPinned(), true);
+  });
+
+  test("settle() leaves a scrollable, scrolled-up transcript unpinned (does not fight reading)", () => {
+    const c = createScrollFollowController();
+    c.gesture("up");
+    assert.equal(c.isPinned(), false);
+    c.settle(geo(500)); // still overflowing; the user is reading above the fold
+    assert.equal(c.isPinned(), false);
+  });
+
+  test("settle() is a no-op when already pinned", () => {
+    const c = createScrollFollowController();
+    assert.equal(c.isPinned(), true);
+    c.settle(geo(500)); // scrollable, pinned - unchanged
+    assert.equal(c.isPinned(), true);
+  });
+
+  test("a scroll event on a now-non-scrollable transcript re-pins regardless of direction", () => {
+    const c = createScrollFollowController();
+    c.scrolled(geo(0)); // baseline on a tall column
+    c.gesture("up"); // unpin
+    assert.equal(c.isPinned(), false);
+    // A conversation switch clamps scrollTop to 0 on a short transcript: an upward move that would
+    // normally stay unpinned, but there is nothing below to read, so it re-pins.
+    c.scrolled(fits);
+    assert.equal(c.isPinned(), true);
+  });
+
+  test("an upward gesture on a non-scrollable transcript does NOT unpin (geometry supplied)", () => {
+    const c = createScrollFollowController();
+    assert.equal(c.isPinned(), true);
+    // A wheel-up over a transcript that fits the viewport: nothing above the fold, no scroll event can
+    // re-pin, so it must stay pinned (else the chevron strands - the reported bug).
+    c.gesture("up", fits);
+    assert.equal(c.isPinned(), true);
+  });
+
+  test("an upward gesture still unpins a scrollable transcript (geometry supplied)", () => {
+    const c = createScrollFollowController();
+    c.gesture("up", geo(400)); // overflowing, room to read above - unpins as before
+    assert.equal(c.isPinned(), false);
+  });
+
+  test("an upward gesture without geometry unpins (back-compat: callers that can't measure)", () => {
+    const c = createScrollFollowController();
+    c.gesture("up");
+    assert.equal(c.isPinned(), false);
+  });
+});

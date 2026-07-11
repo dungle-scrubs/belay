@@ -34,3 +34,15 @@ export function liveEdgeOffset(geo: Pick<ScrollGeometry, "scrollHeight" | "clien
 export function atBottomOf(geo: ScrollGeometry, tolerance = AT_BOTTOM_TOLERANCE): boolean {
   return distanceFromBottom(geo) < tolerance;
 }
+
+/**
+ * True when the content overflows the viewport enough to actually scroll - i.e. there is content below
+ * the fold to jump to. A transcript that fits (or nearly fits) the viewport cannot scroll, so it is
+ * always at the live edge and the jump-to-bottom affordance is meaningless.
+ */
+export function isScrollable(
+  geo: Pick<ScrollGeometry, "scrollHeight" | "clientHeight">,
+  tolerance = AT_BOTTOM_TOLERANCE,
+): boolean {
+  return geo.scrollHeight > geo.clientHeight + tolerance;
+}

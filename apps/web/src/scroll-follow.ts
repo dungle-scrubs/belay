@@ -23,7 +23,7 @@
  * bottom-distance math - that stays in `scroll.ts` and is imported here (never re-derived).
  */
 
-import { atBottomOf, type ScrollGeometry } from "./scroll";
+import { atBottomOf, isScrollable, type ScrollGeometry } from "./scroll";
 
 /** Why the pin state last changed - surfaced in the debug snapshot and (as a data attribute) the DOM. */
 export type PinReason =
@@ -32,6 +32,7 @@ export type PinReason =
   | "unattributed-scroll-up"
   | "layout-shift"
   | "user-return-to-bottom"
+  | "content-fits-viewport"
   | "jump"
   | "submit";
 
@@ -99,11 +100,17 @@ export interface ScrollFollowController {
   snapshot(): ScrollFollowSnapshot;
   /** Subscribe to pin-state changes (for `useSyncExternalStore` in the adapter). Returns an unsubscribe. */
   subscribe(listener: () => void): () => void;
-  /** A directional user gesture (wheel `deltaY` sign, touch-move delta). Upward unpins synchronously. */
-  gesture(direction: "up" | "down"): void;
+  /** A directional user gesture (wheel `deltaY` sign, touch-move delta). Upward unpins synchronously -
+   *  UNLESS `geo` is supplied and shows the transcript can't scroll, since then there is nothing above
+   *  the fold and no scroll event could re-pin it (the chevron would strand). */
+  gesture(direction: "up" | "down", geo?: ScrollGeometry): void;
   /** A scroll event from the element, with its current geometry. Reconciles self-writes, unpins on an
    *  unattributed upward move, and re-pins on a genuine user arrival at the bottom. */
   scrolled(geo: ScrollGeometry): void;
+  /** A geometry re-check NOT driven by a scroll event (a content re-measure / conversation switch). Re-
+   *  pins when the transcript can no longer scroll, so the session-long pin singleton, left unpinned by
+   *  an earlier scroll-up, never strands the jump-to-bottom chevron over a non-scrollable transcript. */
+  settle(geo: ScrollGeometry): void;
   /** A known app-owned layout change is about to move content. While pinned, suppress one unmatched
    *  upward scroll event so a collapse/re-measure cannot masquerade as the user reading upward. */
   layoutShift(): void;
@@ -193,12 +200,18 @@ export function createScrollFollowController(
     notify();
   };
 
-  const gesture = (direction: "up" | "down"): void => {
+  const gesture = (direction: "up" | "down", geo?: ScrollGeometry): void => {
     // Upward is the whole point: unpin synchronously, with no position precondition and no intent
     // window. Downward needs no handling here - a deliberate return is recognized by the scroll event
     // actually ARRIVING at the bottom (`scrolled`), which works for wheel, touch, keyboard, and
     // scrollbar alike; residual self-writes landing there are filtered by the ledger instead.
     if (direction !== "up" || !pinned) {
+      return;
+    }
+    // A non-scrollable transcript has nothing above the fold to reveal, and scrollTop can't move - so no
+    // scroll event could ever re-pin it. Unpinning here would strand the jump chevron over a transcript
+    // that cannot scroll; ignore the gesture instead (the wheel still bubbles for native overscroll).
+    if (geo && !isScrollable(geo)) {
       return;
     }
     // The upward input supersedes any in-flight mid-column write. Edge-targeting writes are kept: they
@@ -266,12 +279,24 @@ export function createScrollFollowController(
       return;
     }
 
-    // Unpinned: re-pin on a genuine user arrival at the bottom - moving DOWN and ending within the
-    // tolerance band. Input-agnostic (wheel, touch, keyboard End/PageDown, scrollbar drag). A residual
-    // follow self-scroll cannot reach here (consumed by the ledger above), and upward transit through
-    // the band never satisfies `movedDown`.
+    // Unpinned: a viewport that can no longer scroll (content shrank to fit) has nothing below to read,
+    // so it is at the live edge regardless of direction - re-pin. The movedDown+atBottom path below
+    // cannot fire when the container can't scroll, so without this the chevron would strand.
+    if (!isScrollable(geo)) {
+      setPinned(true, "content-fits-viewport");
+      return;
+    }
+    // Re-pin on a genuine user arrival at the bottom - moving DOWN and ending within the tolerance band.
+    // Input-agnostic (wheel, touch, keyboard End/PageDown, scrollbar drag). A residual follow self-scroll
+    // cannot reach here (consumed by the ledger above), and upward transit never satisfies `movedDown`.
     if (movedDown && atBottomOf(geo)) {
       setPinned(true, "user-return-to-bottom");
+    }
+  };
+
+  const settle = (geo: ScrollGeometry): void => {
+    if (!pinned && !isScrollable(geo)) {
+      setPinned(true, "content-fits-viewport");
     }
   };
 
@@ -358,6 +383,7 @@ export function createScrollFollowController(
     clearLayoutShift,
     layoutShift,
     scrolled,
+    settle,
     repin,
     requestWrite,
     mayFollow: () => pinned,
