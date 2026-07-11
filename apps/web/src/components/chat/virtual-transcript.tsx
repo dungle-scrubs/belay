@@ -57,7 +57,33 @@ export interface VirtualTranscriptProps {
   readonly scrollToBottomRequest: number;
   readonly rowConfig: TranscriptRowConfig;
   readonly testInitialRect?: Rect;
+  /** Reveal-gate timing (defaults to production values). Tests inject fast values so the fade gate
+   *  resolves deterministically without waiting out the real quiet window. */
+  readonly revealTiming?: RevealTiming;
 }
+
+/**
+ * The reveal-gate timing (quiet-window fade): `quietMs` is how long the measured content height must
+ * hold steady before the transcript fades in; `floorMs`/`deadlineMs` are the minimum hold and hard cap
+ * for ordinary content. The `heavy*` pair replaces them when the near-bottom content carries a
+ * debounced heavy renderer (a Mermaid diagram), whose ~350ms render debounce leaves the height flat
+ * long enough that the plain quiet window would fade in the gap BEFORE it renders.
+ */
+export interface RevealTiming {
+  readonly quietMs: number;
+  readonly floorMs: number;
+  readonly deadlineMs: number;
+  readonly heavyFloorMs: number;
+  readonly heavyDeadlineMs: number;
+}
+
+const DEFAULT_REVEAL_TIMING: RevealTiming = {
+  quietMs: 120,
+  floorMs: 0,
+  deadlineMs: 700,
+  heavyFloorMs: 500,
+  heavyDeadlineMs: 1400,
+};
 
 function repeatsPreviousTool(row: TranscriptRow, previous: TranscriptRow | undefined): boolean {
   return (
@@ -89,6 +115,25 @@ const FULL_RENDER_ROW_LIMIT = 128;
  *  subtrees. The range extractor walks outward until it has ~this many rows pre-rendered on each side,
  *  so a wheel/trackpad flick still lands on measured rows while the mounted row count stays bounded. */
 const OVERSCAN_ROWS = 40;
+/** How many rows up from the live edge to scan for a debounced heavy renderer (a Mermaid fence). Only
+ *  content in the initial bottom viewport can shift the reveal position, so a shallow tail scan is
+ *  enough and stays cheap on long transcripts. */
+const HEAVY_RENDER_SCAN_ROWS = 24;
+
+/** True when a row carries a debounced heavy renderer whose async settle would jump the layout after
+ *  first paint - currently a Mermaid fence in an assistant/user message body. Syntax highlighting and
+ *  image decode also settle late, but they land inside the plain quiet window; only Mermaid's render
+ *  debounce needs the longer floor. */
+function rowHasHeavyRenderer(row: TranscriptRow | undefined): boolean {
+  if (row?.kind !== "message") {
+    return false;
+  }
+  const message = row.message;
+  if (message.kind !== "assistant" && message.kind !== "user") {
+    return false;
+  }
+  return message.text.includes("```mermaid");
+}
 
 interface VisualAnchorSnapshot {
   readonly id: string;
@@ -142,6 +187,7 @@ function VirtualTranscriptImpl({
   scrollToBottomRequest,
   rowConfig,
   testInitialRect,
+  revealTiming = DEFAULT_REVEAL_TIMING,
 }: VirtualTranscriptProps) {
   const {
     showThinking,
@@ -160,6 +206,11 @@ function VirtualTranscriptImpl({
   const rowsChangedUntilRef = useRef(0);
   const visualAnchorRef = useRef<VisualAnchorSnapshot | null>(null);
   const [readyToReveal, setReadyToReveal] = useState(false);
+  // The fade gate lags readyToReveal (structural settle) by a quiet window on the measured height, so
+  // late renderers (Mermaid, hljs, images) settle before the transcript is shown. See the reveal
+  // effect below.
+  const [revealed, setRevealed] = useState(false);
+  const revealStartRef = useRef<number | null>(null);
   const [settleTick, setSettleTick] = useState(0);
   // The controller's pin state, mirrored into render: the same value the adapter's jump button reads,
   // derived here (not drilled as a prop) so a remount or a lagging parent render can never disagree
@@ -190,6 +241,17 @@ function VirtualTranscriptImpl({
   // one tool-storm turn cannot mount hundreds of row subtrees. For normal transcripts blocks === turns
   // (same object identities), so keys and cached measurements are unaffected.
   const blocks = useMemo(() => splitOversizedTurns(turns), [turns]);
+  // Whether the initial bottom viewport holds a debounced heavy renderer (a Mermaid diagram): if so
+  // the reveal gate below waits a longer floor for its render to land, instead of fading in during the
+  // 350ms debounce gap. Scans only the tail (see HEAVY_RENDER_SCAN_ROWS) so it stays cheap.
+  const nearBottomHasHeavyRenderer = useMemo(() => {
+    for (let i = Math.max(0, rows.length - HEAVY_RENDER_SCAN_ROWS); i < rows.length; i += 1) {
+      if (rowHasHeavyRenderer(rows[i])) {
+        return true;
+      }
+    }
+    return false;
+  }, [rows]);
   // The gate is TOTAL ROW COUNT, not turn count (Tier 4.1): a short transcript renders fully (plain
   // flow layout, no estimate-correction machinery), and anything larger windows - including a single
   // turn holding hundreds of tool rows, which the old turn-count gate rendered whole.
@@ -551,6 +613,46 @@ function VirtualTranscriptImpl({
     virtualizer,
   ]);
 
+  // The content-settle reveal gate. readyToReveal above fires at STRUCTURAL settle (the live-edge range
+  // mounted + pinned), but several renderers finish LATER and change height - a Mermaid diagram
+  // debounces ~350ms then renders async, hljs lazy-loads its engine on the first fence, images decode -
+  // so fading in at structural settle shows a first paint that then hops. Hold the fade at opacity 0
+  // until the measured height (totalSize) has been QUIET for `quietMs`; by then the late renders have
+  // landed and the pinned follow above has re-anchored, so the fade reveals the transcript already at
+  // its final position. A near-bottom Mermaid uses a longer floor + cap (its debounce leaves the height
+  // flat long enough that the plain quiet window would fade in the render gap). A hard deadline caps the
+  // wait so a slow/failed renderer can never hold the transcript hidden. Date.now (not performance.now)
+  // keeps the gate deterministic under fake timers.
+  useEffect(() => {
+    // `totalSize` is the quiet-window signal: this effect must re-run on every measured-height change
+    // (a late render growing a row) to restart the quiet timer, even though the body reads the DOM
+    // clock rather than the value itself. Same observe-only idiom as the totalSize follow effect below.
+    void totalSize;
+    if (revealed || !readyToReveal) {
+      return;
+    }
+    if (revealStartRef.current === null) {
+      revealStartRef.current = Date.now();
+    }
+    const elapsed = Date.now() - revealStartRef.current;
+    const floor = nearBottomHasHeavyRenderer ? revealTiming.heavyFloorMs : revealTiming.floorMs;
+    const deadline = nearBottomHasHeavyRenderer
+      ? revealTiming.heavyDeadlineMs
+      : revealTiming.deadlineMs;
+    if (elapsed >= deadline) {
+      setRevealed(true);
+      return;
+    }
+    // Re-runs on every totalSize change, so a late render growing a row restarts the quiet timer; the
+    // floor and deadline stay anchored to the first structural settle (revealStartRef).
+    const wait = Math.max(
+      0,
+      Math.min(Math.max(revealTiming.quietMs, floor - elapsed), deadline - elapsed),
+    );
+    const timer = window.setTimeout(() => setRevealed(true), wait);
+    return () => window.clearTimeout(timer);
+  }, [readyToReveal, revealed, totalSize, nearBottomHasHeavyRenderer, revealTiming]);
+
   useEffect(() => {
     if (!readyToReveal) {
       return;
@@ -601,14 +703,18 @@ function VirtualTranscriptImpl({
     <div
       className={cn(
         fullyRendered ? undefined : "relative",
-        readyToReveal ? "fade-in animate-in duration-150" : "opacity-0",
+        revealed ? "fade-in animate-in duration-150" : "opacity-0",
       )}
       style={{
         height: fullyRendered ? undefined : totalSize,
         overflowAnchor: "none",
       }}
       data-transcript-virtual-list
-      data-transcript-ready={readyToReveal ? "true" : "false"}
+      // `ready` now marks the VISIBLE state (structural settle + the quiet-window content settle), so
+      // waiters (e2e specs, the perf screenshot) see the transcript as it will actually look, not a
+      // pre-Mermaid first paint. `settled` exposes the earlier structural-only signal for diagnostics.
+      data-transcript-ready={revealed ? "true" : "false"}
+      data-transcript-settled={readyToReveal ? "true" : "false"}
       data-transcript-row-count={rows.length}
       data-transcript-turn-count={turns.length}
       data-transcript-padding-top={paddingTop}

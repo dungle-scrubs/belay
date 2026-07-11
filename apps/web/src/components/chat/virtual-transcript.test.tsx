@@ -2,11 +2,22 @@ import assert from "node:assert/strict";
 import { act, render, waitFor } from "@testing-library/react";
 import { type RefObject, useEffect, useRef } from "react";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
-import { VirtualTranscript } from "@/components/chat/virtual-transcript";
+import { type RevealTiming, VirtualTranscript } from "@/components/chat/virtual-transcript";
 import { createScrollFollowController, type ScrollFollowController } from "@/scroll-follow";
 import type { TranscriptRow } from "../../transcript-rows";
 
 const noop = () => {};
+
+/** Near-instant reveal timing so tests that only care about mounting/scrolling do not wait out the
+ *  real quiet window. Focused reveal-gate tests pass their own timing. Module-level (stable identity)
+ *  so it does not re-run the reveal effect every render. */
+const FAST_REVEAL_TIMING: RevealTiming = {
+  quietMs: 1,
+  floorMs: 0,
+  deadlineMs: 20,
+  heavyFloorMs: 1,
+  heavyDeadlineMs: 20,
+};
 
 function userRow(index: number): TranscriptRow {
   return {
@@ -114,6 +125,7 @@ function Harness({
   scrollToBottomRequest = 0,
   compact = false,
   controller: providedController,
+  revealTiming = FAST_REVEAL_TIMING,
 }: {
   readonly rows: readonly TranscriptRow[];
   readonly pinned?: boolean;
@@ -122,6 +134,8 @@ function Harness({
   /** A test may supply its own controller (to pre-set pin state or spy on it); otherwise the harness
    *  keeps one in sync with the `pinned` prop. */
   readonly controller?: ScrollFollowController;
+  /** Reveal-gate timing; defaults to near-instant so non-reveal tests do not wait it out. */
+  readonly revealTiming?: RevealTiming;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   // A real controller mirroring the `pinned` prop. The initial value is baked in at creation so the
@@ -156,6 +170,7 @@ function Harness({
         scrollToBottomRequest={scrollToBottomRequest}
         rowConfig={{ showThinking: true, compact, onOpenPath: noop, onDoctorRefresh: noop }}
         testInitialRect={{ width: 900, height: 600 }}
+        revealTiming={revealTiming}
       />
     </div>
   );
@@ -644,6 +659,71 @@ describe("VirtualTranscript", () => {
     await waitFor(() => {
       assert.ok(container.querySelectorAll("[data-transcript-virtual-row]").length > 0);
     });
+  });
+
+  test("a near-bottom Mermaid holds the fade past the plain quiet window (covers its render debounce)", async () => {
+    // The reveal gate must NOT fade in during Mermaid's ~350ms render-debounce gap (the height stays
+    // flat there, so a plain quiet window would fire early and then the diagram would pop in). With a
+    // mermaid fence near the bottom, `data-transcript-ready` stays false through the heavy floor even
+    // though the transcript has structurally settled.
+    const timing: RevealTiming = {
+      quietMs: 20,
+      floorMs: 0,
+      deadlineMs: 1500,
+      heavyFloorMs: 250,
+      heavyDeadlineMs: 2500,
+    };
+    const rows = [
+      userRow(0),
+      assistantRow("a-mermaid", "flow:\n\n```mermaid\ngraph TD\n  A-->B\n```"),
+    ];
+    const { container } = render(<Harness rows={rows} revealTiming={timing} />);
+    const list = () => container.querySelector("[data-transcript-virtual-list]");
+
+    // Structural settle happens fast; the visible reveal is still held.
+    await waitFor(() => {
+      assert.equal(list()?.getAttribute("data-transcript-settled"), "true");
+    });
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    assert.equal(
+      list()?.getAttribute("data-transcript-ready"),
+      "false",
+      "the fade is held through the Mermaid render-debounce gap, not shown at structural settle",
+    );
+
+    // And it does eventually reveal (the floor is a hold, not a block).
+    await waitFor(
+      () => {
+        assert.equal(list()?.getAttribute("data-transcript-ready"), "true");
+      },
+      { timeout: 2000 },
+    );
+  });
+
+  test("a plain transcript reveals as soon as its height goes quiet (no heavy floor)", async () => {
+    // The heavy floor is Mermaid-specific: ordinary prose reveals on the short quiet window, well
+    // before the (much longer) heavy floor would have elapsed.
+    const timing: RevealTiming = {
+      quietMs: 20,
+      floorMs: 0,
+      deadlineMs: 1500,
+      heavyFloorMs: 400,
+      heavyDeadlineMs: 2500,
+    };
+    const rows = [userRow(0), assistantRow("a-prose", "just prose, no diagram here")];
+    const { container } = render(<Harness rows={rows} revealTiming={timing} />);
+
+    await waitFor(
+      () => {
+        assert.equal(
+          container
+            .querySelector("[data-transcript-virtual-list]")
+            ?.getAttribute("data-transcript-ready"),
+          "true",
+        );
+      },
+      { timeout: 300 },
+    );
   });
 
   test("an assistant Mermaid diagram row still lets the virtual list settle", async () => {
