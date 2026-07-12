@@ -94,7 +94,7 @@ function FilterChip({
       aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "cursor-pointer rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+        "cursor-pointer border px-2.5 py-0.5 text-xs transition-colors",
         active
           ? "border-primary bg-primary text-primary-foreground"
           : "border-border text-muted-foreground hover:bg-card",
