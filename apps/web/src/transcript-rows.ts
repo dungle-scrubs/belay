@@ -1,3 +1,4 @@
+import type { WorkingRowData } from "./derive";
 import type { Message, ToolMessage } from "./transcript";
 
 export interface ToolBatchLookup {
@@ -21,15 +22,17 @@ export type TranscriptRow =
   | {
       readonly kind: "working";
       readonly id: string;
+      readonly startedAt?: number;
+      readonly outputTokens?: number;
     };
 
 export interface BuildTranscriptRowsInput {
   readonly toolBatches: ToolBatchLookup;
   readonly transcript: readonly Message[];
   /** Append the inline "working…" row as the LAST transcript item for a plain active turn (no task, no
-   *  delegation). Task/delegation turns pin the TurnStatusHeader instead (see `activeWorkingRowVisible`).
-   *  Off by default. */
-  readonly working?: boolean;
+   *  delegation), carrying its live time/tokens metrics. Task/delegation turns pin the TurnStatusHeader
+   *  instead (see `activeWorkingRowFrom`). Absent when there is no such row. */
+  readonly working?: WorkingRowData;
 }
 
 /**
@@ -76,7 +79,12 @@ export function buildTranscriptRows(input: BuildTranscriptRowsInput): Transcript
   }
 
   if (working) {
-    rows.push({ kind: "working", id: "working" });
+    rows.push({
+      kind: "working",
+      id: "working",
+      ...(working.startedAt !== undefined ? { startedAt: working.startedAt } : {}),
+      ...(working.outputTokens !== undefined ? { outputTokens: working.outputTokens } : {}),
+    });
   }
 
   return rows;

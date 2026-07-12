@@ -1005,24 +1005,40 @@ export function turnStatusHeaderFrom(
   };
 }
 
+/** The inline "working…" row's live metrics: `startedAt` drives the elapsed cell, `outputTokens` the
+ *  `↑` cell (hidden until the first progress snapshot). No tool/action summary - just "working…" + the
+ *  same time/tokens parens the pinned header shows. */
+export interface WorkingRowData {
+  readonly startedAt?: number;
+  readonly outputTokens?: number;
+}
+
 /**
- * Whether the inline transcript "working…" row should show: an active turn that is NOT pinned - a plain
- * turn with no in-progress task and no active delegation (those go to {@link turnStatusHeaderFrom}). The
- * two are mutually exclusive, so exactly one live indicator ever shows. The inline row is deliberately
- * just "working…" - no metrics, no tool summary - so this returns only a boolean.
+ * The inline transcript "working…" row for an active turn that is NOT pinned - a plain turn with no
+ * in-progress task and no active delegation (those go to {@link turnStatusHeaderFrom}). `undefined` when
+ * the row should not show, so the two indicators stay mutually exclusive (exactly one shows). Carries
+ * only the time/tokens metrics; the label and its sweep live in the renderer.
  */
-export function activeWorkingRowVisible(
+export function activeWorkingRowFrom(
   events: readonly SessionEvent[],
   { awaitingResponse }: { readonly awaitingResponse: boolean },
-): boolean {
+): WorkingRowData | undefined {
   if (!isTurnActive(events, awaitingResponse)) {
-    return false;
+    return undefined;
   }
   const runId = activeTurnRunId(events);
   if (activeDelegatingAgent(events, runId)) {
-    return false;
+    return undefined;
   }
-  return !tasksFrom(events).some((task) => task.status === "in_progress");
+  if (tasksFrom(events).some((task) => task.status === "in_progress")) {
+    return undefined;
+  }
+  const startedAt = activeTurnStartedAt(events);
+  const outputTokens = liveOutputTokens(events);
+  return {
+    ...(startedAt !== null ? { startedAt } : {}),
+    ...(outputTokens !== undefined ? { outputTokens } : {}),
+  };
 }
 
 /** The epoch-ms timestamp of the most recent event with a parseable `createdAt`, or null. */

@@ -157,5 +157,5 @@ test("selectors derive host, title, session name, and turn status from the read 
   assert.equal(selectTabTitle(host, "trevor-local", "trevor-local"), "repo · Trevor");
   // A plain awaiting-gap turn (no task, no delegation) is not pinned - it shows the inline working row.
   assert.equal(selectTurnStatusHeader(model, { hostlessPending: false }), undefined);
-  assert.equal(selectActiveWorkingRow(model, { hostlessPending: false }), true);
+  assert.ok(selectActiveWorkingRow(model, { hostlessPending: false }));
 });

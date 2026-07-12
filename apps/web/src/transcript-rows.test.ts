@@ -94,9 +94,9 @@ describe("buildTranscriptRows", () => {
     assert.deepEqual(result.map(transcriptRowKey), ["message:r1", "message:w1", "message:r2"]);
   });
 
-  test("appends a trailing working row only when the working flag is set", () => {
-    // A plain active turn (no task, no delegation) appends the inline "working…" row as the last item;
-    // task/delegation turns leave `working` off and pin the TurnStatusHeader instead.
+  test("appends a trailing working row carrying its metrics only when working data is set", () => {
+    // A plain active turn (no task, no delegation) appends the inline "working…" row as the last item,
+    // carrying its live metrics; task/delegation turns omit `working` and pin the TurnStatusHeader.
     const transcript = [user("u1"), assistant("a1")];
     const toolBatches = readOnlyToolBatches(transcript);
 
@@ -104,15 +104,23 @@ describe("buildTranscriptRows", () => {
     assert.deepEqual(
       idle.map((row) => row.kind),
       ["message", "message"],
-      "no working row without the flag",
+      "no working row without the data",
     );
 
-    const working = buildTranscriptRows({ toolBatches, transcript, working: true });
+    const working = buildTranscriptRows({
+      toolBatches,
+      transcript,
+      working: { startedAt: 1000, outputTokens: 340 },
+    });
     assert.deepEqual(
       working.map((row) => row.kind),
       ["message", "message", "working"],
       "the working row trails the last message",
     );
-    assert.equal(transcriptRowKey(working[2] as never), "working");
+    const workingRow = working[2];
+    assert.equal(workingRow?.kind, "working");
+    assert.equal(transcriptRowKey(workingRow as never), "working");
+    assert.equal(workingRow?.kind === "working" ? workingRow.startedAt : null, 1000);
+    assert.equal(workingRow?.kind === "working" ? workingRow.outputTokens : null, 340);
   });
 });

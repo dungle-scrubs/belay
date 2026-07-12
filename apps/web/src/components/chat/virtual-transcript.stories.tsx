@@ -89,8 +89,9 @@ const ROWS: readonly TranscriptRow[] = [
 const RUNNING_ROWS: readonly TranscriptRow[] = [
   ...ROWS.slice(0, 4),
   row(toolMessage("t5", "bash", { command: "pnpm build" })), // no result -> still running
-  // A plain turn (no task, no delegation) trails the inline "working…" row as its last item.
-  { kind: "working", id: "working" },
+  // A plain turn (no task, no delegation) trails the inline "working…" row as its last item, with the
+  // same time/tokens parens the pinned header shows (elapsed omitted here so the story stays static).
+  { kind: "working", id: "working", outputTokens: 234800 },
 ];
 
 // A brand-new thread: the working row sits right under the couple of messages, not floated at the

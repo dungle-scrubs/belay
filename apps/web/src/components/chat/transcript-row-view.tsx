@@ -19,6 +19,7 @@ import { parseToolArgs, ToolRenderer } from "@/components/chat/tool-message";
 import { toolMessageStatus } from "@/components/chat/tool-status";
 import { CommandMenu } from "@/components/command-menu/command-menu";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useElapsedLabel } from "@/hooks/use-elapsed-label";
 import { WithInspect } from "@/tool-detail/inspect-affordance";
 import { fmtCtx, fmtTokens } from "../../derive";
 import { toolSummary } from "../../tool-args";
@@ -114,6 +115,35 @@ function stopTitle(cause: string): string {
     default:
       return "turn stopped";
   }
+}
+
+/**
+ * The inline "working…" indicator for a plain turn (no task, no delegation): the last transcript item.
+ * The label is the orange/white `.working-shimmer` sweep (index.css); beside it, the same live parens the
+ * pinned header shows - `(elapsed · ↑ tokens)` - with the elapsed timer ticking client-side and the `↑`
+ * cell hidden until the first output-token snapshot. The label text stays real (transparent fill) so
+ * screen readers still announce it.
+ */
+function WorkingIndicator({
+  startedAt,
+  outputTokens,
+}: {
+  readonly startedAt?: number;
+  readonly outputTokens?: number;
+}) {
+  const elapsed = useElapsedLabel(startedAt);
+  const cells = [
+    elapsed,
+    outputTokens === undefined ? null : `↑ ${fmtTokens(outputTokens)} tokens`,
+  ].filter((cell): cell is string => Boolean(cell));
+  return (
+    <span className="inline-flex items-baseline gap-1.5 text-sm">
+      <span className="working-shimmer italic">working…</span>
+      {cells.length > 0 ? (
+        <span className="text-muted-foreground">({cells.join(" · ")})</span>
+      ) : null}
+    </span>
+  );
 }
 
 export interface TranscriptRowViewProps {
@@ -234,11 +264,7 @@ function TranscriptRowViewImpl({
   }
 
   if (row.kind === "working") {
-    // The inline live indicator for a plain turn (no task, no delegation): the last transcript item,
-    // a minimal "working…" with no metrics or tool summary (task/delegation turns get the richer pinned
-    // TurnStatusHeader instead). Its orange/red sweep is `.working-shimmer` (index.css); the text stays
-    // real (transparent fill) so screen readers still announce it.
-    return <span className="working-shimmer text-sm italic">working…</span>;
+    return <WorkingIndicator startedAt={row.startedAt} outputTokens={row.outputTokens} />;
   }
 
   const message = row.message;
@@ -610,8 +636,15 @@ function sameTranscriptRow(a: TranscriptRow, b: TranscriptRow): boolean {
     return false;
   }
   if (a.kind === "working" || b.kind === "working") {
-    // Same kind + constant id ("working"): the inline indicator is static, so treat it as unchanged.
-    return true;
+    // The elapsed timer ticks inside WorkingIndicator (its own interval), so only a metrics change needs
+    // a re-render here; `startedAt` is stable within a turn, `outputTokens` grows as the model streams.
+    // (`a.kind === b.kind` already holds, so both are the working row when either is.)
+    return (
+      a.kind === "working" &&
+      b.kind === "working" &&
+      a.startedAt === b.startedAt &&
+      a.outputTokens === b.outputTokens
+    );
   }
   if (a.compactAbove !== b.compactAbove) {
     return false;

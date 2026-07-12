@@ -65,6 +65,7 @@ import type {
   PendingHandoff,
   PendingQuestion,
   TurnStatusHeaderData,
+  WorkingRowData,
 } from "../../derive";
 import { type InventoryState, RESUME_CHOOSER, type ResumeContext } from "../../resume";
 import type { QueuedPrompt } from "../../send-queue";
@@ -91,9 +92,9 @@ export interface TranscriptView {
   /** The pinned live turn-status header (plan 50): the in-flight status line above the checklist for a
    *  task-driven or delegating turn, else undefined. A plain turn shows `workingRow` inline instead. */
   readonly turnStatusHeader?: TurnStatusHeaderData;
-  /** Append the inline "working…" row to the transcript: a plain active turn (no task, no delegation),
-   *  the mutually-exclusive counterpart to `turnStatusHeader`. */
-  readonly workingRow?: boolean;
+  /** The inline "working…" row's live metrics (append it to the transcript): a plain active turn (no
+   *  task, no delegation), the mutually-exclusive counterpart to `turnStatusHeader`. */
+  readonly workingRow?: WorkingRowData;
   readonly queue: readonly QueuedPrompt[];
   /** Unqueue a durable follow-up (plan 47): supersede it so the host drops it from the run. */
   readonly onUnqueue: (id: string) => void;
