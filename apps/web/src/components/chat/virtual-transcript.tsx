@@ -311,9 +311,13 @@ function VirtualTranscriptImpl({
     },
     initialRect: testInitialRect,
     scrollEndThreshold: 40,
-    // useAnimationFrameWithResizeObserver: batch row re-measurement to an animation frame so a row
-    // resizing mid-stream coalesces its corrections instead of thrashing scrollTop per layout tick.
-    useAnimationFrameWithResizeObserver: true,
+    // useAnimationFrameWithResizeObserver batches row re-measurement to an animation frame so a
+    // resize coalesces its corrections instead of thrashing scrollTop per layout tick. But while PINNED
+    // (following the live edge), that one-frame defer is exactly the visible glitch: the last block
+    // grows this frame (a streamed token / appended tool row), yet the follow correction lands next
+    // frame, so the live-edge row sits ~tens of px off for a single frame, then snaps back. So batch
+    // ONLY while unpinned (reading, where anti-thrash matters); while pinned, correct in the same frame.
+    useAnimationFrameWithResizeObserver: !pinned,
     // Every tanstack-initiated scroll is a dumb "ask the controller" pass-through: pinned means it is
     // a follow write, unpinned means it can only be a measure/anchor correction (followOnAppend is off
     // and app follows are gated upstream). ALL policy - denying follows while unpinned, rejecting an
@@ -526,11 +530,19 @@ function VirtualTranscriptImpl({
   });
 
   useLayoutEffect(() => {
-    const last = rows.at(-1)?.id ?? null;
-    if (last !== lastRowIdRef.current) {
+    // Re-pin the live edge in THIS layout pass (pre-paint) whenever real content is appended, so nothing
+    // below the insertion visibly shifts. A plain turn keeps a trailing constant-id "working…" row as
+    // the last item, so keying on `rows.at(-1)` alone never changes on an append and the re-pin would
+    // fall to a post-paint frame - making the working row bounce for a frame (the twitch). Key on the
+    // last NON-working row instead: it changes exactly on a real append (re-pin synchronously) and stays
+    // put during pure token streaming (the smooth end-anchor handles that, so no over-follow / jitter).
+    const lastRow = rows.at(-1);
+    const anchorRow = lastRow?.kind === "working" ? rows.at(-2) : lastRow;
+    const anchorId = anchorRow?.id ?? null;
+    if (anchorId !== lastRowIdRef.current) {
       followLiveEdge();
     }
-    lastRowIdRef.current = last;
+    lastRowIdRef.current = anchorId;
   });
 
   useEffect(() => {
