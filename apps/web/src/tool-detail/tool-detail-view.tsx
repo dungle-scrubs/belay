@@ -84,7 +84,11 @@ export function ToolDetailView({
         surfaceLabel="tool detail"
         viewportDataAttribute="data-tool-detail-scroll"
       >
-        <div data-live-scroll-item data-live-scroll-item-id={model.id}>
+        <div
+          data-live-scroll-item
+          data-live-scroll-item-id={model.id}
+          className="flex flex-col gap-5"
+        >
           <DetailBody model={model} onOpenPath={onOpenPath} />
         </div>
       </LiveScrollSurface>
