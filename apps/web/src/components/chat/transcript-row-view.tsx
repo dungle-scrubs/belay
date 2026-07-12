@@ -67,11 +67,7 @@ function compactRowAction(
 }
 
 function TranscriptBlock({ children, id }: { readonly children: ReactNode; readonly id: string }) {
-  return (
-    <div data-message-id={id} className="pl-3.5">
-      {children}
-    </div>
-  );
+  return <div data-message-id={id}>{children}</div>;
 }
 
 function compactExpandedDetail(message: Message): ReactNode | null {
@@ -180,39 +176,33 @@ function TranscriptRowViewImpl({
       // it, so exactly one element holds each message id (a duplicate would split the transcript-selection
       // capture vs. resolve and misplace the persistent highlight). The inspect affordance wraps the
       // collapsed row too, so a tool/shell can be inspected without first expanding.
-      // The `pl-3.5` indent lives on this OUTER wrapper (not on WithInspect's className) so EVERY
-      // compact row shares it and their leading icons line up - WithInspect drops its className for a
-      // non-eligible row, so passing the indent there only indented tool/shell rows. It matches the
-      // `pl-3.5` the tool_batch + full rows use, so a batch, a tool, and a marker all align.
       return (
-        <div className="pl-3.5">
-          <WithInspect message={row.message} onOpenDetail={onOpenDetail}>
-            <div data-message-id={expanded && !expandedDetail ? undefined : row.message.id}>
-              <CompactRow
-                display={display}
-                expanded={expanded}
-                onToggle={onExpand}
-                onAction={onAction}
-                suppressPrimary={suppressCompactPrimary}
-              >
-                {expanded
-                  ? (expandedDetail ?? (
-                      <TranscriptRowView
-                        row={row}
-                        compact={false}
-                        showThinking={showThinking}
-                        onOpenPath={onOpenPath}
-                        onOpenArtifact={onOpenArtifact}
-                        onDoctorRefresh={onDoctorRefresh}
-                        onMenuAction={onMenuAction}
-                        questionsOneLine={questionsOneLine}
-                      />
-                    ))
-                  : null}
-              </CompactRow>
-            </div>
-          </WithInspect>
-        </div>
+        <WithInspect message={row.message} onOpenDetail={onOpenDetail}>
+          <div data-message-id={expanded && !expandedDetail ? undefined : row.message.id}>
+            <CompactRow
+              display={display}
+              expanded={expanded}
+              onToggle={onExpand}
+              onAction={onAction}
+              suppressPrimary={suppressCompactPrimary}
+            >
+              {expanded
+                ? (expandedDetail ?? (
+                    <TranscriptRowView
+                      row={row}
+                      compact={false}
+                      showThinking={showThinking}
+                      onOpenPath={onOpenPath}
+                      onOpenArtifact={onOpenArtifact}
+                      onDoctorRefresh={onDoctorRefresh}
+                      onMenuAction={onMenuAction}
+                      questionsOneLine={questionsOneLine}
+                    />
+                  ))
+                : null}
+            </CompactRow>
+          </div>
+        </WithInspect>
       );
     }
   }
@@ -220,7 +210,7 @@ function TranscriptRowViewImpl({
   if (row.kind === "tool_batch") {
     if (compact) {
       return (
-        <div className="flex flex-col pl-3.5">
+        <div className="flex flex-col">
           {row.tools.map((tool, index) => {
             const display = compactDisplayFor(tool);
             if (!display) {
@@ -240,11 +230,7 @@ function TranscriptRowViewImpl({
         </div>
       );
     }
-    return (
-      <div className="pl-3.5">
-        <ConcurrentTools tools={row.tools.map((tool) => toConcurrentTool(tool, onOpenPath))} />
-      </div>
-    );
+    return <ConcurrentTools tools={row.tools.map((tool) => toConcurrentTool(tool, onOpenPath))} />;
   }
 
   const message = row.message;
@@ -255,7 +241,7 @@ function TranscriptRowViewImpl({
     return (
       <WithInspect message={message} onOpenDetail={onOpenDetail}>
         <div data-message-id={message.id}>
-          <ToolRenderer message={message} className="pl-3.5" onOpenPath={onOpenPath} />
+          <ToolRenderer message={message} onOpenPath={onOpenPath} />
         </div>
       </WithInspect>
     );
@@ -263,7 +249,7 @@ function TranscriptRowViewImpl({
 
   if (message.kind === "lucid") {
     return (
-      <div data-message-id={message.id} className="pl-3.5">
+      <div data-message-id={message.id}>
         <LucidArtifactCard
           title={message.title}
           version={message.version}
@@ -300,7 +286,7 @@ function TranscriptRowViewImpl({
 
   if (message.kind === "question") {
     return (
-      <div data-message-id={message.id} className="pl-3.5">
+      <div data-message-id={message.id}>
         <QuestionTranscriptItem message={message} oneLine={questionsOneLine} />
       </div>
     );
@@ -325,12 +311,10 @@ function TranscriptRowViewImpl({
     const reclaimed =
       message.reclaimed > 0 ? ` · ~${fmtTokens(estimateTokens(message.reclaimed))} reclaimed` : "";
     return (
-      <div className="pl-3.5">
-        <ToneAlert tone="yellow" icon={RotateCw} title="context full">
-          {message.detail}
-          {reclaimed} · {RECOVERY_ACTION_LABEL}
-        </ToneAlert>
-      </div>
+      <ToneAlert tone="yellow" icon={RotateCw} title="context full">
+        {message.detail}
+        {reclaimed} · {RECOVERY_ACTION_LABEL}
+      </ToneAlert>
     );
   }
 
@@ -341,7 +325,7 @@ function TranscriptRowViewImpl({
     const descriptor = messageKindDescriptor(message);
     const Icon = descriptor.icon;
     return (
-      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+      <div className="flex items-center gap-1.5 text-label tracking-wide text-muted-foreground/70">
         <Icon className="size-3 shrink-0" />
         {quietMarkerText(descriptor)}
       </div>
@@ -356,7 +340,7 @@ function TranscriptRowViewImpl({
     const descriptor = messageKindDescriptor(message);
     const Icon = descriptor.icon;
     return (
-      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+      <div className="flex items-center gap-1.5 text-label tracking-wide text-muted-foreground/70">
         <Icon className="size-3 shrink-0" />
         {quietMarkerText(descriptor)}
       </div>
@@ -372,15 +356,13 @@ function TranscriptRowViewImpl({
     const Icon = descriptor.icon;
     if (message.status === "reached") {
       return (
-        <div className="pl-3.5">
-          <ToneAlert tone="yellow" icon={Icon} title="usage limit reached">
-            {descriptor.secondary}
-          </ToneAlert>
-        </div>
+        <ToneAlert tone="yellow" icon={Icon} title="usage limit reached">
+          {descriptor.secondary}
+        </ToneAlert>
       );
     }
     return (
-      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+      <div className="flex items-center gap-1.5 text-label tracking-wide text-muted-foreground/70">
         <Icon className="size-3 shrink-0" />
         {quietMarkerText(descriptor)}
       </div>
@@ -394,7 +376,7 @@ function TranscriptRowViewImpl({
     const descriptor = messageKindDescriptor(message);
     const Icon = descriptor.icon;
     return (
-      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+      <div className="flex items-center gap-1.5 text-label tracking-wide text-muted-foreground/70">
         <Icon className="size-3 shrink-0" />
         {quietMarkerText(descriptor)}
       </div>
@@ -408,7 +390,7 @@ function TranscriptRowViewImpl({
     const descriptor = messageKindDescriptor(message);
     const Icon = descriptor.icon;
     return (
-      <div className="flex items-center gap-1.5 pl-3.5 text-label tracking-wide text-muted-foreground/70">
+      <div className="flex items-center gap-1.5 text-label tracking-wide text-muted-foreground/70">
         <Icon className="size-3 shrink-0" />
         {quietMarkerText(descriptor)}
       </div>
@@ -417,12 +399,10 @@ function TranscriptRowViewImpl({
 
   if (message.kind === "reconnecting") {
     return (
-      <div className="pl-3.5">
-        <ToneAlert tone="blue" icon={RotateCw} title="connection dropped">
-          {reconnectDisplayDetail(message.detail)} ·{" "}
-          {reconnectActionLabel(message.attempt, message.maxAttempts ?? LEGACY_RECONNECT_ATTEMPTS)}
-        </ToneAlert>
-      </div>
+      <ToneAlert tone="blue" icon={RotateCw} title="connection dropped">
+        {reconnectDisplayDetail(message.detail)} ·{" "}
+        {reconnectActionLabel(message.attempt, message.maxAttempts ?? LEGACY_RECONNECT_ATTEMPTS)}
+      </ToneAlert>
     );
   }
 
@@ -433,11 +413,7 @@ function TranscriptRowViewImpl({
   if (message.kind === "inlineAgent") {
     // An inline delegation (plan 09.4): the compact inline-agent row(s), grouped when a turn spawned
     // several. Clicking a row opens the child's live transcript takeover (M6) via onOpenAgent.
-    return (
-      <div className="pl-3.5">
-        <InlineAgentGroup agents={message.agents} onOpen={onOpenAgent} />
-      </div>
-    );
+    return <InlineAgentGroup agents={message.agents} onOpen={onOpenAgent} />;
   }
 
   if (message.kind === "delegation") {
@@ -448,21 +424,19 @@ function TranscriptRowViewImpl({
     const tone = failed ? "text-smui-red" : running ? "text-smui-purple" : "text-smui-green";
     const verb = running ? "running in background…" : failed ? "delegation failed" : "delegated";
     return (
-      <div className="pl-3.5">
-        <ToneAlert
-          tone="purple"
-          icon={PanelRight}
-          title={
-            <>
-              {message.agent} · {verb}
-            </>
-          }
-          titleClassName={tone}
-        >
-          <div className="text-muted-foreground">{message.task}</div>
-          {message.result ? <div className="mt-1 whitespace-pre-wrap">{message.result}</div> : null}
-        </ToneAlert>
-      </div>
+      <ToneAlert
+        tone="purple"
+        icon={PanelRight}
+        title={
+          <>
+            {message.agent} · {verb}
+          </>
+        }
+        titleClassName={tone}
+      >
+        <div className="text-muted-foreground">{message.task}</div>
+        {message.result ? <div className="mt-1 whitespace-pre-wrap">{message.result}</div> : null}
+      </ToneAlert>
     );
   }
 
@@ -566,7 +540,7 @@ function TranscriptRowViewImpl({
       return null;
     }
     return (
-      <div className="flex flex-col gap-3 pl-3.5">
+      <div className="flex flex-col gap-3">
         {thinking ? <ReasoningTrace content={thinking} streaming={reasoningStreaming} /> : null}
         {overflowNote}
         {errorNote}
@@ -597,7 +571,7 @@ function TranscriptRowViewImpl({
   }
 
   return (
-    <div data-message-id={message.id} className="flex flex-col gap-3 pl-3.5">
+    <div data-message-id={message.id} className="flex flex-col gap-3">
       {thinking ? <ReasoningTrace content={thinking} streaming={reasoningStreaming} /> : null}
       {anomalyNote ??
         (message.text ? <MarkdownBody text={message.text} mermaid={message.done} /> : null)}

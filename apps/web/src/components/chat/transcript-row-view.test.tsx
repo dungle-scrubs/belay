@@ -326,7 +326,10 @@ test("user, shell, and command-result rows share the same transcript block align
     const view = renderRow(row);
     const block = view.container.querySelector(`[data-message-id="${id}"]`);
     assert.ok(block, `${id} should have a selectable transcript block`);
-    assert.ok(block.classList.contains("pl-3.5"), `${id} should use the shared left inset`);
+    assert.ok(
+      !block.classList.contains("pl-3.5"),
+      `${id} should sit flush at the transcript's left edge, not inset`,
+    );
     view.unmount();
   }
 });

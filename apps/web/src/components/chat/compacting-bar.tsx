@@ -56,24 +56,22 @@ export function CompactingBar({ tokens, budget }: { tokens: number; budget: numb
   }, []);
 
   return (
-    <div className="pl-3.5">
-      <div className="flex flex-col gap-1.5 rounded border border-smui-frost-3/25 bg-smui-frost-3/[0.04] px-3 py-2">
-        <div className="flex items-center justify-between text-label tracking-wider text-smui-frost-3">
-          <span className="inline-flex items-center gap-1.5">
-            <Layers className="h-3.5 w-3.5 animate-pulse" />
-            {compactionActionLabel()}…
-          </span>
-          <span>{preparing ? "preparing…" : `${Math.round(realPct)}%`}</span>
-        </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-smui-surface-1">
-          <div className="h-full rounded-full bg-smui-frost-3" ref={barRef} />
-        </div>
-        <span className="text-label tracking-wider text-muted-foreground/70">
-          {preparing
-            ? "reading the context to summarize…"
-            : `${fmtTokens(tokens)} / ~${fmtTokens(budget)} tok summarized`}
+    <div className="flex flex-col gap-1.5 rounded border border-smui-frost-3/25 bg-smui-frost-3/[0.04] px-3 py-2">
+      <div className="flex items-center justify-between text-label tracking-wider text-smui-frost-3">
+        <span className="inline-flex items-center gap-1.5">
+          <Layers className="h-3.5 w-3.5 animate-pulse" />
+          {compactionActionLabel()}…
         </span>
+        <span>{preparing ? "preparing…" : `${Math.round(realPct)}%`}</span>
       </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-smui-surface-1">
+        <div className="h-full rounded-full bg-smui-frost-3" ref={barRef} />
+      </div>
+      <span className="text-label tracking-wider text-muted-foreground/70">
+        {preparing
+          ? "reading the context to summarize…"
+          : `${fmtTokens(tokens)} / ~${fmtTokens(budget)} tok summarized`}
+      </span>
     </div>
   );
 }
