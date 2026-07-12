@@ -94,19 +94,25 @@ describe("buildTranscriptRows", () => {
     assert.deepEqual(result.map(transcriptRowKey), ["message:r1", "message:w1", "message:r2"]);
   });
 
-  test("never appends a live-edge working row (plan 50 retired it for the pinned header)", () => {
-    // The in-flight indicator is now the pinned TurnStatusHeader above the checklist, not a scrolling
-    // transcript row, so an active turn adds no extra row here.
+  test("appends a trailing working row only when the working flag is set", () => {
+    // A plain active turn (no task, no delegation) appends the inline "working…" row as the last item;
+    // task/delegation turns leave `working` off and pin the TurnStatusHeader instead.
     const transcript = [user("u1"), assistant("a1")];
-    const result = buildTranscriptRows({
-      toolBatches: readOnlyToolBatches(transcript),
-      transcript,
-    });
+    const toolBatches = readOnlyToolBatches(transcript);
 
+    const idle = buildTranscriptRows({ toolBatches, transcript });
     assert.deepEqual(
-      result.map((row) => row.kind),
+      idle.map((row) => row.kind),
       ["message", "message"],
+      "no working row without the flag",
     );
-    assert.equal(result.length, 2, "no extra live-edge row is appended for an active turn");
+
+    const working = buildTranscriptRows({ toolBatches, transcript, working: true });
+    assert.deepEqual(
+      working.map((row) => row.kind),
+      ["message", "message", "working"],
+      "the working row trails the last message",
+    );
+    assert.equal(transcriptRowKey(working[2] as never), "working");
   });
 });

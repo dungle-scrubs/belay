@@ -233,6 +233,14 @@ function TranscriptRowViewImpl({
     return <ConcurrentTools tools={row.tools.map((tool) => toConcurrentTool(tool, onOpenPath))} />;
   }
 
+  if (row.kind === "working") {
+    // The inline live indicator for a plain turn (no task, no delegation): the last transcript item,
+    // a minimal "working…" with no metrics or tool summary (task/delegation turns get the richer pinned
+    // TurnStatusHeader instead). Its orange/red sweep is `.working-shimmer` (index.css); the text stays
+    // real (transparent fill) so screen readers still announce it.
+    return <span className="working-shimmer text-sm italic">working…</span>;
+  }
+
   const message = row.message;
   if (message.kind === "tool") {
     // data-message-id makes the tool block a selectable transcript segment, so a cross-item
@@ -598,7 +606,14 @@ function sameTranscriptRow(a: TranscriptRow, b: TranscriptRow): boolean {
   if (a === b) {
     return true;
   }
-  if (a.kind !== b.kind || a.id !== b.id || a.compactAbove !== b.compactAbove) {
+  if (a.kind !== b.kind || a.id !== b.id) {
+    return false;
+  }
+  if (a.kind === "working" || b.kind === "working") {
+    // Same kind + constant id ("working"): the inline indicator is static, so treat it as unchanged.
+    return true;
+  }
+  if (a.compactAbove !== b.compactAbove) {
     return false;
   }
   if (a.kind === "message" && b.kind === "message") {

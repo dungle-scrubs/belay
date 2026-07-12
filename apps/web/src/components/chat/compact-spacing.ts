@@ -52,6 +52,9 @@ export function compactTypeKey(row: TranscriptRow): string {
   if (row.kind === "tool_batch") {
     return READ_ONLY_KEY;
   }
+  if (row.kind === "working") {
+    return "working";
+  }
   const message = row.message;
   if (message.kind === "tool") {
     return toolTypeKey(message.name);

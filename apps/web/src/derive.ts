@@ -25,7 +25,7 @@ import {
   type WorktreeSummary,
 } from "@trevor/session";
 import type { PanelJob } from "@/support-panel/support-panel";
-import { type TurnActionEvidence, toolActionLabel, turnActionLabel } from "./action-label";
+import { type TurnActionEvidence, turnActionLabel } from "./action-label";
 
 export { parseToolArgs, toolSummary } from "./tool-args";
 
@@ -894,40 +894,6 @@ function activeTurnEvidence(
 }
 
 /**
- * The newest tool still running in the active turn - a `tool.started` with no matching `tool.completed`
- * - as a present-progress verb via the shared `toolActionLabel` (so the header reads "reading
- * src/foo.ts", never re-deriving the verb vocabulary). `undefined` when no tool is mid-flight. Map
- * insertion order keeps the most-recently-started still-running call last.
- */
-function runningToolLabel(
-  events: readonly SessionEvent[],
-  runId: string | null,
-): string | undefined {
-  if (!runId) {
-    return undefined;
-  }
-  const running = new Map<string, { name: string; arguments: string }>();
-  for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
-    if (!decoded || !("runId" in decoded) || decoded.runId !== runId) {
-      continue;
-    }
-    if (decoded.type === "tool.started") {
-      // A delegation tool surfaces as the friendly "delegating to X…" headline (M5), never a raw
-      // "running delegate_inline" tool verb, so it never becomes the newest running tool here.
-      if (decoded.name === "delegate_inline" || decoded.name === "delegate_background") {
-        continue;
-      }
-      running.set(decoded.callId, { name: decoded.name, arguments: decoded.arguments });
-    } else if (decoded.type === "tool.completed") {
-      running.delete(decoded.callId);
-    }
-  }
-  const newest = [...running.values()].at(-1);
-  return newest ? toolActionLabel(newest.name, newest.arguments) : undefined;
-}
-
-/**
  * The agent of the newest still-running INLINE-AGENT delegation on this run - a `delegate_inline` link
  * whose child has no terminal link yet - or undefined. Drives the friendly "delegating to {agent}…"
  * turn-status headline (plan 09.4 M5) instead of the raw delegation tool verb. Scoped to inline-agent
@@ -994,13 +960,18 @@ function liveOutputTokens(events: readonly SessionEvent[]): number | undefined {
 }
 
 /**
- * The pinned live turn-status header (plan 50), composed from primitives already on the wire.
- * `undefined` when no turn is active. Otherwise: the `headline` is the in-progress task's
- * present-progressive `activeForm` (the WHAT), falling back to the engine `state` when no task is
- * active; the `state` (the HOW) is a running tool's verb, else the `turnActionLabel` engine phase
- * (thinking/streaming/loading/Working); `startedAt` drives the elapsed cell; `outputTokens` is the live
- * monotonic output count (hidden until the first progress snapshot). This is the one projection - the
- * component only renders it and owns the redundancy/hidden-cell rendering rules.
+ * The pinned live turn-status header (plan 50), composed from primitives already on the wire. It is
+ * RESERVED for turns worth pinning above the checklist: a turn driving an in-progress task, or an
+ * active delegation. A plain turn (thinking / running a tool, no task, no delegation) is `undefined`
+ * here - it shows the inline transcript "working…" row instead (see {@link activeWorkingRowVisible}),
+ * so exactly one live indicator ever shows and the pinned spot stays meaningful.
+ *
+ * When defined: the `headline` is the in-progress task's present-progressive `activeForm` (the WHAT),
+ * falling back to the engine `state` for a delegation-only turn; the `state` (the HOW) is the active
+ * delegation ("delegating to {agent}…"), else the `turnActionLabel` engine phase
+ * (thinking/streaming/loading) - never a running tool's command, which is too long for the parens.
+ * `startedAt` drives the elapsed cell; `outputTokens` is the live monotonic output count (hidden until
+ * the first progress snapshot). The component only renders it and owns the redundancy/hidden-cell rules.
  */
 export function turnStatusHeaderFrom(
   events: readonly SessionEvent[],
@@ -1010,13 +981,18 @@ export function turnStatusHeaderFrom(
     return undefined;
   }
   const runId = activeTurnRunId(events);
-  // A running delegation reads as "delegating to {agent}…" (M5), taking precedence over the raw tool
-  // verb; otherwise the newest running tool's verb, else the engine phase.
   const delegatingAgent = activeDelegatingAgent(events, runId);
+  const inProgress = tasksFrom(events).find((task) => task.status === "in_progress");
+  // Plain turns render inline, not pinned: only a task-driven turn or an active delegation earns the
+  // pinned header.
+  if (!inProgress && !delegatingAgent) {
+    return undefined;
+  }
+  // A running delegation reads as "delegating to {agent}…" (M5); otherwise the engine phase. The
+  // running-tool command is deliberately NOT shown - it is too long/explanatory for the parens.
   const state = delegatingAgent
     ? `delegating to ${delegatingAgent}…`
-    : (runningToolLabel(events, runId) ?? turnActionLabel(activeTurnEvidence(events, runId)));
-  const inProgress = tasksFrom(events).find((task) => task.status === "in_progress");
+    : turnActionLabel(activeTurnEvidence(events, runId));
   const startedAt = activeTurnStartedAt(events);
   const outputTokens = liveOutputTokens(events);
   return {
@@ -1027,6 +1003,26 @@ export function turnStatusHeaderFrom(
     ...(outputTokens !== undefined ? { outputTokens } : {}),
     state,
   };
+}
+
+/**
+ * Whether the inline transcript "working…" row should show: an active turn that is NOT pinned - a plain
+ * turn with no in-progress task and no active delegation (those go to {@link turnStatusHeaderFrom}). The
+ * two are mutually exclusive, so exactly one live indicator ever shows. The inline row is deliberately
+ * just "working…" - no metrics, no tool summary - so this returns only a boolean.
+ */
+export function activeWorkingRowVisible(
+  events: readonly SessionEvent[],
+  { awaitingResponse }: { readonly awaitingResponse: boolean },
+): boolean {
+  if (!isTurnActive(events, awaitingResponse)) {
+    return false;
+  }
+  const runId = activeTurnRunId(events);
+  if (activeDelegatingAgent(events, runId)) {
+    return false;
+  }
+  return !tasksFrom(events).some((task) => task.status === "in_progress");
 }
 
 /** The epoch-ms timestamp of the most recent event with a parseable `createdAt`, or null. */

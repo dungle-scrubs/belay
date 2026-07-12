@@ -9,6 +9,7 @@ import {
 import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import {
+  activeWorkingRowVisible,
   commandArgPreview,
   commandsFrom,
   defaultProviderFrom,
@@ -1036,10 +1037,16 @@ test("turnStatusHeaderFrom: an in-progress task drives the headline from its act
   assert.ok(header?.startedAt, "the active run's start time drives the elapsed cell");
 });
 
-test("turnStatusHeaderFrom: with no task the headline falls back to the engine turnActionLabel", () => {
+test("turnStatusHeaderFrom: a plain turn (no task, no delegation) pins nothing - it goes inline", () => {
+  // The pinned header is reserved for task/delegation turns; a plain thinking turn shows the inline
+  // transcript "working…" row instead (activeWorkingRowVisible), so nothing is pinned here.
   const header = turnStatusHeaderFrom([userMessage(), started("r1")], { awaitingResponse: false });
-  assert.equal(header?.headline, "thinking");
-  assert.equal(header?.state, "thinking");
+  assert.equal(header, undefined);
+  assert.equal(
+    activeWorkingRowVisible([userMessage(), started("r1")], { awaitingResponse: false }),
+    true,
+    "the inline working row carries the plain turn",
+  );
 });
 
 test("turnStatusHeaderFrom: a running inline delegation reads 'delegating to {agent}…', never the tool verb (09.4 M5)", () => {
@@ -1149,42 +1156,53 @@ test("turnStatusHeaderFrom: the delegating headline clears once the only child f
   assert.doesNotMatch(header?.state ?? "", /delegate_inline/);
 });
 
-test("turnStatusHeaderFrom: a running tool with no task drives a tool-verb headline", () => {
+test("turnStatusHeaderFrom: a running tool with no task pins nothing (it goes inline, no tool command)", () => {
+  const events = [
+    userMessage(),
+    started("r1"),
+    evt("tool.started", {
+      runId: "r1",
+      callId: "c1",
+      name: "read",
+      arguments: JSON.stringify({ path: "src/foo.ts" }),
+    }),
+  ];
+  // A running tool no longer drives a pinned header - a plain turn goes inline, and the tool command
+  // is never surfaced (it was too long/explanatory for the parens).
+  assert.equal(turnStatusHeaderFrom(events, { awaitingResponse: false }), undefined);
+  assert.equal(activeWorkingRowVisible(events, { awaitingResponse: false }), true);
+});
+
+test("turnStatusHeaderFrom: a running tool on a task turn keeps state as the engine phase, not the tool command", () => {
   const header = turnStatusHeaderFrom(
     [
       userMessage(),
       started("r1"),
+      taskEvent("Capping the menu…", "Cap the menu"),
       evt("tool.started", {
         runId: "r1",
         callId: "c1",
-        name: "read",
-        arguments: JSON.stringify({ path: "src/foo.ts" }),
+        name: "bash",
+        arguments: JSON.stringify({ command: "cd /very/long/path && pnpm test:unit" }),
       }),
     ],
     { awaitingResponse: false },
   );
-  assert.equal(header?.headline, "reading src/foo.ts");
-  assert.equal(header?.state, "reading src/foo.ts");
-});
-
-test("turnStatusHeaderFrom: a completed tool no longer drives the headline", () => {
-  const header = turnStatusHeaderFrom(
-    [
-      userMessage(),
-      started("r1"),
-      evt("tool.started", { runId: "r1", callId: "c1", name: "read", arguments: "{}" }),
-      evt("tool.completed", { runId: "r1", callId: "c1", name: "read", result: "ok" }),
-    ],
-    { awaitingResponse: false },
-  );
-  // No tool is mid-flight now, so the engine phase carries the state again.
+  assert.equal(header?.headline, "Capping the menu…");
+  // The HOW cell is the engine phase - never "running cd /very/long/path…".
   assert.equal(header?.state, "thinking");
-  assert.equal(header?.headline, "thinking");
+  assert.doesNotMatch(header?.state ?? "", /cd \//);
 });
 
 test("turnStatusHeaderFrom: output tokens come from the newest assistant.progress snapshot", () => {
   const header = turnStatusHeaderFrom(
-    [userMessage(), started("r1"), progress("r1", 100), progress("r1", 340)],
+    [
+      userMessage(),
+      started("r1"),
+      progress("r1", 100),
+      progress("r1", 340),
+      taskEvent("Working…", "w"),
+    ],
     { awaitingResponse: false },
   );
   assert.equal(header?.outputTokens, 340);
@@ -1194,14 +1212,22 @@ test("turnStatusHeaderFrom: output tokens never decrease within a turn (monotoni
   // An advisory progress snapshot reporting FEWER output tokens than a prior one must not regress the
   // cell (D-002/R-3): the header clamps to the max seen in the live turn.
   const header = turnStatusHeaderFrom(
-    [userMessage(), started("r1"), progress("r1", 340), progress("r1", 200)],
+    [
+      userMessage(),
+      started("r1"),
+      progress("r1", 340),
+      progress("r1", 200),
+      taskEvent("Working…", "w"),
+    ],
     { awaitingResponse: false },
   );
   assert.equal(header?.outputTokens, 340);
 });
 
 test("turnStatusHeaderFrom: the token cell is absent until the first progress snapshot", () => {
-  const header = turnStatusHeaderFrom([userMessage(), started("r1")], { awaitingResponse: false });
+  const header = turnStatusHeaderFrom([userMessage(), started("r1"), taskEvent("Working…", "w")], {
+    awaitingResponse: false,
+  });
   assert.equal(header?.outputTokens, undefined);
 });
 
@@ -1233,11 +1259,65 @@ test("turnStatusHeaderFrom: a /clear mid-turn does not leak the prior run's toke
   );
 });
 
-test("turnStatusHeaderFrom: the awaiting gap (no run yet) still pins a Working header", () => {
-  const header = turnStatusHeaderFrom([userMessage()], { awaitingResponse: true });
-  assert.equal(header?.headline, "Working");
-  assert.equal(header?.outputTokens, undefined);
+test("turnStatusHeaderFrom: a plain awaiting gap (no run yet) goes inline, not pinned", () => {
+  // The awaiting gap counts as active, but with no task/delegation it is a plain turn -> the inline
+  // "working…" row, not a pinned header.
+  assert.equal(turnStatusHeaderFrom([userMessage()], { awaitingResponse: true }), undefined);
+  assert.equal(activeWorkingRowVisible([userMessage()], { awaitingResponse: true }), true);
+});
+
+test("turnStatusHeaderFrom: an awaiting gap on a task turn still pins the task header", () => {
+  const header = turnStatusHeaderFrom([userMessage(), taskEvent("Shipping…", "ship")], {
+    awaitingResponse: true,
+  });
+  assert.equal(header?.headline, "Shipping…");
   assert.ok(header?.startedAt, "the trailing user.message drives the elapsed cell before the run");
+});
+
+test("activeWorkingRowVisible: true only for a plain active turn, never with a task/delegation/idle", () => {
+  // No turn active -> no inline row.
+  assert.equal(activeWorkingRowVisible([], { awaitingResponse: false }), false);
+  assert.equal(
+    activeWorkingRowVisible([userMessage(), started("r1"), completed("r1")], {
+      awaitingResponse: false,
+    }),
+    false,
+    "a settled turn shows nothing",
+  );
+  // A task turn is pinned, not inline.
+  assert.equal(
+    activeWorkingRowVisible([userMessage(), started("r1"), taskEvent("Doing…", "do")], {
+      awaitingResponse: false,
+    }),
+    false,
+    "a task turn uses the pinned header",
+  );
+  // An active delegation is pinned, not inline.
+  assert.equal(
+    activeWorkingRowVisible(
+      [
+        userMessage(),
+        started("r1"),
+        evt("tool.started", {
+          runId: "r1",
+          callId: "c1",
+          name: "delegate_inline",
+          arguments: "{}",
+        }),
+        evt("delegated.to", {
+          runId: "r1",
+          childSessionId: "s::sub::a",
+          agent: "explorer",
+          task: "t",
+          mode: "inline",
+          status: "running",
+        }),
+      ],
+      { awaitingResponse: false },
+    ),
+    false,
+    "a delegating turn uses the pinned header",
+  );
 });
 
 test("isTurnActive is the shared active-turn predicate (active run OR awaiting response)", () => {

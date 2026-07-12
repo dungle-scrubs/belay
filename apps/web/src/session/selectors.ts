@@ -1,5 +1,6 @@
 import type { HostPresence } from "@trevor/session";
 import {
+  activeWorkingRowVisible,
   type HostStatus,
   hostStatus,
   isHostlessPendingPrompt,
@@ -51,6 +52,17 @@ export function selectTurnStatusHeader(
   options: { readonly hostlessPending: boolean },
 ): ReturnType<typeof turnStatusHeaderFrom> {
   return turnStatusHeaderFrom(model.events, {
+    awaitingResponse: model.awaitingResponse && !options.hostlessPending,
+  });
+}
+
+/** Whether the inline transcript "working…" row shows: a plain active turn (no task, no delegation),
+ *  the mutually-exclusive counterpart to {@link selectTurnStatusHeader}. Shares its host-stranded gate. */
+export function selectActiveWorkingRow(
+  model: SessionReadModel,
+  options: { readonly hostlessPending: boolean },
+): boolean {
+  return activeWorkingRowVisible(model.events, {
     awaitingResponse: model.awaitingResponse && !options.hostlessPending,
   });
 }

@@ -15,6 +15,7 @@ import {
 import { TranscriptProjector, toTranscript } from "../transcript";
 import { createSessionReadModel } from "./projection";
 import {
+  selectActiveWorkingRow,
   selectHostStatus,
   selectSessionName,
   selectTabTitle,
@@ -154,9 +155,7 @@ test("selectors derive host, title, session name, and turn status from the read 
   assert.deepEqual(host, hostStatus(events, null, Date.parse("2026-01-01T00:00:10.000Z")));
   assert.equal(selectSessionName(model, "fallback"), "Build the projection");
   assert.equal(selectTabTitle(host, "trevor-local", "trevor-local"), "repo · Trevor");
-  assert.deepEqual(selectTurnStatusHeader(model, { hostlessPending: false }), {
-    headline: "Working",
-    startedAt: Date.parse("2026-01-01T00:00:00.000Z"),
-    state: "Working",
-  });
+  // A plain awaiting-gap turn (no task, no delegation) is not pinned - it shows the inline working row.
+  assert.equal(selectTurnStatusHeader(model, { hostlessPending: false }), undefined);
+  assert.equal(selectActiveWorkingRow(model, { hostlessPending: false }), true);
 });

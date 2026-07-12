@@ -88,9 +88,12 @@ export interface TranscriptView {
   /** The per-row rendering config (row takeovers/commands + thinking/compact flags), forwarded as one
    *  bundle to VirtualTranscript rather than re-threaded field by field. */
   readonly rowConfig: TranscriptRowConfig;
-  /** The pinned live turn-status header (plan 50): the one in-flight status line above the checklist,
-   *  or undefined when no turn is active. Replaces the retired scrolling "Working" row. */
+  /** The pinned live turn-status header (plan 50): the in-flight status line above the checklist for a
+   *  task-driven or delegating turn, else undefined. A plain turn shows `workingRow` inline instead. */
   readonly turnStatusHeader?: TurnStatusHeaderData;
+  /** Append the inline "working…" row to the transcript: a plain active turn (no task, no delegation),
+   *  the mutually-exclusive counterpart to `turnStatusHeader`. */
+  readonly workingRow?: boolean;
   readonly queue: readonly QueuedPrompt[];
   /** Unqueue a durable follow-up (plan 47): supersede it so the host drops it from the run. */
   readonly onUnqueue: (id: string) => void;
@@ -361,7 +364,7 @@ function PanelHostImpl(props: {
     props;
   const { replayed } = stream;
   const { transcript, toolBatches, rowConfig, queue, onUnqueue } = tv;
-  const { turnStatusHeader } = tv;
+  const { turnStatusHeader, workingRow } = tv;
   // Whether the empty-transcript placeholder is what fills the center right now (replayed, nothing
   // to show, no host). It decides both the placeholder's content and whether the bottom
   // "Starting host..." bar is redundant (the placeholder already shows the launch).
@@ -377,8 +380,8 @@ function PanelHostImpl(props: {
         ? "no launch root is available"
         : "resume to continue";
   const rows = useMemo(
-    () => buildTranscriptRows({ toolBatches, transcript }),
-    [toolBatches, transcript],
+    () => buildTranscriptRows({ toolBatches, transcript, working: workingRow }),
+    [toolBatches, transcript, workingRow],
   );
   const [sidebarPreviewWidth, setSidebarPreviewWidth] = useState<number | null>(null);
   const sidebarWidth = sidebarPreviewWidth ?? sidebar.width;

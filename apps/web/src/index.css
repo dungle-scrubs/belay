@@ -339,6 +339,49 @@
   --shimmer-color: hsl(var(--smui-frost-2) / 0.85);
 }
 
+/* The inline "working…" transcript indicator (plan 50.x). A high-contrast two-tone sweep: the label
+ * is smui-orange with a WHITE band passing through it (white reads brightest against the orange). Two
+ * deliberate properties:
+ *   - the gradient TILES (repeat) over a FIXED pixel period and the animation travels exactly one
+ *     period, so the loop is SEAMLESS - a virtualizer re-mount that restarts the animation lands on an
+ *     identical frame and never twitches (the reported bug);
+ *   - fixed-px sizing makes it independent of the element width, so a transcript reflow can't shift
+ *     the band either.
+ * Distinct from `.shimmer` (the subtle frost sweep on thinking/tool rows) - this one is meant to POP. */
+@keyframes working-shimmer {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 160px 0;
+  }
+}
+.working-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    hsl(var(--smui-orange)) 0%,
+    hsl(var(--smui-orange)) 30%,
+    hsl(0 0% 100%) 50%,
+    hsl(var(--smui-orange)) 70%,
+    hsl(var(--smui-orange)) 100%
+  );
+  background-size: 160px 100%;
+  background-repeat: repeat-x;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: working-shimmer 1.6s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .working-shimmer {
+    animation: none;
+    background-image: none;
+    -webkit-text-fill-color: hsl(var(--smui-orange));
+    color: hsl(var(--smui-orange));
+  }
+}
+
 /* SMUI re-theming for the shared Markdown renderer (.trevor-md, see markdown.tsx).
  * Scoped to .smui-md so it only applies inside the chat message components and
  * never touches the live app, whose markdown.css stays light. Overrides only the

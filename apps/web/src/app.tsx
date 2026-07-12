@@ -106,6 +106,7 @@ import { useSlashMenu } from "./hooks/use-slash-menu";
 import { useFileIndex, useWorkspaceFileSearch } from "./hooks/use-workspace-file-search";
 import { createSessionReadModel } from "./session/projection";
 import {
+  selectActiveWorkingRow,
   selectHostlessPending,
   selectHostStatus,
   selectSessionName,
@@ -624,12 +625,18 @@ export function App() {
       }),
     [readModel, host.leaderId, status, replayed, now],
   );
-  // The ONE pinned live turn-status header (plan 50): the in-flight status line above the checklist,
-  // undefined when no turn is active. `hostlessPending` suppresses it for a prompt stranded with no
-  // host (the no-host status line carries that affordance instead), matching the retired working row's
-  // gate; it composes elapsed/output-tokens/engine-state from events entirely web-side.
+  // The pinned live turn-status header (plan 50): the in-flight status line above the checklist for a
+  // task-driven or delegating turn, undefined otherwise. `hostlessPending` suppresses it for a prompt
+  // stranded with no host (the no-host status line carries that affordance instead); it composes
+  // elapsed/output-tokens/engine-state from events entirely web-side.
   const turnStatusHeader = useMemo(
     () => selectTurnStatusHeader(readModel, { hostlessPending }),
+    [readModel, hostlessPending],
+  );
+  // The inline "working…" transcript row for a plain turn (no task, no delegation): the mutually-
+  // exclusive counterpart to the pinned header, so exactly one live indicator ever shows.
+  const workingRow = useMemo(
+    () => selectActiveWorkingRow(readModel, { hostlessPending }),
     [readModel, hostlessPending],
   );
   const reconciledRunRef = useRef<string | null>(null);
@@ -1769,15 +1776,16 @@ export function App() {
       transcript,
       toolBatches,
       rowConfig,
-      // The pinned live turn-status header (plan 50) replaces the scrolling "Working" row. It is
-      // already suppressed for a host-stranded prompt (turnStatusHeaderFrom is gated on
-      // `awaitingResponse && !hostlessPending`), so the no-host status line still carries that
-      // affordance; `busy`/the send queue are unchanged, so follow-ups still queue and catch up.
+      // A task-driven / delegating turn pins the turn-status header above the checklist; a plain turn
+      // shows the inline `workingRow` in the transcript instead. Both are suppressed for a host-stranded
+      // prompt (gated on `awaitingResponse && !hostlessPending`), so the no-host status line still
+      // carries that affordance; `busy`/the send queue are unchanged, so follow-ups still queue.
       turnStatusHeader,
+      workingRow,
       queue: visibleQueue,
       onUnqueue: unqueue,
     }),
-    [transcript, toolBatches, rowConfig, turnStatusHeader, visibleQueue, unqueue],
+    [transcript, toolBatches, rowConfig, turnStatusHeader, workingRow, visibleQueue, unqueue],
   );
 
   const openPanel = useMemoizedFn(() => modal.setPanelOpen(true));

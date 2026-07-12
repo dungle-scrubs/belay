@@ -53,6 +53,11 @@ const toolRow = (over: Partial<Extract<Message, { kind: "tool" }>> = {}): Transc
   message: { kind: "tool", id: "c1", name: "bash", args: '{"command":"ls"}', done: true, ...over },
 });
 
+test("a working row renders the inline 'working…' indicator", () => {
+  const { container } = renderRow({ kind: "working", id: "working" });
+  assert.match(container.textContent ?? "", /working…/);
+});
+
 test("a tool row exposes the inspect affordance, which opens its detail (plan 08 M5)", () => {
   const onOpenDetail = vi.fn();
   render(

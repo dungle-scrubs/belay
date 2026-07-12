@@ -134,6 +134,9 @@ export function estimateTranscriptRowSize(
   if (row.kind === "tool_batch") {
     return 36 + row.tools.length * 22;
   }
+  if (row.kind === "working") {
+    return 32;
+  }
   const message = row.message;
   if (message.kind === "user") {
     return 72;

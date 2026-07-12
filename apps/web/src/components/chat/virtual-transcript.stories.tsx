@@ -89,7 +89,21 @@ const ROWS: readonly TranscriptRow[] = [
 const RUNNING_ROWS: readonly TranscriptRow[] = [
   ...ROWS.slice(0, 4),
   row(toolMessage("t5", "bash", { command: "pnpm build" })), // no result -> still running
-  // The live-turn indicator is the pinned TurnStatusHeader (plan 50), not a transcript row.
+  // A plain turn (no task, no delegation) trails the inline "working…" row as its last item.
+  { kind: "working", id: "working" },
+];
+
+// A brand-new thread: the working row sits right under the couple of messages, not floated at the
+// bottom of a tall viewport (it flows as the last transcript item).
+const SHORT_WORKING_ROWS: readonly TranscriptRow[] = [
+  row({
+    kind: "user",
+    id: "sw-u1",
+    text: "Add a health check endpoint.",
+    artifacts: [],
+    pastes: [],
+  }),
+  { kind: "working", id: "working" },
 ];
 
 function longAnswer(index: number): string {
@@ -180,6 +194,18 @@ function Frame({
     </div>
   );
 }
+
+export const WorkingRow: Story = {
+  render: () => <Frame rows={RUNNING_ROWS} compact={false} />,
+};
+
+export const WorkingRowShortThread: Story = {
+  render: () => <Frame rows={SHORT_WORKING_ROWS} compact={false} />,
+};
+
+export const WorkingRowCompact: Story = {
+  render: () => <Frame rows={RUNNING_ROWS} compact />,
+};
 
 function SidebarResizeFrame() {
   const [width, setWidth] = useState(320);
