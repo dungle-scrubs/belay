@@ -189,7 +189,12 @@ async function fetchVia(args: WebFetchArgs, deps: WebFetchDeps): Promise<WebFetc
   }
 
   const needsFallback = mode !== "static" && winner.status !== "usable";
-  const bounded = winner.content ?? { content: "", truncated: false };
+  // A blocked/failed winner has no trustworthy body: its "content" is a challenge page or nav chrome,
+  // not the page's text. Emit empty content so the model reads needsFallback + attempts as the signal
+  // and never mistakes the noise for the source. Only usable/thin winners carry real (if partial) text.
+  const hasReadableBody = winner.status === "usable" || winner.status === "thin";
+  const bounded =
+    hasReadableBody && winner.content ? winner.content : { content: "", truncated: false };
 
   return {
     url: args.url,

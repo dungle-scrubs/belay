@@ -131,6 +131,26 @@ test("a blocked challenge page is classified blocked and flagged for fallback in
   assert.equal(blocked.needsFallback, true);
 });
 
+test("an exhausted ladder emits no body, only the fallback signal", async () => {
+  // Static is blocked, Jina 403s, Firecrawl has no key: every backend is unusable. The winner's body
+  // is a challenge/chrome page, not the source, so content is suppressed rather than shipped as noise.
+  const { fetch } = multiplexedFetch({
+    static: {
+      text: "<html><body>Access denied. Request blocked.</body></html>",
+      contentType: "text/html",
+    },
+    jina: { status: 403, text: "" },
+  });
+
+  const result = await runLadder({ url: "https://example.com/p" }, ladderDeps(fetch));
+
+  const attempts = result.attempts as { backend: string; status: string }[];
+  assert.equal(attempts[0]?.status, "blocked");
+  assert.equal(result.needsFallback, true);
+  assert.equal(result.content, "", "a blocked/failed winner carries no body");
+  assert.equal(result.textLength, 0);
+});
+
 test("an unsafe URL raises an input failure before any fetch (no network)", async () => {
   let fetched = false;
   const blockingDeps: WebFetchDeps = {

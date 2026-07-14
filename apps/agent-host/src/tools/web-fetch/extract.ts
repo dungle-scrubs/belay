@@ -124,20 +124,24 @@ function collapseWhitespace(text: string): string {
     .trim();
 }
 
-/** A blocker/challenge page (Cloudflare, captcha, "enable JavaScript", access-denied interstitials)
- *  the static path can't get past - distinct from a thin page, which simply has little content. */
-const BLOCKER_SIGNALS = [
+/** Blocker phrases a real challenge/interstitial renders as VISIBLE text (Cloudflare's "checking your
+ *  browser", captcha prompts, access-denied pages). Scanned against the extracted text only, never the
+ *  raw HTML: a `<noscript>enable JavaScript</noscript>` fallback ships on nearly every JS app, so
+ *  scanning markup would flag an otherwise server-rendered page (e.g. a GitHub repo) as blocked when
+ *  its content is right there. A page that renders ONLY such a notice is caught by the `thin` path. */
+const VISIBLE_BLOCKER_SIGNALS = [
   "captcha",
   "are you a robot",
   "verify you are human",
   "checking your browser",
-  "cf-browser-verification",
-  "enable javascript",
-  "please enable js",
   "access denied",
   "request blocked",
   "ddos protection",
 ];
+
+/** Blocker markers that live in markup/attributes rather than visible text (Cloudflare's challenge
+ *  hook), so they are matched against the raw HTML instead. */
+const MARKUP_BLOCKER_SIGNALS = ["cf-browser-verification"];
 
 const THIN_TEXT_THRESHOLD = 200;
 
@@ -160,9 +164,13 @@ export function classifyStatic(input: {
     return "failed";
   }
 
-  const haystack = `${input.rawHtml} ${input.extractedText}`.toLowerCase();
+  const visibleText = input.extractedText.toLowerCase();
 
-  if (BLOCKER_SIGNALS.some((signal) => haystack.includes(signal))) {
+  if (VISIBLE_BLOCKER_SIGNALS.some((signal) => visibleText.includes(signal))) {
+    return "blocked";
+  }
+
+  if (MARKUP_BLOCKER_SIGNALS.some((signal) => input.rawHtml.toLowerCase().includes(signal))) {
     return "blocked";
   }
 

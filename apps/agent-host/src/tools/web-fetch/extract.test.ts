@@ -96,6 +96,15 @@ test("classifies a challenge/blocker page as blocked", () => {
   assert.equal(status, "blocked");
 });
 
+test("a server-rendered page carrying a <noscript> enable-JavaScript notice is not blocked", () => {
+  // The noscript fallback ships on nearly every JS app (GitHub included). It must not flag a page
+  // whose real content is server-rendered and present as blocked - that mislabel wastes the ladder.
+  const body = "This is the real, server-rendered article body. ".repeat(20);
+  const rawHtml = `<html><body><noscript>You need to enable JavaScript to run this app.</noscript><p>${body}</p></body></html>`;
+  const status = classifyStatic({ httpStatus: 200, rawHtml, extractedText: body });
+  assert.equal(status, "usable");
+});
+
 test("classifies a 4xx/5xx or failed fetch as failed", () => {
   assert.equal(classifyStatic({ httpStatus: 404, rawHtml: "", extractedText: "" }), "failed");
   assert.equal(classifyStatic({ httpStatus: 503, rawHtml: "", extractedText: "" }), "failed");
