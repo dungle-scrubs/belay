@@ -167,9 +167,9 @@ const TOOL_GUIDANCE: readonly ToolGuidanceLine[] = [
   },
   {
     keep: "high",
-    text: "Use docs for CURRENT EXTERNAL documentation - the official docs of a product, API, library, SDK, or service (setup, usage, configuration, limits, reference). docs resolves a subject into a cached, citeable corpus you then search and read, layering caching and source citations over web_search/web_fetch; reach for it when you need authoritative external reference material rather than a single one-off page read.",
+    text: "Use docs for CURRENT EXTERNAL documentation - the official docs of a product, API, library, SDK, or service (setup, usage, configuration, limits, reference). docs resolves a subject into a cached, citeable corpus you then search and read, layering caching and source citations over web_search/web_fetch; reach for it when you need authoritative external reference material rather than a single one-off page read. Reach for it BEFORE reverse-engineering a third-party tool's behavior from error messages: when you are guessing at version-specific behavior or how two tools interact (say, matching a linter to its ruleset preset), or after two attempts have not converged, the canonical answer is in the official docs, not in inference - inferring another tool's config precedence from its errors often never converges at all.",
     condensed:
-      "Use docs for CURRENT EXTERNAL documentation (a product, API, library, SDK, or service) - a cached, citeable corpus you search and read; not for this repo's own source.",
+      "Use docs for CURRENT EXTERNAL documentation (a product, API, library, SDK, or service) - a cached, citeable corpus you search and read; not for this repo's own source. Reach for it before reverse-engineering a third-party tool from its error messages.",
   },
   // Plan 24 M6 (D-002/D-003/D-006): LSP guidance is SELECTIVE-USE - the named moments where a
   // bounded language-server fact beats searching or reading, the explicit not-cases (text search

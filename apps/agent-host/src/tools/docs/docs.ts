@@ -100,7 +100,10 @@ export const docsTool = simpleTool({
     "Look up and cache EXTERNAL documentation for a product, API, library, SDK, or service - the " +
     "documentation-aware companion to web_search/web_fetch. Use it to RESOLVE docs for a subject " +
     "into a cached corpus and to SEARCH/READ that corpus; NOT to crawl, browse, or search the " +
-    "workspace's own code. Read-only. Returns JSON: {action, outcome, detail, ...payload}.",
+    "workspace's own code. Reach for it BEFORE reverse-engineering a third-party tool's behavior " +
+    "from error messages: when configuring, integrating, or debugging a library/SDK/service, the " +
+    "canonical answer - especially version-specific behavior or how two tools interact - is in the " +
+    "official docs, not in inference. Read-only. Returns JSON: {action, outcome, detail, ...payload}.",
   params: DocsParams,
   readOnly: true,
   execute: (args) => runDocs(args, liveDeps),
