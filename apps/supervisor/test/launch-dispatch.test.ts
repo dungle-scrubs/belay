@@ -155,6 +155,47 @@ test("a dead-root launch yields a failed result with the missing-folder reason a
   }
 });
 
+test("a home-abbreviated root is expanded before the launcher and the session-id derivation", async () => {
+  // The browser echoes inventory paths back as launch roots on resume/retry, and those are
+  // home-abbreviated for display (`~/dev/app`). The dispatcher must hand the launcher the REAL
+  // path or the missing-root gate stats the literal `~` and fails a live folder as missing.
+  const launched: { sessionId: string; root: string }[] = [];
+
+  const deps: SupervisorDeps = {
+    selfProducerId: PRODUCER_IDS.supervisor,
+    emit: (event) =>
+      transport.publishEvent(SUPERVISOR_SESSION_ID, {
+        ...event,
+        producerId: PRODUCER_IDS.supervisor,
+      }),
+    launch: (input) => {
+      launched.push(input);
+      return Promise.resolve("launched");
+    },
+    pickFolder: () => Promise.resolve({ cancelled: true }),
+    listProjects: () => [],
+    home: "/home/kev",
+  };
+  await subscribe(deps);
+
+  await transport.publishEvent(SUPERVISOR_SESSION_ID, {
+    ...events.sessionLaunchRequested({ requestId: "req-tilde", root: "~/dev/app" }),
+    producerId: PRODUCER_IDS.web,
+  });
+
+  const result = decodeTrevorEvent((await awaitResult("req-tilde")) ?? throwUnresolved());
+  assert.equal(result?.type, "session.launch.result");
+
+  if (result?.type === "session.launch.result") {
+    assert.equal(result.status, "launched");
+    assert.equal(result.sessionId, projectSessionId("/home/kev/dev/app"));
+  }
+
+  assert.deepEqual(launched, [
+    { sessionId: projectSessionId("/home/kev/dev/app"), root: "/home/kev/dev/app" },
+  ]);
+});
+
 test("a launcher failure becomes a failed result carrying the error, not a crash", async () => {
   const deps: SupervisorDeps = {
     selfProducerId: PRODUCER_IDS.supervisor,

@@ -1,3 +1,4 @@
+import { homedir } from "node:os";
 import {
   addProject,
   BELAY_HOME,
@@ -94,6 +95,9 @@ const deps: SupervisorDeps = {
   // a hung stat never blocks dispatch; the sidebar's missing marking and a launch's missing-root
   // failure can never disagree (plan 58.8).
   rootExists: directoryExistsAsync,
+  // The OS home for expanding home-abbreviated (`~/...`) roots the browser echoes back on
+  // resume/retry - without it the launch gate stats the literal `~` path and fails as missing.
+  home: homedir(),
   now: () => new Date().toISOString(),
   // MUST be the same identity `emit` stamps, or self-echo suppression breaks (the supervisor would act
   // on its own published results).

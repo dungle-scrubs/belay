@@ -73,6 +73,11 @@ export interface SupervisorDeps {
    *  stale network mount) never blocks the dispatch loop. When absent, records are reported
    *  unmarked (legacy wiring). */
   readonly rootExists?: (path: string) => boolean | Promise<boolean>;
+  /** The OS home directory, for expanding home-abbreviated (`~/...`) launch roots. Wire clients echo
+   *  inventory paths - which are home-abbreviated for display - back as launch roots on resume/retry,
+   *  and the launch missing-root gate stats them literally, so an unexpanded `~` root fails as
+   *  "project folder no longer exists". When absent, roots pass through verbatim (legacy wiring). */
+  readonly home?: string;
   /** ISO timestamp source for registry `updatedAt` stamps. */
   readonly now?: () => string;
   /** This supervisor's producer id, so it never acts on its own echoed results (self-echo suppression). */
@@ -134,13 +139,32 @@ export async function handleSupervisorEvent(
  * paired `session.launch.result`. A launcher failure (unresolvable/nonexistent root, spawn denied) is
  * caught and surfaced as a structured `failed` result on the control session - never a silent drop.
  */
+/** Expands a home-abbreviated (`~` / `~/...`) path against the OS home; any other path passes through. */
+function expandHome(path: string, home: string): string {
+  if (path === "~") {
+    return home;
+  }
+
+  return path.startsWith("~/") ? home + path.slice(1) : path;
+}
+
 async function handleLaunch(
   requestId: string,
-  root: string,
+  requestedRoot: string,
   deps: SupervisorDeps,
   sessionIdOverride?: string,
-  projectPath?: string,
+  requestedProjectPath?: string,
 ): Promise<void> {
+  // Expand before BOTH the session-id derivation and the launcher call: the launcher's missing-root
+  // gate and spawn cwd need the real path, and the derived id must match what the CLI derives from
+  // the same (absolute) root.
+  const root = deps.home ? expandHome(requestedRoot, deps.home) : requestedRoot;
+
+  const projectPath =
+    requestedProjectPath && deps.home
+      ? expandHome(requestedProjectPath, deps.home)
+      : requestedProjectPath;
+
   const sessionId = sessionIdOverride ?? projectSessionId(root);
   try {
     // Plan 58 M4: a fresh project-scoped session gets a `session.project` marker BEFORE the host
