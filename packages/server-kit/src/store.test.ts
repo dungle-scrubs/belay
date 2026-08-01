@@ -22,7 +22,7 @@ function restoreEnv(key: string, value: string | undefined): void {
 
 test("startStore reads the env port/host convention and prints the standard banner", async () => {
   process.env.TEST_STORE_PORT = "0";
-  delete process.env.TEST_STORE_HOST;
+  process.env.TEST_STORE_HOST = "";
   const lines: string[] = [];
   const originalLog = console.log;
   console.log = (line?: unknown) => {

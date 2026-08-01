@@ -24,14 +24,14 @@ export interface StartStoreOptions {
 
 export function startStore(options: StartStoreOptions): Promise<RunningServer> {
   const port = Number(process.env[`${options.envPrefix}_PORT`] ?? options.reservedPort);
-  const host = process.env[`${options.envPrefix}_HOST`];
+  const host = process.env[`${options.envPrefix}_HOST`] || "127.0.0.1";
   reportLegacyData(options);
   return startServer(options.build(), {
     port,
     host,
     onListen: (boundPort) => {
       console.log(
-        `[${options.name}] listening on http://${host ?? "127.0.0.1"}:${boundPort} ` +
+        `[${options.name}] listening on http://${host}:${boundPort} ` +
           `(${options.dataLabel}: ${abbreviateHome(options.dataPath)})`,
       );
     },
