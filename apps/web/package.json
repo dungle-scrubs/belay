@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "typecheck": "tsgo --noEmit -p tsconfig.json",
     "check:assistant-ui-drift": "bash scripts/assistant-ui-drift.sh",
-    "storybook": "storybook dev -p 17422",
+    "storybook": "storybook dev -p 17422 --host 127.0.0.1",
     "build-storybook": "storybook build",
     "test-storybook": "concurrently -k -s first -n sb,test \"http-server storybook-static --port 6006 --silent\" \"wait-on tcp:127.0.0.1:6006 && test-storybook --config-dir .storybook --url http://127.0.0.1:6006\""
   },
