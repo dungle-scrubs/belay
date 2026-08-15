@@ -1,6 +1,6 @@
-# Trevor Security Risks
+# Belay Security Risks
 
-Trevor is currently best treated as a trusted local developer tool with a
+Belay is currently best treated as a trusted local developer tool with a
 browser UI. It is not secure against a hostile browser, malicious extension,
 malicious local webpage, or shared-machine attacker.
 
@@ -11,7 +11,7 @@ local services, and the host treats those events as user intent. Some of those
 intents can trigger privileged local actions such as shell commands, editor
 opens, worktree changes, host restart, and model/tool execution.
 
-This means Trevor is safe only under a trusted-local-browser assumption unless
+This means Belay is safe only under a trusted-local-browser assumption unless
 the local HTTP/WebSocket services add authentication and origin enforcement.
 
 ## Findings
@@ -24,7 +24,7 @@ the local HTTP/WebSocket services add authentication and origin enforcement.
 - `producerId` is client-supplied and forgeable, so it should not be treated as
   authority.
 - The host runs commands/actions for any non-host event once it decodes as a
-  supported Trevor event.
+  supported Belay event.
 - The prompt shell lane can execute shell commands through the host. Its safety
   layer is a deny-list, not a sandbox.
 - `apps/blob-store/src/main.ts` logs a loopback URL but calls `listen(PORT)`
@@ -52,7 +52,7 @@ the local HTTP/WebSocket services add authentication and origin enforcement.
 
 1. Add a per-launch unguessable capability token required by the session-store,
    blob-store, web client, and host.
-2. Reject HTTP and WebSocket requests unless `Origin` is exactly Trevor's local
+2. Reject HTTP and WebSocket requests unless `Origin` is exactly Belay's local
    UI origin. Treat missing or unexpected origins conservatively.
 3. Bind every local service explicitly to `127.0.0.1`, including blob-store.
 4. Stop using `producerId` as an authority signal. Authenticate the publisher at
@@ -62,7 +62,7 @@ the local HTTP/WebSocket services add authentication and origin enforcement.
 6. Add CSP and, where practical, Trusted Types for the web UI.
 7. Keep durable secrets out of browser storage and rendered DOM. Store authority
    in the host, not the frontend.
-8. For stronger operational isolation, run Trevor in a dedicated browser profile
+8. For stronger operational isolation, run Belay in a dedicated browser profile
    or browser instance with extensions disabled.
 9. Audit every model- or network-sourced render path for injection (markdown,
    mermaid, syntax highlighting, Lucid artifacts, web fetch/search results,
@@ -74,7 +74,7 @@ the local HTTP/WebSocket services add authentication and origin enforcement.
 
 ## Security Model
 
-Until these fixes exist, Trevor's practical security model is:
+Until these fixes exist, Belay's practical security model is:
 
 - Trusted local user.
 - Trusted browser profile.
@@ -100,7 +100,7 @@ current code.
 Headline: the ledger's core-risk framing is correct and **all of its priority
 fixes except the blob-store bind remain open**. The concrete, fully-verified
 result is that a single hostile web page (or extension, or local process) visited
-while a Trevor session is live can achieve **arbitrary shell execution on the
+while a Belay session is live can achieve **arbitrary shell execution on the
 developer's machine** with no user interaction, because the local event boundary
 has no authentication and the host treats a client-supplied `producerId` as
 authority.
@@ -118,10 +118,10 @@ authority.
    subscriber - including the host's own stream subscription
    (`main.ts` `onEvent: handleEvent`).
 3. The host's only "gate" on acting is `isAnswerableProducer(producerId, self)`,
-   which is literally `producerId !== "trevor-host"`
+   which is literally `producerId !== "belay-host"`
    (`packages/session/src/identity.ts:57-70`) - an echo filter, not
    authentication - plus a `live && lease.isLeader()` liveness check. Any forged
-   `producerId` (e.g. `"trevor-web"`) passes.
+   `producerId` (e.g. `"belay-web"`) passes.
 4. A forged `user.shell` event reaches `runShellCommand`
    (`apps/agent-host/src/main.ts:989-1001`) ->
    `spawn(command, { shell: true })`
@@ -145,7 +145,7 @@ against the workspace (model-mediated, but a crafted prompt reliably drives it).
 
 - **B1 (critical, VERIFIED): forged inbound events drive privileged host
   actions; `producerId` is not authority.** Beyond `user.shell` (above), these
-  arms fire for any non-`trevor-host` producer under normal live+leader
+  arms fire for any non-`belay-host` producer under normal live+leader
   operation: `user.command` -> `/restart` (host re-exec; `args:"force"` bypasses
   the debug gate, `commands/lifecycle.ts:100`), `/cd <path>` (re-exec at an
   attacker-chosen cwd, `session/session-switch.ts:214`),
@@ -233,18 +233,18 @@ against the workspace (model-mediated, but a crafted prompt reliably drives it).
 - **S1 (medium, VERIFIED, corrects the original ledger): the prompt-recall
   buffer is in `sessionStorage`, not `localStorage`, and the send-queue does not
   persist at all.** `apps/web/src/composer-storage.ts` stores the unsubmitted
-  draft (`trevor.draft.*`, cleared on submit/`/clear`) and a **capped-50**
-  recall ring (`trevor.history.*`, `HISTORY_CAP=50`) in `sessionStorage`
+  draft (`belay.draft.*`, cleared on submit/`/clear`) and a **capped-50**
+  recall ring (`belay.history.*`, `HISTORY_CAP=50`) in `sessionStorage`
   (tab-scoped, cleared on tab close) - a smaller blast radius than the ledger's
   "localStorage" wording implies. The durable-follow-up send queue is memory-only
   (`hooks/use-send-queue.ts`, React state). The confidentiality exposure (an XSS
   reads the draft + <=50 recall prompts) is still real. The recall cap (fix #10)
   is DONE; a "clear recall history" control and secret-shaped-line trimming are
-  still MISSING. Fix: add a clear-history control that drops `trevor.history.*`;
+  still MISSING. Fix: add a clear-history control that drops `belay.history.*`;
   optionally strip `sk-...`/`bearer ...`-shaped lines before `appendHistory`.
 
 - **S2 (CONFIRMED SAFE): no secret crosses to the browser.** No API key, auth
-  token, 1Password/OP secret, or `~/.pi/auth.json` / `~/.trevor` **content**
+  token, 1Password/OP secret, or `~/.pi/auth.json` / `~/.belay` **content**
   reaches the web client. The `host.online` payload, `SourceSummary` (auth STATE
   enum only), `host.sourceAuth` (public device-code `verificationUrl` + user
   code, never a key), doctor snapshot

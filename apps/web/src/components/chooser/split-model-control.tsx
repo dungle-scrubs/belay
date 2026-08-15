@@ -1,4 +1,4 @@
-import { type ModelRef, modelRefKey, type QuickPickerGroup, sameModel } from "@trevor/session";
+import { type ModelRef, modelRefKey, type QuickPickerGroup, sameModel } from "@belay/session";
 import { Check, ChevronDown, Sparkles } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";

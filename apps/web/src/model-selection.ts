@@ -9,7 +9,7 @@ import {
   quickPickerModels,
   type ReasoningSurface,
   type SourceSummary,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * The model-selection projection (D-065 M3): during migration the full chooser + split control are fed

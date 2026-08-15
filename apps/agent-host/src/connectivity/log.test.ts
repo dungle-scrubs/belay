@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { InternetSnapshot } from "@belay/session";
 import { fmtFields } from "@host/transport/log";
-import type { InternetSnapshot } from "@trevor/session";
 import { test } from "vitest";
 import { InternetMonitor, type ProbeLogLine } from "./probe";
 

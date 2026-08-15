@@ -4,11 +4,11 @@ import {
   type ManifestSectionId,
   orderSections,
   renderManifestSections,
-} from "@trevor/session";
+} from "@belay/session";
 import { currentManifest } from "./source";
 
 /**
- * The built-in `trevor-expert` QUERY ORCHESTRATION (plan 14, M8/M9). trevor-expert explains THIS host from
+ * The built-in `belay-expert` QUERY ORCHESTRATION (plan 14, M8/M9). belay-expert explains THIS host from
  * its own deterministic capability manifest: given a question, it reads the manifest ON DEMAND (never dumped
  * into every prompt), routes to the few relevant sections, and RENDERS only those - a bounded answer with
  * provenance and explicit unknown/unavailable states.
@@ -19,19 +19,19 @@ import { currentManifest } from "./source";
  * not general interpolation is enabled. It is read-only end to end: it never mutates state, grants a
  * permission, or starts work - it reads a description and renders it.
  *
- * Responsible for: routing a trevor-expert question to a bounded set of manifest sections and
+ * Responsible for: routing a belay-expert question to a bounded set of manifest sections and
  * rendering the answer from the live manifest.
  * Not for: composing the manifest itself - build.ts and the ./source seam own that.
  */
 
 /** The model-facing tool name (its def is the discovery metadata - discoverable, but not dumped). */
-export const TREVOR_EXPERT_NAME = "trevor_expert";
+export const BELAY_EXPERT_NAME = "belay_expert";
 
 /** The discovery description: what it does + when to reach for it (the trigger the model keys off). */
-export const TREVOR_EXPERT_DESCRIPTION =
-  "Answer questions about THIS Trevor host's own capabilities - its tools, slash commands, output styles, " +
+export const BELAY_EXPERT_DESCRIPTION =
+  "Answer questions about THIS Belay host's own capabilities - its tools, slash commands, output styles, " +
   "skills, agents, model providers/catalog, doctor health, protocol/version, and workspace - from the live, " +
-  "host-generated capability manifest. Use this when asked what Trevor can do, which tools/commands/skills " +
+  "host-generated capability manifest. Use this when asked what Belay can do, which tools/commands/skills " +
   "exist, what models are available, or how a built-in feature works. Read-only; it never changes anything.";
 
 /** The max sections a single expert answer loads - keeps every answer bounded. */
@@ -69,10 +69,10 @@ const ROUTES: readonly Route[] = [
 /** The small default overview for a question that matches no route. */
 const DEFAULT_SECTIONS: readonly ManifestSectionId[] = ["commands", "tools"];
 
-/** Footer listing the areas trevor-expert can answer about, so an unrouted/unknown topic gets an explicit
+/** Footer listing the areas belay-expert can answer about, so an unrouted/unknown topic gets an explicit
  *  pointer instead of a fabricated answer (M9: explicit unknown states). */
 const EXPERT_AREAS_FOOTER =
-  "Ask trevor-expert about: tools, commands, styles, skills, agents, mcp, lsp, hooks, docs, doctor, " +
+  "Ask belay-expert about: tools, commands, styles, skills, agents, mcp, lsp, hooks, docs, doctor, " +
   "providers/catalog, runtime, protocol, or workspace.";
 
 /**
@@ -123,8 +123,13 @@ export async function answerExpertQuery(
   const getManifest = options.getManifest ?? currentManifest;
   const manifest = await getManifest("expert");
   if (!manifest) {
-    return "trevor-expert: the capability manifest is unavailable (no live host on this session).";
+    return "belay-expert: the capability manifest is unavailable (no live host on this session).";
   }
   const body = renderManifestSections(manifest, selectExpertSections(question));
-  return `trevor-expert (from the live capability manifest):\n\n${body}\n\n${EXPERT_AREAS_FOOTER}`;
+  return `belay-expert (from the live capability manifest):\n\n${body}\n\n${EXPERT_AREAS_FOOTER}`;
 }
+
+/** @deprecated Use BELAY_EXPERT_NAME */
+export const TREVOR_EXPERT_NAME = BELAY_EXPERT_NAME;
+/** @deprecated Use BELAY_EXPERT_DESCRIPTION */
+export const TREVOR_EXPERT_DESCRIPTION = BELAY_EXPERT_DESCRIPTION;

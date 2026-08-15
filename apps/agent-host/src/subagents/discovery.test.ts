@@ -12,7 +12,7 @@ import type { AgentDefinition } from "./discovery";
  * clamped to read-only tools.
  */
 
-const dir = mkdtempSync(join(tmpdir(), "trevor-agents-"));
+const dir = mkdtempSync(join(tmpdir(), "belay-agents-"));
 // A user-defined agent that overrides nothing (a new id) with an explicit, narrow tool allow-list.
 mkdirSync(join(dir, "researcher"), { recursive: true });
 writeFileSync(

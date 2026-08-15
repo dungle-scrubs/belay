@@ -1,3 +1,4 @@
+import { events, freshSessionId, type SessionTransport, toPublishInput } from "@belay/session";
 import type { CompactionController } from "@host/agent/compaction-controller";
 import type { ConversationLog } from "@host/agent/conversation-log";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
@@ -6,7 +7,6 @@ import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import { events, freshSessionId, type SessionTransport, toPublishInput } from "@trevor/session";
 import { Effect, Fiber } from "effect";
 import { interpretFiberExit, interruptFiber } from "../effect/fiber-exit";
 import { parseHandoff } from "./handoff";

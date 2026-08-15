@@ -6,10 +6,10 @@ import { createCappedJsonlWriter } from "./telemetry-jsonl";
 /**
  * Opt-in LOCAL provider-attempt tracing (plan 13 M6). When `TREVOR_PROVIDER_TRACE=1`, each provider
  * attempt (one model step) is appended as a bounded, redacted JSON line to
- * `TREVOR_STATE_HOME/otel/provider-attempts.jsonl` - the deep-telemetry evidence for debugging a flaky
+ * `BELAY_STATE_HOME/otel/provider-attempts.jsonl` - the deep-telemetry evidence for debugging a flaky
  * provider (failure class, attempt/retry state, token counts, timing) WITHOUT the raw prompt, transcript,
  * tool output, or provider body. It is DISABLED by default; a disabled writer is a no-op that touches no
- * disk. Node-only (fs), reached through the `@trevor/session/telemetry-provider-trace` subpath so it never
+ * disk. Node-only (fs), reached through the `@belay/session/telemetry-provider-trace` subpath so it never
  * bundles into the browser. Best-effort + byte-capped, exactly like the file sink.
  *
  * These records are diagnostic evidence only (D-008): they are never read back as a tool-output cache or
@@ -19,7 +19,7 @@ import { createCappedJsonlWriter } from "./telemetry-jsonl";
 export interface ProviderAttemptRecord {
   readonly provider: string;
   readonly model: string;
-  /** An id correlating this attempt to its turn. The trace is LOCAL-ONLY (under TREVOR_STATE_HOME), so a
+  /** An id correlating this attempt to its turn. The trace is LOCAL-ONLY (under BELAY_STATE_HOME), so a
    *  run id is acceptable here - unlike a metric label, this file never leaves the machine. */
   readonly attemptId: string;
   readonly outcome: "ok" | "error";

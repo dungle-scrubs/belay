@@ -1,13 +1,13 @@
+import { storagePathByName } from "@belay/session/node-paths";
 import { loadJsonConfig, writeJsonConfig } from "@host/boot/config";
 import { asNonEmptyString, asRecord } from "@host/boot/decode";
-import { storagePathByName } from "@trevor/session/node-paths";
 import type { HookDefinition } from "./config";
 
 /**
  * The hook approval store and THE execution gate (plan 25 M2, D-006). Approval is explicit
  * trust: a project/user hook NEVER executes before the user approves its current trust hash,
  * and any change to config or referenced scripts re-closes the gate until re-approval.
- * Approvals live in `<TREVOR_STATE_HOME>/hooks-approvals.json` (machine-local runtime state,
+ * Approvals live in `<BELAY_STATE_HOME>/hooks-approvals.json` (machine-local runtime state,
  * routed through the storage inventory) keyed by {@link hookApprovalKey}, each record holding
  * the approved `sha256:` hash and when it was granted. State transitions are pure - callers
  * load, transform, save - so the store stays inspectable and unit-testable without disk. The
@@ -31,7 +31,7 @@ export interface HookApprovalsState {
 
 export const EMPTY_HOOK_APPROVALS: HookApprovalsState = { approvals: {} };
 
-/** The storage-inventory name of the approvals file owned by `@trevor/session/node-paths`. */
+/** The storage-inventory name of the approvals file owned by `@belay/session/node-paths`. */
 const HOOK_APPROVALS_ENTRY = "hook-approvals";
 
 /** The approvals file under the state root, resolved through the root-policy inventory. */

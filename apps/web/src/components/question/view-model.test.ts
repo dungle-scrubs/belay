@@ -160,9 +160,9 @@ test("buildAnswer: single choice carries the selection and merges choice content
 
 test("buildAnswer: free text carries text and no selection", () => {
   let d = emptyDraft(fx.freeText);
-  d = setCustomText(d, defined(fx.freeText.questions[0]), "trevor-kit");
+  d = setCustomText(d, defined(fx.freeText.questions[0]), "belay-kit");
   const ans = buildAnswer(fx.freeText, d);
-  assert.equal(defined(ans.questions[0]).text, "trevor-kit");
+  assert.equal(defined(ans.questions[0]).text, "belay-kit");
   assert.equal(defined(ans.questions[0]).selected, undefined);
 });
 

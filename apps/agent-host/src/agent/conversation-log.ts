@@ -1,4 +1,4 @@
-import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
+import { decodeTrevorEvent, type SessionEvent } from "@belay/session";
 import type { ChatMessage } from "../providers";
 import { clipLine } from "../tools/shared";
 import { buildHistory } from "./history-projection";

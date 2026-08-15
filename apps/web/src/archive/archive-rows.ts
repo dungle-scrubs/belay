@@ -3,7 +3,7 @@ import {
   permanentDeleteEligibility,
   type SessionSummary,
   sortInventory,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * The archive-browser read model (plan 04): a pure projection of the session inventory into the rows

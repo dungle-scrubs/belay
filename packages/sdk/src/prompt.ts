@@ -7,7 +7,7 @@ import {
   type ModelSwitchInitiator,
   type ModelSwitchOutcome,
   type SessionEvent,
-} from "@trevor/session";
+} from "@belay/session";
 import { awaitStreamResult } from "./await-stream";
 import type { TrevorClient } from "./client";
 import { SdkError, urlClass } from "./errors";

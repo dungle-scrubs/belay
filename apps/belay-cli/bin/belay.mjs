@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// The `trevor` terminal executable (D-085). The CLI itself is TypeScript run through tsx (the repo
+// The `belay` terminal executable (D-085). The CLI itself is TypeScript run through tsx (the repo
 // has no build step); this shim resolves the workspace tsx binary and execs `src/main.ts`, forwarding
-// argv. Installed on PATH via `pnpm --filter @trevor/cli link --global`, or run as `pnpm trevor`.
+// argv. Installed on PATH via `pnpm --filter @belay/cli link --global`, or run as `pnpm belay`.
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";

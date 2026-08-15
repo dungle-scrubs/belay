@@ -1,4 +1,4 @@
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary } from "@belay/session";
 
 /**
  * Resolves a session's project path (plan 58 M3): the durable `projectPath` marker wins, then

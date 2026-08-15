@@ -1,6 +1,6 @@
 # apps - Agent Instructions
 
-`apps/` holds every Trevor application, and these rules cover all of them:
+`apps/` holds every Belay application, and these rules cover all of them:
 
 - **`apps/web`** - the browser frontend: React 19 + Vite, a Tether
   WebSocket participant.
@@ -16,7 +16,7 @@ React-only and apply to the frontend (`apps/web`), never to the Node host.
 
 Scope: every app under `apps/`. Today only `apps/agent-host` has adopted
 Effect (the stable v3 `effect` core). `apps/web` does not depend on Effect:
-its wire decoding rides the Schema codecs owned by `@trevor/session`, which
+its wire decoding rides the Schema codecs owned by `@belay/session`, which
 collapse to plain types, callbacks, and Promises at the package edge.
 
 Follow the house policy in the `effect-standards` skill: **adopt Effect only
@@ -49,7 +49,7 @@ and the boundaries it deliberately keeps imperative.
   module, and do not let an isolated Effect island fight a surrounding sea of
   plain Promises.
 - **Schema / decode at trust boundaries.** Decoding wire data (e.g. Tether
-  envelopes via `@trevor/tether`) returns an `Either`; branch on it explicitly
+  envelopes via `@belay/tether`) returns an `Either`; branch on it explicitly
   (`Either.isLeft`, as in `apps/agent-host/src/main.ts`) rather than trusting
   the shape. One schema is the source of truth for parse, decode, and typed
   error.
@@ -107,7 +107,7 @@ dance.
 3. **One-shot mount effect with no cleanup and no semantics** - `useMount` is
    fine but not forced for a true one-liner.
 4. **When it fights the session transport or React.** Keep the
-   `@trevor/session` boundary (Schema decode, WS client) and React boundaries
+   `@belay/session` boundary (Schema decode, WS client) and React boundaries
    clean; do not wrap transport-owned lifecycle in an ahooks hook just to use
    one.
 

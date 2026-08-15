@@ -3,8 +3,8 @@ import { test } from "vitest";
 import { type CommandRow, filterRows, groupRows, toneClass } from "./types";
 
 const rows: CommandRow[] = [
-  { id: "a", label: "sidebar git", metadata: "~/dev/trevor", status: "running", group: "proj" },
-  { id: "b", label: "compaction", metadata: "~/dev/trevor", keywords: ["fold"], group: "proj" },
+  { id: "a", label: "sidebar git", metadata: "~/dev/belay", status: "running", group: "proj" },
+  { id: "b", label: "compaction", metadata: "~/dev/belay", keywords: ["fold"], group: "proj" },
   { id: "c", label: "opchain audit", metadata: "~/dev/opchain", status: "stale", group: "other" },
 ];
 
@@ -33,9 +33,9 @@ test("filterRows matches label, metadata, status, and keywords case-insensitivel
 });
 
 test("filterRows is AND-of-tokens across the haystack", () => {
-  // both tokens must appear; "trevor" + "compaction" only co-occur in row b
+  // both tokens must appear; "belay" + "compaction" only co-occur in row b
   assert.deepEqual(
-    filterRows(rows, "trevor compaction").map((r) => r.id),
+    filterRows(rows, "belay compaction").map((r) => r.id),
     ["b"],
   );
   assert.deepEqual(filterRows(rows, "opchain running"), []);

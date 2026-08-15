@@ -1,5 +1,5 @@
+import type { InternetSnapshot } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { InternetSnapshot } from "@trevor/session";
 import { InternetStatus } from "./internet-status";
 
 /**

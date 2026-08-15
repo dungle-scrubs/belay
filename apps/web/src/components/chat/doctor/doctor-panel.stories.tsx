@@ -1,5 +1,5 @@
+import type { DoctorSnapshot } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { DoctorSnapshot } from "@trevor/session";
 import { useState } from "react";
 import { storyFrame } from "@/components/chat/story-frame";
 import {

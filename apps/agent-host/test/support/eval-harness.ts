@@ -1,32 +1,32 @@
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { publishTurn } from "@host/agent/turn";
-import { interruptFiber } from "@host/effect/fiber-exit";
-import type { ChatMessage, Provider } from "@host/providers";
 import {
   type ArtifactSource,
   createTrevorClient,
   type TranscriptEntry,
   type TrevorClient,
-} from "@trevor/sdk";
+} from "@belay/sdk";
 import {
   type ArtifactRef,
   decodeTrevorEvent,
   PRODUCER_IDS,
   type SessionEvent,
   type SessionTransport,
-} from "@trevor/session";
-import { testIdentity } from "@trevor/session/testing";
-import { type BootedBlob, bootBlob, bootStore } from "@trevor/test-kit/boot";
+} from "@belay/session";
+import { testIdentity } from "@belay/session/testing";
+import { type BootedBlob, bootBlob, bootStore } from "@belay/test-kit/boot";
+import { publishTurn } from "@host/agent/turn";
+import { interruptFiber } from "@host/effect/fiber-exit";
+import type { ChatMessage, Provider } from "@host/providers";
 import { Effect, Fiber } from "effect";
 import { fakeProvider, transportEmit } from "./fake-provider";
 
-/** The booted session-store handle test-kit returns (derived so the host needs no `@trevor/server-kit` dep). */
+/** The booted session-store handle test-kit returns (derived so the host needs no `@belay/server-kit` dep). */
 type BootedStore = Awaited<ReturnType<typeof bootStore>>;
 
 /**
- * The eval/automation harness (plan 28 M10): drive Trevor end-to-end through the SAME `@trevor/sdk`
+ * The eval/automation harness (plan 28 M10): drive Belay end-to-end through the SAME `@belay/sdk`
  * headless workflow layer an external eval or automation would use, and get back a structured run record
  * to score. It boots the real local stores (test-kit owns that lifecycle), binds an SDK client, and - in
  * the deterministic `fake` lane - attaches a minimal fake-provider host that reacts to the client's

@@ -61,9 +61,9 @@ test("buildSystemPrompt states the confinement rule verbatim - the tool-selectio
 
 test("buildSystemPrompt guides the model to use doctor only as a diagnostic, not routine context", () => {
   const prompt = buildSystemPrompt(TOOLS, { workspaceRoot: "/ws", cwd: "/ws" });
-  // It explains what doctor is (Trevor's own host self-diagnostic)...
+  // It explains what doctor is (Belay's own host self-diagnostic)...
   assert.ok(
-    prompt.includes("The doctor tool runs Trevor's own host self-diagnostic"),
+    prompt.includes("The doctor tool runs Belay's own host self-diagnostic"),
     "the prompt describes the doctor self-diagnostic tool",
   );
   // ...and pins the constraint that it is NOT routine context-gathering for ordinary coding.
@@ -209,9 +209,9 @@ test("buildSystemPrompt frames mcp as the configured-external-integrations tool,
     prompt.includes("The mcp tool talks to the user's configured MCP servers"),
     "the prompt describes mcp as the configured MCP-server surface",
   );
-  // ...and pins the preference order: built-in Trevor tools first, MCP only when they don't fit.
+  // ...and pins the preference order: built-in Belay tools first, MCP only when they don't fit.
   assert.ok(
-    prompt.includes("prefer Trevor's built-in tools when they fit"),
+    prompt.includes("prefer Belay's built-in tools when they fit"),
     "the prompt prefers built-in tools over MCP",
   );
 });
@@ -495,7 +495,7 @@ test("M2: a small window (< 16k) omits the detailed LSP/MCP/docs/archive/tool_sc
     "Use archive_read with path for local zip inspection",
     "The tool_script tool runs a short READ-ONLY TypeScript script",
     "Use ast_grep for STRUCTURAL",
-    "The doctor tool runs Trevor's own host self-diagnostic",
+    "The doctor tool runs Belay's own host self-diagnostic",
     "do NOT invent hidden loops",
   ]) {
     assert.ok(!minimal.includes(dropped), `minimal tier omits: ${dropped}`);
@@ -504,7 +504,7 @@ test("M2: a small window (< 16k) omits the detailed LSP/MCP/docs/archive/tool_sc
 
 test("M2: the minimal tier still keeps identity, execution context, core coding guidance, and confinement", () => {
   const minimal = buildSystemPrompt(TOOLS, { ...WS, contextWindow: 8_000 });
-  assert.ok(minimal.includes("You are Trevor"), "identity is retained");
+  assert.ok(minimal.includes("You are Belay"), "identity is retained");
   assert.ok(minimal.includes("Workspace root: /ws"), "execution context is retained");
   assert.ok(
     minimal.includes("Use glob to discover files by name or path, and grep to find exact strings"),
@@ -555,8 +555,8 @@ test("M2: the core tier keeps a CONDENSED form of the high-value blocks (retaine
 test("M2: the core tier DROPS the niche low-value blocks entirely", () => {
   const core = buildSystemPrompt(TOOLS, { ...WS, contextWindow: 32_000 });
   for (const dropped of [
-    "The doctor tool runs Trevor's own host self-diagnostic",
-    "The trevor_expert tool answers questions",
+    "The doctor tool runs Belay's own host self-diagnostic",
+    "The belay_expert tool answers questions",
     "Use archive_unpack only when the user asks",
     "Firecrawl is a scarce final fallback",
     "never wait for LSP before editing",
@@ -601,5 +601,5 @@ test("M4: a large native contextLength but a small served window still gets the 
     !prompt.includes("The mcp tool talks to the user's configured MCP servers"),
     "the served window (8k) drives the tier, not the 200k native contextLength",
   );
-  assert.ok(prompt.includes("You are Trevor"), "the minimal prompt is still well-formed");
+  assert.ok(prompt.includes("You are Belay"), "the minimal prompt is still well-formed");
 });

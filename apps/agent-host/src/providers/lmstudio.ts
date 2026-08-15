@@ -3,8 +3,9 @@
  * admission-gated Effect/Provider shim over LmStudioClient.
  * Not for: the load lifecycle and context reloads; those live in lmstudio-client.ts.
  */
+
+import { DEFAULT_LMSTUDIO_URL } from "@belay/session";
 import { envNumber } from "@host/boot/env";
-import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 import { Effect, FiberRef, Stream } from "effect";
 import type { LocalModelTarget } from "../admission/contract";
 import { admittedStream } from "../admission/effect";

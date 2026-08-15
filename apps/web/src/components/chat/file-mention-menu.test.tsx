@@ -1,5 +1,5 @@
+import type { FileMatch } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { FileMatch } from "@trevor/session";
 import { describe, expect, test, vi } from "vitest";
 import { FileMentionMenu } from "./file-mention-menu";
 

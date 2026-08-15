@@ -1,4 +1,4 @@
-import { type SessionEvent, seedTangentPrompt } from "@trevor/session";
+import { type SessionEvent, seedTangentPrompt } from "@belay/session";
 import { toTranscript } from "@/transcript";
 import type { TangentTurn } from "./tangent-shell";
 

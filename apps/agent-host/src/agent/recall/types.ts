@@ -1,4 +1,4 @@
-import type { RecallKind, RecallOrigin } from "@trevor/session";
+import type { RecallKind, RecallOrigin } from "@belay/session";
 
 /**
  * Session recall (D-044) engine-internal types. Recall searches the current project's DURABLE
@@ -8,7 +8,7 @@ import type { RecallKind, RecallOrigin } from "@trevor/session";
  *
  * The SERIALIZABLE result types (RecallResult, RecallFinding, RecallCitedSource, RecallDiagnostic,
  * RecallStatus, RecallOrigin, RecallKind) are the cross-surface wire contract and live in
- * `@trevor/session`; they are re-exported here so the engine reads one set of names. The types
+ * `@belay/session`; they are re-exported here so the engine reads one set of names. The types
  * below (records, anchors, neighborhoods, filters) never cross the boundary, so they stay local.
  *
  * Responsible for: the recall engine's internal record/anchor/neighborhood/filter types, plus
@@ -24,7 +24,7 @@ export type {
   RecallOrigin,
   RecallResult,
   RecallStatus,
-} from "@trevor/session";
+} from "@belay/session";
 
 /** Stable provenance for the session a recall record originated in, used for citations. */
 export interface RecallSessionRef {

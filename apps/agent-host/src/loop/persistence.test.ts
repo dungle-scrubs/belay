@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { LoopSnapshot } from "@trevor/session";
+import type { LoopSnapshot } from "@belay/session";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createLoopPersistence } from "./persistence";
 import type { LoopIterationRunner } from "./runner";
@@ -25,7 +25,7 @@ let dir: string;
 let file: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "trevor-loop-persist-"));
+  dir = mkdtempSync(join(tmpdir(), "belay-loop-persist-"));
   file = join(dir, "loops.json");
 });
 afterEach(() => rmSync(dir, { recursive: true, force: true }));

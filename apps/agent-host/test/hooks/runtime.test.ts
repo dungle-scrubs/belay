@@ -385,7 +385,7 @@ describe("hasHooks - the hot-path predicate (25 simplify E1)", () => {
 
 describe("per-workspace project approvals (25 simplify S1)", () => {
   test("a project hook approved under workspace A is unapproved under workspace B", async () => {
-    const root = mkdtempSync(join(tmpdir(), "trevor-hooks-s1-"));
+    const root = mkdtempSync(join(tmpdir(), "belay-hooks-s1-"));
     try {
       // Two workspaces with BYTE-IDENTICAL project config (and the same fixture command), one
       // shared approvals file. Approval is granted under workspace A's key only.
@@ -404,8 +404,8 @@ describe("per-workspace project approvals (25 simplify S1)", () => {
       mkdirSync(userConfigDir, { recursive: true });
       const workspaces = ["ws-a", "ws-b"].map((name) => {
         const workspaceRoot = join(root, name);
-        mkdirSync(join(workspaceRoot, ".trevor"), { recursive: true });
-        const projectHooksPath = join(workspaceRoot, ".trevor", "hooks.json");
+        mkdirSync(join(workspaceRoot, ".belay"), { recursive: true });
+        const projectHooksPath = join(workspaceRoot, ".belay", "hooks.json");
         writeFileSync(projectHooksPath, hooksJson);
         return { workspaceRoot, projectHooksPath };
       });

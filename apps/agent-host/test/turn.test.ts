@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
+import type { TrevorEventInput } from "@belay/session";
+import { METRIC_NAMES, SPAN_NAMES } from "@belay/session/telemetry";
+import type {
+  ProviderAttemptRecord,
+  ProviderTraceWriter,
+} from "@belay/session/telemetry-provider-trace";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { publishTurn } from "@host/agent/turn";
 import type { ChatMessage, Provider, ProviderEvent } from "@host/providers";
 import { providerIncidents } from "@host/providers";
 import { ProviderUnavailable } from "@host/providers/errors";
-import type { TrevorEventInput } from "@trevor/session";
-import { METRIC_NAMES, SPAN_NAMES } from "@trevor/session/telemetry";
-import type {
-  ProviderAttemptRecord,
-  ProviderTraceWriter,
-} from "@trevor/session/telemetry-provider-trace";
-import { recordingTelemetrySink } from "@trevor/test-kit";
 import { Effect, Fiber, Stream } from "effect";
 import { test } from "vitest";
 import { collectingEmit, fakeProvider, runTurn } from "./support/fake-provider";
@@ -506,7 +506,7 @@ test("cancellation interrupts a streaming turn before it completes", async () =>
   assert.equal(completed[0]?.payload.cancelled, true);
 });
 
-test("a turn emits a trevor.turn span (provider + model + ok status) with tool spans nested under it", async () => {
+test("a turn emits a belay.turn span (provider + model + ok status) with tool spans nested under it", async () => {
   const recorder = recordingTelemetrySink();
   const { layer } = collectingEmit();
   await Effect.runPromise(

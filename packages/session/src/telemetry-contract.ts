@@ -136,34 +136,34 @@ export function safeAttributes(attributes: Readonly<Record<string, unknown>>): T
   return safe;
 }
 
-/** The span names Trevor emits at public module boundaries (contract-owned, not ad-hoc per module). Kept
+/** The span names Belay emits at public module boundaries (contract-owned, not ad-hoc per module). Kept
  *  to the set instrumentation actually produces; a new boundary adds its name here when it is wired. */
 export const SPAN_NAMES = {
-  turn: "trevor.turn",
-  providerAttempt: "trevor.provider.attempt",
-  tool: "trevor.tool",
-  toolScript: "trevor.tool_script",
-  storeAppend: "trevor.store.append",
-  storeCircuitClosed: "trevor.store.circuit_closed",
-  storeCircuitOpen: "trevor.store.circuit_open",
-  storeDiag: "trevor.store.diag",
-  storeSlowQuery: "trevor.store.slow_query",
-  supervisorStoreWedgeDetected: "trevor.supervisor.store_wedge_detected",
-  supervisorStoreRestarted: "trevor.supervisor.store_restarted",
-  supervisorStoreRecoveryExhausted: "trevor.supervisor.store_recovery_exhausted",
-  blobIo: "trevor.blob.io",
-  cliLaunch: "trevor.cli.launch",
-  webRender: "trevor.web.render",
+  turn: "belay.turn",
+  providerAttempt: "belay.provider.attempt",
+  tool: "belay.tool",
+  toolScript: "belay.tool_script",
+  storeAppend: "belay.store.append",
+  storeCircuitClosed: "belay.store.circuit_closed",
+  storeCircuitOpen: "belay.store.circuit_open",
+  storeDiag: "belay.store.diag",
+  storeSlowQuery: "belay.store.slow_query",
+  supervisorStoreWedgeDetected: "belay.supervisor.store_wedge_detected",
+  supervisorStoreRestarted: "belay.supervisor.store_restarted",
+  supervisorStoreRecoveryExhausted: "belay.supervisor.store_recovery_exhausted",
+  blobIo: "belay.blob.io",
+  cliLaunch: "belay.cli.launch",
+  webRender: "belay.web.render",
 } as const;
 
-/** The low-cardinality metric names Trevor records (contract-owned; only the emitted set). */
+/** The low-cardinality metric names Belay records (contract-owned; only the emitted set). */
 export const METRIC_NAMES = {
-  turnDuration: "trevor.turn.duration",
-  turnStop: "trevor.turn.stop",
-  modelSwitch: "trevor.turn.model_switch",
-  usageLimit: "trevor.turn.usage_limit",
-  retryCount: "trevor.provider.retries",
-  blobOutcome: "trevor.blob.outcome",
+  turnDuration: "belay.turn.duration",
+  turnStop: "belay.turn.stop",
+  modelSwitch: "belay.turn.model_switch",
+  usageLimit: "belay.turn.usage_limit",
+  retryCount: "belay.provider.retries",
+  blobOutcome: "belay.blob.outcome",
 } as const;
 
 /** A telemetry span name (one of the contract's {@link SPAN_NAMES}). */
@@ -313,13 +313,13 @@ function emitSpan(
   safeEmitSpan(sink, { name, attributes, status, durationMs, ...(error ? { error } : {}) });
 }
 
-/** One of Trevor's telemetry-emitting services (the OTel `service.name` + Sentry project scope). */
+/** One of Belay's telemetry-emitting services (the OTel `service.name` + Sentry project scope). */
 export type TelemetryService =
   | "agent-host"
   | "session-store"
   | "blob-store"
   | "supervisor"
-  | "trevor-cli"
+  | "belay-cli"
   | "web";
 
 /**
@@ -332,8 +332,8 @@ export function resourceAttributes(
   version: string | null,
 ): TelemetryAttributes {
   return {
-    "service.name": `trevor-${service}`,
+    "service.name": `belay-${service}`,
     "service.version": version ?? "dev",
-    "telemetry.sdk.name": "trevor",
+    "telemetry.sdk.name": "belay",
   };
 }

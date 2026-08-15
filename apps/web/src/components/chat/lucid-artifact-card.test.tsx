@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { lucidArtifactRef } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { lucidArtifactRef } from "@trevor/session";
 import { test } from "vitest";
 import { LucidArtifactCard } from "./lucid-artifact-card";
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { events, PRODUCER_IDS } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+import { events, PRODUCER_IDS } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import { createModelSourceResolver, type ProviderRegistry } from "./model-source-resolver";

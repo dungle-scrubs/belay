@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 import { defaultHookDiscoveryRoots, discoverHooks, PROJECT_HOOKS_FILE } from "./discovery";
 
 const roots = {
-  projectHooksPath: "/repo/.trevor/hooks.json",
+  projectHooksPath: "/repo/.belay/hooks.json",
   userHooksPath: "/home/user/.config-home/hooks.json",
 };
 
@@ -125,10 +125,10 @@ describe("discoverHooks - tolerance", () => {
 });
 
 describe("defaultHookDiscoveryRoots", () => {
-  test("project hooks live under .trevor/ in the workspace; user hooks under the config home", () => {
+  test("project hooks live under .belay/ in the workspace; user hooks under the config home", () => {
     const defaults = defaultHookDiscoveryRoots("/some/workspace");
     expect(defaults.projectHooksPath).toBe(join("/some/workspace", PROJECT_HOOKS_FILE));
-    expect(PROJECT_HOOKS_FILE).toBe(join(".trevor", "hooks.json"));
+    expect(PROJECT_HOOKS_FILE).toBe(join(".belay", "hooks.json"));
     expect(defaults.userHooksPath.endsWith("hooks.json")).toBe(true);
   });
 });

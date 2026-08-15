@@ -1,13 +1,13 @@
+import type { CapabilityManifest, ManifestScope, ManifestSection } from "@belay/session";
+import { MANIFEST_VERSION } from "@belay/session";
 import { resolveInterpolationConfig } from "@host/commands/interpolation";
-import type { CapabilityManifest, ManifestScope, ManifestSection } from "@trevor/session";
-import { MANIFEST_VERSION } from "@trevor/session";
 import { describe, expect, it } from "vitest";
 import {
   answerExpertQuery,
+  BELAY_EXPERT_DESCRIPTION,
+  BELAY_EXPERT_NAME,
   MAX_EXPERT_SECTIONS,
   selectExpertSections,
-  TREVOR_EXPERT_DESCRIPTION,
-  TREVOR_EXPERT_NAME,
 } from "./expert";
 
 /** A manifest with a few named sections, for the routing/rendering assertions. */
@@ -37,16 +37,16 @@ const CATALOG_SECTION: ManifestSection = {
   items: [{ id: "lmstudio", label: "lmstudio" }],
 };
 
-describe("trevor-expert discovery metadata (M8)", () => {
+describe("belay-expert discovery metadata (M8)", () => {
   it("has a stable name and a description that states what it does + when to use it (triggers)", () => {
-    expect(TREVOR_EXPERT_NAME).toBe("trevor_expert");
-    expect(TREVOR_EXPERT_DESCRIPTION.toLowerCase()).toContain("capabilit");
+    expect(BELAY_EXPERT_NAME).toBe("belay_expert");
+    expect(BELAY_EXPERT_DESCRIPTION.toLowerCase()).toContain("capabilit");
     // Trigger visibility: the description tells the model when to reach for it.
-    expect(TREVOR_EXPERT_DESCRIPTION.toLowerCase()).toMatch(/use (this |it )?when|ask/);
+    expect(BELAY_EXPERT_DESCRIPTION.toLowerCase()).toMatch(/use (this |it )?when|ask/);
   });
 });
 
-describe("trevor-expert routes a question to a BOUNDED set of sections (M8)", () => {
+describe("belay-expert routes a question to a BOUNDED set of sections (M8)", () => {
   it("maps a question to only the relevant sections, never the whole manifest", () => {
     expect(selectExpertSections("what tools can you run?")).toEqual(["tools"]);
     expect(selectExpertSections("which providers and models are available?")).toEqual(["catalog"]);
@@ -71,7 +71,7 @@ describe("trevor-expert routes a question to a BOUNDED set of sections (M8)", ()
   });
 });
 
-describe("trevor-expert renders ONLY the sections a question needs (M8)", () => {
+describe("belay-expert renders ONLY the sections a question needs (M8)", () => {
   it("renders just the routed section, not unrelated ones, from a single manifest read", async () => {
     const getManifest = manifestWith([TOOLS_SECTION, CATALOG_SECTION]);
     const answer = await answerExpertQuery("what tools can you run?", { getManifest });

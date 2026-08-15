@@ -2,7 +2,7 @@ import { createHooksRuntime, type HooksRuntime } from "./runtime";
 
 /**
  * The host-wide hooks runtime singleton (plan 25 M5), in the mcp/lsp host-runtime tradition: one
- * lazy runtime over the default roots (`<workspace>/.trevor/hooks.json` + `<TREVOR_HOME>/hooks.json`),
+ * lazy runtime over the default roots (`<workspace>/.belay/hooks.json` + `<BELAY_HOME>/hooks.json`),
  * shared by every turn's tool boundary (main, subagent, and clip turns - main.ts and
  * agent/delegate.ts bind it) and, from M9, by /doctor. Construction reads and spawns NOTHING:
  * discovery happens on the first dispatch and is cached for the host's lifetime, while approvals

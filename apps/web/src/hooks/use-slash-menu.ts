@@ -1,4 +1,4 @@
-import type { CommandSpec } from "@trevor/session";
+import type { CommandSpec } from "@belay/session";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,

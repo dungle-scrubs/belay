@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { SupervisorProject } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { SupervisorProject } from "@trevor/session";
 import { test, vi } from "vitest";
 import { NewSessionPicker, type NewSessionPickerProps } from "./new-session-picker";
 
@@ -13,7 +13,7 @@ import { NewSessionPicker, type NewSessionPickerProps } from "./new-session-pick
 const NOW = Date.parse("2026-07-04T12:00:00.000Z");
 
 const RECENTS: SupervisorProject[] = [
-  { root: "~/dev/trevor", sessionId: "s1", updatedAt: "2026-07-04T11:00:00.000Z" },
+  { root: "~/dev/belay", sessionId: "s1", updatedAt: "2026-07-04T11:00:00.000Z" },
   { root: "~/dev/opchain", sessionId: "s2", updatedAt: "2026-07-03T12:00:00.000Z" },
 ];
 
@@ -42,10 +42,10 @@ const createButton = () => screen.getByRole("button", { name: "Create" }) as HTM
 
 test("renders recents and picking one launches that root directly", () => {
   const props = renderPicker();
-  assert.ok(screen.getByText("trevor"), "the recent's folder name renders");
+  assert.ok(screen.getByText("belay"), "the recent's folder name renders");
   assert.ok(screen.getByText("~/dev/opchain"), "the recent's full root renders");
-  fireEvent.click(screen.getByText("trevor"));
-  assert.deepEqual((props.onPickRecent as ReturnType<typeof vi.fn>).mock.calls, [["~/dev/trevor"]]);
+  fireEvent.click(screen.getByText("belay"));
+  assert.deepEqual((props.onPickRecent as ReturnType<typeof vi.fn>).mock.calls, [["~/dev/belay"]]);
 });
 
 test("empty recents shows the no-recents state", () => {
@@ -147,7 +147,7 @@ test("the starting-host state locks every control and swaps Create in place", ()
   assert.equal((screen.getByLabelText("Folder") as HTMLInputElement).disabled, true);
   assert.equal((screen.getByLabelText("Browse for a folder") as HTMLButtonElement).disabled, true);
   // A recent cannot launch while starting (its button is disabled).
-  const recentBtn = screen.getByText("trevor").closest("button") as HTMLButtonElement;
+  const recentBtn = screen.getByText("belay").closest("button") as HTMLButtonElement;
   assert.equal(recentBtn.disabled, true);
   fireEvent.click(recentBtn);
   assert.equal((props.onPickRecent as ReturnType<typeof vi.fn>).mock.calls.length, 0);

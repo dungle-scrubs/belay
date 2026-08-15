@@ -1,9 +1,9 @@
+import { events, type TrevorEventInput } from "@belay/session";
 import type { ProviderError } from "@host/providers/index";
 import type { Lease } from "@host/session/lease";
 import { warn } from "@host/transport/log";
 import { commas } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import { events, type TrevorEventInput } from "@trevor/session";
 import { Cause, Effect, Fiber } from "effect";
 import { interpretFiberExit } from "../effect/fiber-exit";
 import type { CompactionController } from "./compaction-controller";

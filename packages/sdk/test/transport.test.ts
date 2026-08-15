@@ -1,6 +1,6 @@
-import type { RunningServer } from "@trevor/server-kit";
-import { events } from "@trevor/session";
-import { bootStore } from "@trevor/test-kit/boot";
+import type { RunningServer } from "@belay/server-kit";
+import { events } from "@belay/session";
+import { bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTrevorClient, SdkError } from "../src/index";
 

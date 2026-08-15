@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { LucidAnchor } from "@trevor/session";
+import type { LucidAnchor } from "@belay/session";
 import { test } from "vitest";
 import {
   applyLucidVersion,

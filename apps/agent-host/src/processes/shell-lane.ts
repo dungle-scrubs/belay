@@ -1,7 +1,7 @@
+import { events } from "@belay/session";
 import { DEFAULT_PROMOTION_CONFIG } from "@host/tools/promote-policy";
 import { promotedResultText, runPromotable } from "@host/tools/promote-runner";
 import type { EmitEvent } from "@host/transport/services";
-import { events } from "@trevor/session";
 import { supervisor } from "./processes";
 
 /**

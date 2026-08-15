@@ -3,17 +3,17 @@ import { closeSync, existsSync, mkdirSync, openSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { HEALTH_PATH, isHealthBody } from "@trevor/server-kit";
+import { HEALTH_PATH, isHealthBody } from "@belay/server-kit";
 import {
   decodeTrevorEvent,
   type SessionEvent,
   streamTransport,
   viewerIdentity,
-} from "@trevor/session";
-import { raceTimeout, sleep } from "@trevor/session/async";
+} from "@belay/session";
+import { raceTimeout, sleep } from "@belay/session/async";
 import { nodeFs } from "./fs";
 import { LaunchError, type LaunchPlatform, type Reporter, type SpawnedHost } from "./launch";
-import { TREVOR_HOME, TREVOR_STATE_HOME } from "./project";
+import { BELAY_HOME, BELAY_STATE_HOME } from "./project";
 import {
   SERVICE_FILTERS,
   SERVICE_SCRIPTS,
@@ -94,22 +94,22 @@ async function probeService(name: ServiceName, port: number): Promise<ServicePro
 }
 
 /**
- * Opens (append) a log file under `<TREVOR_STATE_HOME>/logs/<name>.log` and returns its fd, so a
+ * Opens (append) a log file under `<BELAY_STATE_HOME>/logs/<name>.log` and returns its fd, so a
  * detached child's stdout/stderr is captured instead of discarded - the launcher spawns everything
  * detached, and without this a crash or a stalled stream leaves NO trace (the stuck-turn diagnosis
  * had to read the SQLite event log directly). Falls back to "ignore" if the log can't be opened.
  */
 function logFd(name: string): number | "ignore" {
   try {
-    mkdirSync(join(TREVOR_STATE_HOME, "logs"), { recursive: true });
-    return openSync(join(TREVOR_STATE_HOME, "logs", `${name}.log`), "a");
+    mkdirSync(join(BELAY_STATE_HOME, "logs"), { recursive: true });
+    return openSync(join(BELAY_STATE_HOME, "logs", `${name}.log`), "a");
   } catch {
     return "ignore";
   }
 }
 
 /** Spawns a shared service detached through the repo's pnpm runner, so it outlives this launcher
- *  and only one set exists across projects. Its output goes to `<TREVOR_STATE_HOME>/logs/<name>.log`. */
+ *  and only one set exists across projects. Its output goes to `<BELAY_STATE_HOME>/logs/<name>.log`. */
 function startService(name: ServiceName): Promise<void> {
   const out = logFd(name);
   const child = spawn("pnpm", ["--filter", SERVICE_FILTERS[name], SERVICE_SCRIPTS[name]], {
@@ -150,7 +150,7 @@ function waitForWeb(): Promise<boolean> {
 
 /**
  * Watches a session's stream for `host.online` (or presence), resolving true on the first sighting and
- * false at the timeout. Reuses the same `@trevor/session` transport the host + web speak, so the
+ * false at the timeout. Reuses the same `@belay/session` transport the host + web speak, so the
  * "host joined" evidence is the real wire event, not a guess.
  */
 function watchSession(
@@ -163,7 +163,7 @@ function watchSession(
   return transport
     .awaitEvent(
       sessionId,
-      viewerIdentity({ displayName: "trevor-launcher", instanceId: id, participantId: id }),
+      viewerIdentity({ displayName: "belay-launcher", instanceId: id, participantId: id }),
       satisfied,
       { timeoutMs },
     )
@@ -201,7 +201,7 @@ export function buildHostSpawnCommand(opts: {
       opts.tsxCli,
       opts.hostMain,
     ],
-    command: `opchain primary --read${opts.allowEnvToken ? " --allow-env-token" : ""} op run --env-file=<TREVOR_HOME>/.env.op -- tsx agent-host`,
+    command: `opchain primary --read${opts.allowEnvToken ? " --allow-env-token" : ""} op run --env-file=<BELAY_HOME>/.env.op -- tsx agent-host`,
     file: "opchain",
   };
 }
@@ -236,7 +236,7 @@ async function spawnHost(opts: {
   const require = createRequire(import.meta.url);
   const tsxCli = require.resolve("tsx/cli");
   const hostMain = join(repoRoot(), "apps", "agent-host", "src", "main.ts");
-  const envFile = join(TREVOR_HOME, ".env.op");
+  const envFile = join(BELAY_HOME, ".env.op");
   const command = buildHostSpawnCommand({
     envFile,
     envFileExists: existsSync(envFile),
@@ -260,7 +260,7 @@ async function spawnHost(opts: {
       // host's own tsconfig carries the @host/* mapping (22.1 D-007) - without this pointer the
       // host dies on its first @host import before it can log anything.
       TSX_TSCONFIG_PATH: join(repoRoot(), "apps", "agent-host", "tsconfig.json"),
-      // Debug mode (`trevor --debug`): the host boots with its debug command surface on (incl.
+      // Debug mode (`belay --debug`): the host boots with its debug command surface on (incl.
       // /restart). The flag rides the env so it survives the host's own /restart re-exec.
       ...(opts.debug ? { TREVOR_DEBUG: "1" } : {}),
     },
@@ -359,9 +359,9 @@ export function nodePlatform(reporter: Reporter = { step: () => {} }): LaunchPla
   return {
     fs: nodeFs,
     // The launcher's `home` drives the host + project registries (hosts.json, locks/, projects.json),
-    // which are runtime STATE, so it points at the state home. `.env.op` (config) stays on TREVOR_HOME.
-    home: TREVOR_STATE_HOME,
-    configHome: TREVOR_HOME,
+    // which are runtime STATE, so it points at the state home. `.env.op` (config) stays on BELAY_HOME.
+    home: BELAY_STATE_HOME,
+    configHome: BELAY_HOME,
     cwd: process.cwd(),
     pid: process.pid,
     reporter,

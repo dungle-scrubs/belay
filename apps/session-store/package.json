@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/session-store",
+  "name": "@belay/session-store",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,12 +11,12 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/server-kit": "workspace:*",
-    "@trevor/session": "workspace:*",
+    "@belay/server-kit": "workspace:*",
+    "@belay/session": "workspace:*",
     "ws": "^8.21.0"
   },
   "devDependencies": {
-    "@trevor/test-kit": "workspace:*",
+    "@belay/test-kit": "workspace:*",
     "@types/node": "^26.0.0",
     "@types/ws": "^8.18.1",
     "tsx": "^4.22.4",

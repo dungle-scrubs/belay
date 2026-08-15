@@ -3,7 +3,7 @@ import {
   type JobSnapshot,
   type TaskSnapshot,
   type TaskStatus,
-} from "@trevor/session";
+} from "@belay/session";
 import type { ToolDetailModel } from "@/tool-detail/detail-model";
 import type { Message } from "@/transcript";
 import { taskRowLabel } from "../tasks-display";

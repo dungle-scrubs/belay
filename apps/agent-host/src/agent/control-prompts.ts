@@ -1,3 +1,10 @@
+import {
+  type ArtifactRef,
+  events,
+  type ModelRef,
+  type PublishInput,
+  type SessionTransport,
+} from "@belay/session";
 import { DEFAULT_PROVIDER } from "@host/providers/index";
 import {
   buildControlTurns,
@@ -10,13 +17,6 @@ import { getClipboardWriter } from "@host/tools/clipboard";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import {
-  type ArtifactRef,
-  events,
-  type ModelRef,
-  type PublishInput,
-  type SessionTransport,
-} from "@trevor/session";
 import type { CompactionCommandsApi } from "./compaction-commands";
 import type { CompactionController } from "./compaction-controller";
 import type { ConversationLog } from "./conversation-log";

@@ -1,5 +1,5 @@
+import type { ArtifactRef } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { ArtifactRef } from "@trevor/session";
 import type { ReactNode } from "react";
 import { MessageAttachments } from "./message-attachments";
 import { InlineImageLoading } from "./message-images";

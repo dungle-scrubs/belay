@@ -4,7 +4,7 @@ import {
   decodeSourceRecallRefreshResult,
   decodeSourceRecallResult,
   type ToolName,
-} from "@trevor/session";
+} from "@belay/session";
 import type { ReactElement } from "react";
 import { ToolFallback } from "@/components/assistant-ui/tool-fallback";
 import { multiEditDetailArgs, parseToolArgs, toolSummary } from "@/tool-args";
@@ -385,7 +385,7 @@ const renderGeneric: RenderArm = ({ message, status, onOpenPath, className }) =>
 };
 
 /**
- * The exhaustive name -> renderer table keyed by `ToolName` (the @trevor/session contract, M24),
+ * The exhaustive name -> renderer table keyed by `ToolName` (the @belay/session contract, M24),
  * so adding or renaming a host tool surfaces here at compile time. Every known tool maps to its
  * arm (most to the generic row); unknown/dynamic tool names (custom skill/agent tools outside the
  * union) are NOT in this table and fall through to the generic default in `ToolRenderer`.
@@ -412,8 +412,8 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
   // The `doctor` self-diagnostic tool returns its sanitized health report as flat text, so it
   // renders like other text-output tools (the dashboard surface is the /doctor command, not this).
   doctor: renderOutput,
-  // `trevor_expert` answers capability questions from the manifest as flat, already-redacted text.
-  trevor_expert: renderOutput,
+  // `belay_expert` answers capability questions from the manifest as flat, already-redacted text.
+  belay_expert: renderOutput,
   // `migrate_claude_md` (plan 26) surfaces its per-file decision as a required-response question card
   // (the provider-question surface); this row is the flat summary it returns after the answer.
   migrate_claude_md: renderOutput,
@@ -457,7 +457,7 @@ const TOOL_RENDERERS: Record<ToolName, RenderArm> = {
  * The single tool-message renderer: it owns the tool NAME -> renderer dispatch and the
  * `done -> status` derivation in one place, so callers render one component instead of a name
  * ladder (M29). Status is derived once here and threaded to whichever arm runs. The dispatch is
- * keyed by `ToolName` (the @trevor/session contract) for compile-time exhaustiveness; an unknown
+ * keyed by `ToolName` (the @belay/session contract) for compile-time exhaustiveness; an unknown
  * or dynamic tool name (custom skill/agent tools) falls back to the generic ToolCall row, as does
  * any arm that defers (a multi_edit/write/edit whose args haven't streamed a path yet).
  *

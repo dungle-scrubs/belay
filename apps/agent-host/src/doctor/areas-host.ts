@@ -1,10 +1,10 @@
+import type { DoctorArea, DoctorFinding, DoctorNextAction } from "@belay/session";
 import {
   CWD_LOCK_FORCE_CLEAR_HINT,
   type CwdLockDoctorFact,
   cwdLockSummary,
   isCwdLockWarn,
 } from "@host/session/cwd-lock";
-import type { DoctorArea, DoctorFinding, DoctorNextAction } from "@trevor/session";
 import { area } from "./area";
 import type { DoctorProbeInput } from "./probe-input";
 

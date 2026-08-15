@@ -29,18 +29,18 @@ import {
 
 const NOW = "2026-06-27T12:00:00.000Z";
 let home: string;
-const savedHome = process.env.TREVOR_STATE_HOME;
+const savedHome = process.env.BELAY_STATE_HOME;
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), "trevor-corpus-"));
-  process.env.TREVOR_STATE_HOME = home;
+  home = mkdtempSync(join(tmpdir(), "belay-corpus-"));
+  process.env.BELAY_STATE_HOME = home;
 });
 
 afterEach(() => {
   if (savedHome === undefined) {
-    delete process.env.TREVOR_STATE_HOME;
+    delete process.env.BELAY_STATE_HOME;
   } else {
-    process.env.TREVOR_STATE_HOME = savedHome;
+    process.env.BELAY_STATE_HOME = savedHome;
   }
   rmSync(home, { recursive: true, force: true });
 });
@@ -61,7 +61,7 @@ function input(over: Partial<ObservationInput> = {}): ObservationInput {
 }
 
 describe("corpus paths (M1)", () => {
-  it("resolves the jsonl and index under TREVOR_STATE_HOME/observations", () => {
+  it("resolves the jsonl and index under BELAY_STATE_HOME/observations", () => {
     expect(corpusJsonlPath("provider_failure")).toBe(
       join(home, "observations", "provider-failures.jsonl"),
     );

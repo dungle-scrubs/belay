@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { GitStatus } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { GitStatus } from "@trevor/session";
 import { test } from "vitest";
 import { gitLine, WorkspaceIdentity } from "./workspace-identity";
 
@@ -30,9 +30,9 @@ test("gitLine returns null when there is no branch and no commit", () => {
 });
 
 test("renders cwd and a clean branch line", () => {
-  const { container } = render(<WorkspaceIdentity cwd="~/dev/trevor" git={base} />);
+  const { container } = render(<WorkspaceIdentity cwd="~/dev/belay" git={base} />);
   const text = container.textContent ?? "";
-  assert.ok(text.includes("~/dev/trevor"), text);
+  assert.ok(text.includes("~/dev/belay"), text);
   assert.ok(text.includes("main"), text);
   assert.ok(!text.includes("↑") && !text.includes("↓"), "no arrows when ahead/behind are 0");
 });
@@ -40,7 +40,7 @@ test("renders cwd and a clean branch line", () => {
 test("renders dirty asterisk and ahead/behind arrows", () => {
   const { container } = render(
     <WorkspaceIdentity
-      cwd="~/dev/trevor"
+      cwd="~/dev/belay"
       git={{ ...base, branch: "feat/x", dirty: true, ahead: 2, behind: 3 }}
     />,
   );

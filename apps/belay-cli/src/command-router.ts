@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, extname } from "node:path";
-import type { TrevorClient } from "@trevor/sdk";
+import type { TrevorClient } from "@belay/sdk";
 import { resolveModelConfig } from "./config";
 import {
   runArtifactGet,
@@ -32,66 +32,66 @@ export interface CommandSpec {
 export const COMMAND_SPECS: readonly CommandSpec[] = [
   {
     name: "list",
-    usage: "trevor list [--archived]",
+    usage: "belay list [--archived]",
     summary: "List this project's sessions (active by default; --archived for filed).",
   },
-  { name: "archive", usage: "trevor archive <session>", summary: "Archive a session." },
-  { name: "unarchive", usage: "trevor unarchive <session>", summary: "Unarchive a session." },
+  { name: "archive", usage: "belay archive <session>", summary: "Archive a session." },
+  { name: "unarchive", usage: "belay unarchive <session>", summary: "Unarchive a session." },
   {
     name: "stop",
-    usage: "trevor stop <session>",
+    usage: "belay stop <session>",
     summary: "Gracefully shut down the session's host (SIGTERM).",
   },
   {
     name: "kill",
-    usage: "trevor kill <session>",
+    usage: "belay kill <session>",
     summary: "Force-terminate a wedged session host (SIGKILL).",
   },
   {
     name: "prompt",
-    usage: "trevor prompt <session> <text>",
+    usage: "belay prompt <session> <text>",
     summary: "Submit a prompt and stream the turn (--json, --model, --reasoning, --timeout).",
   },
   {
     name: "models",
-    usage: "trevor models",
+    usage: "belay models",
     summary: "List host-announced model ids and reasoning levels (--json).",
   },
   {
     name: "cancel",
-    usage: "trevor cancel <session> <runId>",
+    usage: "belay cancel <session> <runId>",
     summary: "Cancel the active run (publishes user.cancel; not stop/kill).",
   },
   {
     name: "transcript",
-    usage: "trevor transcript <session>",
+    usage: "belay transcript <session>",
     summary: "Print the session transcript (--json for machine output).",
   },
-  { name: "doctor", usage: "trevor doctor <session>", summary: "Print the host /doctor snapshot." },
+  { name: "doctor", usage: "belay doctor <session>", summary: "Print the host /doctor snapshot." },
   {
     name: "capabilities",
-    usage: "trevor capabilities <session>",
+    usage: "belay capabilities <session>",
     summary: "Print the host capability manifest export (--json, --section).",
   },
   {
     name: "artifact",
-    usage: "trevor artifact put <file> | trevor artifact get <hash> [outfile]",
+    usage: "belay artifact put <file> | belay artifact get <hash> [outfile]",
     summary: "Upload or download a content-addressed artifact.",
   },
 ];
 
 export function commandUsageText(): string {
   const commandLines = COMMAND_SPECS.map((spec) => `  ${spec.usage.padEnd(36)} ${spec.summary}`);
-  return `trevor - open this project in Trevor
+  return `belay - open this project in Belay
 
 Usage:
-  trevor                               Resolve the project, ready services, spawn or reuse host, and open.
-  trevor -p "prompt"                   Run one prompt headlessly; add --json, --model, --reasoning, --ephemeral.
-  trevor open <session>                Open/resume a session by id in the browser.
+  belay                               Resolve the project, ready services, spawn or reuse host, and open.
+  belay -p "prompt"                   Run one prompt headlessly; add --json, --model, --reasoning, --ephemeral.
+  belay open <session>                Open/resume a session by id in the browser.
 ${commandLines.join("\n")}
-  trevor --debug                       Start the host in debug mode (extra commands like /restart).
-  trevor --help                        Show this help.
-  trevor --version                     Show the launcher version.
+  belay --debug                       Start the host in debug mode (extra commands like /restart).
+  belay --help                        Show this help.
+  belay --version                     Show the launcher version.
 `;
 }
 
@@ -174,7 +174,7 @@ export function createCommandRouter(deps: CommandRouterDeps): CommandRouter {
       const [sessionId, ...textParts] = pos;
       const text = textParts.join(" ");
       if (!sessionId || !text) {
-        return "usage: trevor prompt <session> <text> [--model source/model] [--reasoning level] [--json] [--timeout ms]";
+        return "usage: belay prompt <session> <text> [--model source/model] [--reasoning level] [--json] [--timeout ms]";
       }
       const modelConfig = resolveModelConfig({
         flagModel: flagValue(rest, "--model"),
@@ -205,7 +205,7 @@ export function createCommandRouter(deps: CommandRouterDeps): CommandRouter {
     }
     if (cmd === "models") {
       if (!deps.ensureHostOnline) {
-        return "trevor models requires launcher wiring";
+        return "belay models requires launcher wiring";
       }
       const { sessionId } = await deps.ensureHostOnline();
       return formatCatalog(
@@ -218,19 +218,19 @@ export function createCommandRouter(deps: CommandRouterDeps): CommandRouter {
     }
     if (cmd === "transcript") {
       if (!pos[0]) {
-        return "usage: trevor transcript <session> [--json]";
+        return "usage: belay transcript <session> [--json]";
       }
       return (await runTranscript(deps.client, pos[0], json)).stdout;
     }
     if (cmd === "doctor") {
       if (!pos[0]) {
-        return "usage: trevor doctor <session> [--json] [--timeout ms]";
+        return "usage: belay doctor <session> [--json] [--timeout ms]";
       }
       return (await runDoctor(deps.client, pos[0], json, timeoutMs)).stdout;
     }
     if (cmd === "capabilities") {
       if (!pos[0]) {
-        return "usage: trevor capabilities <session> [--json] [--section id]";
+        return "usage: belay capabilities <session> [--json] [--section id]";
       }
       return (
         await runCapabilities(deps.client, pos[0], {
@@ -254,7 +254,7 @@ export function createCommandRouter(deps: CommandRouterDeps): CommandRouter {
     const [verb, target, out] = pos;
     if (verb === "put") {
       if (!target) {
-        return "usage: trevor artifact put <file> [--name n] [--mime m] [--json]";
+        return "usage: belay artifact put <file> [--name n] [--mime m] [--json]";
       }
       const bytes = readFile(target);
       const result = await runArtifactPut(
@@ -270,7 +270,7 @@ export function createCommandRouter(deps: CommandRouterDeps): CommandRouter {
     }
     if (verb === "get") {
       if (!target) {
-        return "usage: trevor artifact get <hash> [outfile]";
+        return "usage: belay artifact get <hash> [outfile]";
       }
       const bytes = await runArtifactGet(deps.client, target);
       if (out) {
@@ -280,7 +280,7 @@ export function createCommandRouter(deps: CommandRouterDeps): CommandRouter {
       writeStdoutBytes(bytes);
       return "";
     }
-    return "usage: trevor artifact put <file> | trevor artifact get <hash> [outfile]";
+    return "usage: belay artifact put <file> | belay artifact get <hash> [outfile]";
   };
 
   return {

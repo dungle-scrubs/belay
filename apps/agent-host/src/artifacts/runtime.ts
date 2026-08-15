@@ -1,5 +1,5 @@
-import { type ArtifactRuntime, createArtifactRuntime } from "@trevor/session";
-import { serviceUrl } from "@trevor/session/ports";
+import { type ArtifactRuntime, createArtifactRuntime } from "@belay/session";
+import { serviceUrl } from "@belay/session/ports";
 
 /**
  * Host binding for the shared artifact runtime.

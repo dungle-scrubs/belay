@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
-import { loadTrevorConfig, trevorConfigPath } from "./node-config";
+import { belayConfigPath, loadBelayConfig } from "./node-config";
 
-test("trevorConfigPath follows TREVOR_HOME", () => {
-  assert.equal(trevorConfigPath({ TREVOR_HOME: "/cfg" }), "/cfg/config.jsonc");
+test("belayConfigPath follows BELAY_HOME", () => {
+  assert.equal(belayConfigPath({ BELAY_HOME: "/cfg" }), "/cfg/config.jsonc");
 });
 
-test("loadTrevorConfig reads JSONC model defaults", () => {
-  const loaded = loadTrevorConfig({
-    env: { TREVOR_HOME: "/cfg" },
+test("loadBelayConfig reads JSONC model defaults", () => {
+  const loaded = loadBelayConfig({
+    env: { BELAY_HOME: "/cfg" },
     readFile: () => `{
       // default headless model
       "model": "openai/gpt-5",
@@ -23,17 +23,17 @@ test("loadTrevorConfig reads JSONC model defaults", () => {
   });
 });
 
-test("loadTrevorConfig degrades missing or malformed config to empty settings", () => {
-  const missing = loadTrevorConfig({
-    env: { TREVOR_HOME: "/cfg" },
+test("loadBelayConfig degrades missing or malformed config to empty settings", () => {
+  const missing = loadBelayConfig({
+    env: { BELAY_HOME: "/cfg" },
     readFile: () => {
       throw new Error("missing");
     },
   });
   assert.deepEqual(missing, { path: "/cfg/config.jsonc", config: {}, warning: null });
 
-  const malformed = loadTrevorConfig({
-    env: { TREVOR_HOME: "/cfg" },
+  const malformed = loadBelayConfig({
+    env: { BELAY_HOME: "/cfg" },
     readFile: () => "{ nope",
   });
   assert.deepEqual(malformed.config, {});

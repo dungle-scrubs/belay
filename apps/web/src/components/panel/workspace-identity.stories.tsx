@@ -1,5 +1,5 @@
+import type { GitStatus } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { GitStatus } from "@trevor/session";
 import { WorkspaceIdentity } from "./workspace-identity";
 
 const base: GitStatus = {
@@ -30,38 +30,38 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const CleanBranch: Story = {
-  args: { cwd: "~/dev/trevor", git: base },
+  args: { cwd: "~/dev/belay", git: base },
 };
 
 export const DirtyBranch: Story = {
-  args: { cwd: "~/dev/trevor", git: { ...base, branch: "feature/sidebar", dirty: true } },
+  args: { cwd: "~/dev/belay", git: { ...base, branch: "feature/sidebar", dirty: true } },
 };
 
 export const AheadOnly: Story = {
-  args: { cwd: "~/dev/trevor", git: { ...base, ahead: 3 } },
+  args: { cwd: "~/dev/belay", git: { ...base, ahead: 3 } },
 };
 
 export const BehindOnly: Story = {
-  args: { cwd: "~/dev/trevor", git: { ...base, behind: 5 } },
+  args: { cwd: "~/dev/belay", git: { ...base, behind: 5 } },
 };
 
 export const Diverged: Story = {
   args: {
-    cwd: "~/dev/trevor",
+    cwd: "~/dev/belay",
     git: { ...base, branch: "feat/x", dirty: true, ahead: 2, behind: 4 },
   },
 };
 
 export const DetachedHead: Story = {
   args: {
-    cwd: "~/dev/trevor",
+    cwd: "~/dev/belay",
     git: { ...base, branch: null, detached: "a1b2c3d", upstream: false },
   },
 };
 
 export const NoUpstream: Story = {
   args: {
-    cwd: "~/dev/trevor",
+    cwd: "~/dev/belay",
     git: { ...base, branch: "wip/local", upstream: false, ahead: 0, behind: 0 },
   },
 };
@@ -72,14 +72,14 @@ export const NonGitCwd: Story = {
 
 export const LongPath: Story = {
   args: {
-    cwd: "~/dev/trevor/apps/agent-host/src/very/deeply/nested/directory/structure",
+    cwd: "~/dev/belay/apps/agent-host/src/very/deeply/nested/directory/structure",
     git: base,
   },
 };
 
 export const LongBranch: Story = {
   args: {
-    cwd: "~/dev/trevor",
+    cwd: "~/dev/belay",
     git: {
       ...base,
       branch: "feature/extremely-long-branch-name-that-should-truncate-cleanly",

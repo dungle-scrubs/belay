@@ -3,7 +3,7 @@ import {
   resolveTelemetryConfig,
   type TelemetryConfig,
   type TelemetrySink,
-} from "@trevor/session/telemetry";
+} from "@belay/session/telemetry";
 
 /**
  * The browser telemetry bootstrap (plan 13 M4). The web app resolves its telemetry config from Vite env

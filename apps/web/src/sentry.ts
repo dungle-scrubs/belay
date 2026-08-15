@@ -1,5 +1,5 @@
-import { resolveTelemetryConfig, type TelemetryEnv } from "@trevor/session/telemetry";
-import { type SanitizableSentryEvent, scrubSentryEvent } from "@trevor/session/telemetry-sentry";
+import { resolveTelemetryConfig, type TelemetryEnv } from "@belay/session/telemetry";
+import { type SanitizableSentryEvent, scrubSentryEvent } from "@belay/session/telemetry-sentry";
 
 /**
  * Browser Sentry ERROR-sink bootstrap (plan 13 M10). Mirrors the host's Node sink: opt-in + errors-only.

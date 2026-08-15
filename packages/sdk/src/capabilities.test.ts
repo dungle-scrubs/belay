@@ -1,9 +1,9 @@
-import { events, PRODUCER_IDS } from "@trevor/session";
+import { events, PRODUCER_IDS } from "@belay/session";
 import {
   doctorSnapshot as doctorSnapshotFixture,
   recordingTransport,
   storedEvent,
-} from "@trevor/test-kit";
+} from "@belay/test-kit";
 import { describe, expect, it, vi } from "vitest";
 import { createTrevorClient, type TrevorClient } from "./client";
 
@@ -81,19 +81,19 @@ describe("doctor (M4)", () => {
 });
 
 describe("exportCapabilities (M4)", () => {
-  it("reads the structured manifest from /trevor-export --json (not from prompt text)", async () => {
+  it("reads the structured manifest from /belay-export --json (not from prompt text)", async () => {
     const rec = recordingTransport();
     const client = createTrevorClient({ sessionUrl: SESSION_URL, transport: rec.transport });
     const manifest = { version: 1, scope: "full", sections: [] };
 
     const pending = client.exportCapabilities("s1", { format: "json", timeoutMs: 1_000 });
-    await replyToCommand(rec, "s1", "/trevor-export", JSON.stringify(manifest));
+    await replyToCommand(rec, "s1", "/belay-export", JSON.stringify(manifest));
 
     const result = await pending;
     expect(result).toEqual({ format: "json", manifest });
     // The export command carried the machine flag, proving the SDK asked for the structured surface.
     expect(rec.publishedBy("s1")[0]?.payload).toMatchObject({
-      command: "/trevor-export",
+      command: "/belay-export",
       args: "--json",
     });
   });

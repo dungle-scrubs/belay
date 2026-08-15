@@ -1,6 +1,6 @@
+import { READ_ONLY_TOOL_NAMES } from "@belay/session";
 import { partitionToolCalls } from "@host/agent/loop-tool-calls";
 import { ToolExecutionError, ToolInputError } from "@host/tools/errors";
-import { READ_ONLY_TOOL_NAMES } from "@trevor/session";
 import { Effect } from "effect";
 import { describe, expect, test } from "vitest";
 import type { McpServerConfig } from "./config";

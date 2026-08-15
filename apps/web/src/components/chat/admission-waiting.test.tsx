@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { storedLog } from "@belay/test-kit";
 import { render } from "@testing-library/react";
-import { storedLog } from "@trevor/test-kit";
 import { test } from "vitest";
 import { admissionWaiting } from "@/derive";
 import { AdmissionWaitingRow } from "./admission-waiting";

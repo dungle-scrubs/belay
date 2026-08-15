@@ -36,7 +36,7 @@ const SECTIONS: ManifestSection[] = [
   { id: "mcp", title: "MCP servers", status: "unavailable", note: "not configured", items: [] },
 ];
 
-describe("trevor-export - JSON variant (M6)", () => {
+describe("belay-export - JSON variant (M6)", () => {
   it("emits stable, decodable JSON that round-trips through the manifest decoder", () => {
     const json = renderManifestExport(manifest("human", SECTIONS), {
       format: "json",
@@ -55,7 +55,7 @@ describe("trevor-export - JSON variant (M6)", () => {
   });
 });
 
-describe("trevor-export - text variants (M6)", () => {
+describe("belay-export - text variants (M6)", () => {
   it("full text lists every section with counts, item labels, and explicit unavailable status", () => {
     const text = renderManifestExport(manifest("human", SECTIONS), {
       format: "text",
@@ -81,7 +81,7 @@ describe("trevor-export - text variants (M6)", () => {
   });
 });
 
-describe("trevor-export - section scoping (M6)", () => {
+describe("belay-export - section scoping (M6)", () => {
   it("restricts the export to a single requested section", () => {
     const json = renderManifestExport(manifest("human", SECTIONS), {
       format: "json",
@@ -93,14 +93,14 @@ describe("trevor-export - section scoping (M6)", () => {
   });
 });
 
-describe("trevor-export - redaction (M6)", () => {
+describe("belay-export - redaction (M6)", () => {
   const leaky: ManifestSection[] = [
     {
       id: "tools",
       title: "Tools",
       status: "error",
       note: "failed reading /Users/kevin/dev/secret.key with token sk-ABCDEF1234567890XYZ",
-      items: [{ id: "x", label: "x", summary: "see /Users/kevin/.trevor/creds.json" }],
+      items: [{ id: "x", label: "x", summary: "see /Users/kevin/.belay/creds.json" }],
     },
   ];
 

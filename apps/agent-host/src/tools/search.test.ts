@@ -11,7 +11,7 @@ import { afterAll, test } from "vitest";
  * the root at module load), against a throwaway tree.
  */
 
-const ws = mkdtempSync(join(tmpdir(), "trevor-search-"));
+const ws = mkdtempSync(join(tmpdir(), "belay-search-"));
 const prevWorkspace = process.env.TREVOR_WORKSPACE;
 process.env.TREVOR_WORKSPACE = ws;
 

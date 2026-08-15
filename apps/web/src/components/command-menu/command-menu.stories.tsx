@@ -1,5 +1,5 @@
+import type { CommandMenuPayload } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { CommandMenuPayload } from "@trevor/session";
 import { CommandMenu } from "./command-menu";
 
 /**

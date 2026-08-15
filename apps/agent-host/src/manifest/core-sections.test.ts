@@ -1,7 +1,7 @@
+import type { CommandMenuPayload, CommandSpec, ManifestScope } from "@belay/session";
 import type { OutputStyle } from "@host/prefs/styles";
 import type { SkillEntry } from "@host/skills/skills";
 import type { AgentDescriptor } from "@host/subagents/discovery";
-import type { CommandMenuPayload, CommandSpec, ManifestScope } from "@trevor/session";
 import { describe, expect, it } from "vitest";
 import {
   agentsSection,

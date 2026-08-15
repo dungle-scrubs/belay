@@ -11,9 +11,9 @@ import {
 
 /**
  * Bounded hook discovery with source provenance (plan 25 M1, D-001). Exactly two roots in the
- * first cut, consulted in a fixed order: the PROJECT root (`<workspace>/.trevor/hooks.json`,
- * following the established `.trevor/` project-config home that rules already use) and the USER
- * root (`<TREVOR_HOME>/hooks.json`, following the optional-JSON-config precedent of
+ * first cut, consulted in a fixed order: the PROJECT root (`<workspace>/.belay/hooks.json`,
+ * following the established `.belay/` project-config home that rules already use) and the USER
+ * root (`<BELAY_HOME>/hooks.json`, following the optional-JSON-config precedent of
  * mcp-servers.json). The plan's local/shared scopes have no repo precedent yet and are
  * deliberately NOT invented here; the provenance model (`HookSource` on every definition and
  * issue) is where a later scope slots in. Discovery is deterministic - root order is fixed and
@@ -25,8 +25,8 @@ import {
  * Not for: entry validation (./config), trust/approval (./trust, ./approval), or execution (M3).
  */
 
-/** The project hooks file, relative to the workspace root - `.trevor/` is the project-config home. */
-export const PROJECT_HOOKS_FILE = join(".trevor", "hooks.json");
+/** The project hooks file, relative to the workspace root - `.belay/` is the project-config home. */
+export const PROJECT_HOOKS_FILE = join(".belay", "hooks.json");
 
 export interface HookDiscoveryRoots {
   readonly projectHooksPath: string;
@@ -50,7 +50,7 @@ export interface HookDiscoveryReport {
 
 /**
  * One legacy V1 `HOOK.md` handler found near a hook root (plan 25 M10, D-009): V1 kept hooks as
- * `.trevor/hooks/<id>/HOOK.md` files with frontmatter. Trevor reports them for migration - discovery
+ * `.belay/hooks/<id>/HOOK.md` files with frontmatter. Belay reports them for migration - discovery
  * never parses them into definitions and never executes them. `executable` marks a file whose
  * frontmatter declares a `command:` (the V1 executable-handler shape) vs a prompt-only file.
  */
@@ -63,7 +63,7 @@ export interface LegacyHookFile {
   readonly executable: boolean;
 }
 
-/** The default roots: the workspace's `.trevor/hooks.json` plus the user-global hooks.json. */
+/** The default roots: the workspace's `.belay/hooks.json` plus the user-global hooks.json. */
 export function defaultHookDiscoveryRoots(
   workspaceRoot: string = WORKSPACE_ROOT,
 ): HookDiscoveryRoots {
@@ -77,15 +77,15 @@ export function defaultHookDiscoveryRoots(
 const MAX_LEGACY_FRONTMATTER_CHARS = 4_096;
 
 /** The two V1 HOOK.md locations, relative to their anchors. */
-const LEGACY_PROJECT_HOOKS_DIR = join(".trevor", "hooks");
+const LEGACY_PROJECT_HOOKS_DIR = join(".belay", "hooks");
 
-/** The legacy user hooks home, `~/.trevor_legacy/hooks` (not active TREVOR_HOME). */
+/** The legacy user hooks home, `~/.belay_legacy/hooks` (not active BELAY_HOME). */
 function defaultLegacyUserHooksDir(): string {
-  return join(homedir(), ".trevor_legacy", "hooks");
+  return join(homedir(), ".belay_legacy", "hooks");
 }
 
 export interface LegacyHookScanRoots {
-  /** Anchors the project scan: `<workspaceRoot>/.trevor/hooks/<id>/HOOK.md`. */
+  /** Anchors the project scan: `<workspaceRoot>/.belay/hooks/<id>/HOOK.md`. */
   readonly workspaceRoot: string;
   /** The V1 user hooks dir (`<dir>/<id>/HOOK.md`); default {@link defaultLegacyUserHooksDir}. */
   readonly legacyUserHooksDir?: string;

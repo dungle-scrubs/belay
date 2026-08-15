@@ -1,4 +1,4 @@
-import type { CatalogEntry, ManifestScope, SourceSummary } from "@trevor/session";
+import type { CatalogEntry, ManifestScope, SourceSummary } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import type { CatalogSnapshot } from "../providers/catalog";
 import {
@@ -147,13 +147,13 @@ describe("runtime / protocol / workspace summaries (M4)", () => {
   it("workspace section shows the project basename + branch, never the absolute home path", async () => {
     const body = await run(
       workspaceSection({
-        root: "/Users/secret/dev/trevor",
-        cwd: "/Users/secret/dev/trevor/apps/web",
+        root: "/Users/secret/dev/belay",
+        cwd: "/Users/secret/dev/belay/apps/web",
         branch: "main",
       }),
     );
     expect(JSON.stringify(body)).not.toContain("/Users/secret");
-    expect(body.items.find((i) => i.id === "root")?.summary).toBe("trevor");
+    expect(body.items.find((i) => i.id === "root")?.summary).toBe("belay");
     expect(body.items.find((i) => i.id === "branch")?.summary).toBe("main");
   });
 });

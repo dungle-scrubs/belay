@@ -3,7 +3,7 @@ import {
   foldLucidReview,
   PRODUCER_IDS,
   type SessionEvent,
-} from "@trevor/session";
+} from "@belay/session";
 import {
   catalogFrom,
   commandsFrom,

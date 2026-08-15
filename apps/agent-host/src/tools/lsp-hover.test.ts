@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@belay/session";
 import { MAX_LSP_HOVER_CHARS } from "@host/lsp/caps";
 import type { LspClient } from "@host/lsp/client";
 import { degraded, type LspOutcome, type LspServerStatus, ok } from "@host/lsp/contract";
 import type { LspAcquireOutcome, LspManager } from "@host/lsp/manager";
-import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { buildLspHoverTool, type LspHoverArgs } from "./lsp-hover";
@@ -19,7 +19,7 @@ import { buildLspHoverTool, type LspHoverArgs } from "./lsp-hover";
  * behavior lives in test/lsp/tools-hover-symbols.test.ts.
  */
 
-const root = mkdtempSync(join(tmpdir(), "trevor-lsp-hover-unit-"));
+const root = mkdtempSync(join(tmpdir(), "belay-lsp-hover-unit-"));
 writeFileSync(join(root, "code.ts"), "export const widget = 1;\n");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 

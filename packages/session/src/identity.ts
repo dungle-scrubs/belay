@@ -13,7 +13,7 @@ import type { SessionIdentity } from "./transport";
  * SESSION_ID, the web reads ?session=). They auto-pair only because both default to
  * THIS id, so it must be one value, not two literals that can drift apart.
  */
-export const DEFAULT_SESSION_ID = "trevor-local";
+export const DEFAULT_SESSION_ID = "belay-local";
 
 /**
  * The reserved CONTROL session the supervisor daemon subscribes to and the browser publishes
@@ -24,7 +24,7 @@ export const DEFAULT_SESSION_ID = "trevor-local";
  * Distinct from the supervisor's PRODUCER id (`PRODUCER_IDS.supervisor`) so a session id and a
  * producer id can never alias to the same literal.
  */
-export const SUPERVISOR_SESSION_ID = "trevor-supervisor-control";
+export const SUPERVISOR_SESSION_ID = "belay-supervisor-control";
 
 /**
  * The `runtimeKind` each participant declares on its stream identity. The store
@@ -32,23 +32,23 @@ export const SUPERVISOR_SESSION_ID = "trevor-supervisor-control";
  * the host's declared kind and the store's check are the SAME string or presence
  * silently stops working.
  */
-export const RUNTIME_KIND = { host: "trevor", web: "web" } as const;
+export const RUNTIME_KIND = { host: "belay", web: "web" } as const;
 export type RuntimeKind = (typeof RUNTIME_KIND)[keyof typeof RUNTIME_KIND];
 
 /**
  * The producerId each surface stamps on the events it publishes. The host suppresses
  * its own echo by comparing an event's producerId against its own (PRODUCER_IDS.host),
  * and history projection keys self-vs-other off it - so the namespace lives here once.
- * The `trevor` CLI stamps `cli` on the lifecycle events it publishes (e.g. session.archived).
+ * The `belay` CLI stamps `cli` on the lifecycle events it publishes (e.g. session.archived).
  */
 export const PRODUCER_IDS = {
-  host: "trevor-host",
-  web: "trevor-web",
-  cli: "trevor-cli",
+  host: "belay-host",
+  web: "belay-web",
+  cli: "belay-cli",
   // The supervisor daemon stamps this on the launch/folder-pick/projects-list RESULTS it publishes on
   // the control session, so it can suppress its own echo (`isAnswerableProducer`) and only act on
   // browser-published requests (plan 44.1).
-  supervisor: "trevor-supervisor",
+  supervisor: "belay-supervisor",
 } as const;
 export type ProducerId = (typeof PRODUCER_IDS)[keyof typeof PRODUCER_IDS];
 
@@ -111,10 +111,10 @@ export interface ParticipantIdentityOptions {
   readonly capabilities?: Record<string, unknown>;
 }
 
-/** Builds the canonical stream identity for a Trevor host process. */
+/** Builds the canonical stream identity for a Belay host process. */
 export function hostIdentity(options: ParticipantIdentityOptions): SessionIdentity {
   return {
-    displayName: options.displayName ?? "trevor-host",
+    displayName: options.displayName ?? "belay-host",
     runtimeKind: RUNTIME_KIND.host,
     instanceId: options.instanceId,
     participantId: options.participantId ?? options.instanceId,
@@ -125,7 +125,7 @@ export function hostIdentity(options: ParticipantIdentityOptions): SessionIdenti
 /** Builds the canonical non-host viewer identity for browsers, launchers, readers, and CLIs. */
 export function viewerIdentity(options: ParticipantIdentityOptions): SessionIdentity {
   return {
-    displayName: options.displayName ?? "trevor-web",
+    displayName: options.displayName ?? "belay-web",
     runtimeKind: RUNTIME_KIND.web,
     instanceId: options.instanceId,
     participantId: options.participantId ?? options.instanceId,
@@ -194,7 +194,7 @@ const pad2 = (value: number): string => String(value).padStart(2, "0");
 export function freshSessionId(options: FreshSessionIdOptions = {}): string {
   const now = options.now ?? new Date();
   const random = options.random ?? crypto.randomUUID();
-  const prefix = idSlug(options.prefix ?? "trevor", "trevor");
+  const prefix = idSlug(options.prefix ?? "belay", "belay");
   const stamp = `${now.getUTCFullYear()}${pad2(now.getUTCMonth() + 1)}${pad2(now.getUTCDate())}-${pad2(
     now.getUTCHours(),
   )}${pad2(now.getUTCMinutes())}${pad2(now.getUTCSeconds())}z`;

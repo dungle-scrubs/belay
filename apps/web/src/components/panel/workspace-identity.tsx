@@ -1,4 +1,4 @@
-import { type GitStatus, gitRefLabel } from "@trevor/session";
+import { type GitStatus, gitRefLabel } from "@belay/session";
 import { GitBranch } from "lucide-react";
 
 /**

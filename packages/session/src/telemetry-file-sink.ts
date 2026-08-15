@@ -13,10 +13,10 @@ import { createCappedJsonlWriter } from "./telemetry-jsonl";
 /**
  * The local FILE telemetry exporter (plan 13 M5). When `TREVOR_OTEL_EXPORTER=file`, a service installs
  * this sink and its spans + metrics are appended as one JSON object per line to
- * `TREVOR_STATE_HOME/otel/<service>.jsonl`. This is the free, no-network baseline (escape hatch: local
+ * `BELAY_STATE_HOME/otel/<service>.jsonl`. This is the free, no-network baseline (escape hatch: local
  * JSONL first, an OTel SDK exporter later) - so a trace is inspectable with `tail -f` and no collector.
  *
- * Node-only (fs) and reached through the `@trevor/session/telemetry-file-sink` subpath, so it never
+ * Node-only (fs) and reached through the `@belay/session/telemetry-file-sink` subpath, so it never
  * bundles into the browser. Best-effort by construction: it is BOUNDED by a byte cap (writes past the cap
  * are DROPPED, not rotated, and counted), and every write is guarded so a full disk or a permission error
  * can never fail a user turn. The records it writes are already redacted by `safeAttributes` at the

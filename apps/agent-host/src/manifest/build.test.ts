@@ -1,4 +1,4 @@
-import { MANIFEST_SECTION_ORDER } from "@trevor/session";
+import { MANIFEST_SECTION_ORDER } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import { assembleManifest, type ManifestDeps } from "./build";
 
@@ -21,7 +21,7 @@ const deps: ManifestDeps = {
   catalog: null,
   runtime: { role: "leader", instanceId: "abc", turn: "idle" },
   host: { version: "2.0.0" },
-  workspace: { root: "/Users/secret/dev/trevor", cwd: "/Users/secret/dev/trevor" },
+  workspace: { root: "/Users/secret/dev/belay", cwd: "/Users/secret/dev/belay" },
 };
 
 describe("assembleManifest composition root (M6)", () => {

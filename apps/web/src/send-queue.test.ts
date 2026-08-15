@@ -8,8 +8,8 @@ import {
   pendingFollowUps,
   type SessionEvent,
   type TrevorEventInput,
-} from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import {
   combineQueued,

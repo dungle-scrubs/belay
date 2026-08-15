@@ -19,7 +19,7 @@ import { lspFixtureAdapter } from "./fixture-config";
  * Pure rendering lives in the co-located unit tests.
  */
 
-const root = mkdtempSync(join(tmpdir(), "trevor-lsp-hover-sym-"));
+const root = mkdtempSync(join(tmpdir(), "belay-lsp-hover-sym-"));
 writeFileSync(join(root, "code.ts"), "export const widget = 1;\n");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 

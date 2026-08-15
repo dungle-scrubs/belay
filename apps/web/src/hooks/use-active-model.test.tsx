@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { ModelRef, ProviderModel } from "@belay/session";
 import { renderHook } from "@testing-library/react";
-import type { ModelRef, ProviderModel } from "@trevor/session";
 import { beforeEach, test } from "vitest";
 import type { ModelPrefsView } from "@/derive";
 import { sessionScopedKey } from "@/model-selection";
@@ -73,7 +73,7 @@ test("with NO host default, a fresh session still falls back to the legacy provi
 test("an explicit per-session active wins over the host default", () => {
   // Seed a per-session active pick; the default must not override an in-session choice.
   localStorage.setItem(
-    sessionScopedKey("trevor.modelPreferences", "with-active"),
+    sessionScopedKey("belay.modelPreferences", "with-active"),
     JSON.stringify({
       active: { sourceId: "qwen", modelId: "qwen3-coder", reasoning: "low" },
       reasoningByModel: {},
@@ -91,7 +91,7 @@ test("an empty roster (HMR) recovers the last known-good model, not provider-as-
   // Simulate the post-HMR window: the in-memory host.online fold blanked, so the roster lacks the
   // provider and there is no per-session active. Seed the last known-good model from before HMR.
   const last: ModelRef = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
-  localStorage.setItem(sessionScopedKey("trevor.lastModel", "hmr"), JSON.stringify(last));
+  localStorage.setItem(sessionScopedKey("belay.lastModel", "hmr"), JSON.stringify(last));
 
   const { result } = renderHook(() =>
     useActiveModel({

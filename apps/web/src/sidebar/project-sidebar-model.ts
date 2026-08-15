@@ -1,4 +1,4 @@
-import type { SessionSummary, WorktreeSummary } from "@trevor/session";
+import type { SessionSummary, WorktreeSummary } from "@belay/session";
 import { sessionProjectPath } from "../session/session-root";
 
 /**
@@ -19,7 +19,7 @@ import { sessionProjectPath } from "../session/session-root";
 /**
  * The project-metadata input the read model consumes. Structurally compatible with the launcher's
  * `ProjectRegistryRecord` (plan 58 M1) so a registry snapshot can be passed straight through, but
- * declared HERE so the web bundle never imports the node-side `@trevor/launcher` package. The
+ * declared HERE so the web bundle never imports the node-side `@belay/launcher` package. The
  * sidebar only needs the metadata fields, never the persistence operations.
  */
 export interface ProjectSidebarRecord {

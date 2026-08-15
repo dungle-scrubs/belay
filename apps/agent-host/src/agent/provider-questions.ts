@@ -10,7 +10,7 @@ import {
   type TrevorEventInput,
   validateAnswer,
   validateContract,
-} from "@trevor/session";
+} from "@belay/session";
 import { Effect } from "effect";
 import { ToolInputError } from "../tools/errors";
 

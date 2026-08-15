@@ -1,4 +1,4 @@
-import type { TaskSnapshot } from "@trevor/session";
+import type { TaskSnapshot } from "@belay/session";
 import { TreeBranch } from "@/components/tree-branch";
 import { cn } from "@/lib/utils";
 import {

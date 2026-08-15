@@ -20,7 +20,7 @@ import {
  */
 
 async function writeAuth(contents: unknown): Promise<string> {
-  const dir = await mkdtemp(join(tmpdir(), "trevor-auth-"));
+  const dir = await mkdtemp(join(tmpdir(), "belay-auth-"));
   const path = join(dir, "auth.json");
   await writeFile(path, JSON.stringify(contents), "utf8");
   return path;
@@ -40,7 +40,7 @@ test("static key: a missing auth file fails as ProviderAuthError with a fix hint
   const resolver = staticKeyCredentialResolver({
     providerId: "glm",
     authName: "zai",
-    authPath: join(tmpdir(), "trevor-does-not-exist", "auth.json"),
+    authPath: join(tmpdir(), "belay-does-not-exist", "auth.json"),
   });
   const error = await resolver.resolveApiKey().then(
     () => null,
@@ -81,7 +81,7 @@ test("oauth: a missing auth file fails as ProviderAuthError with a login hint", 
   const resolver = oauthCredentialResolver({
     providerId: "codex",
     oauthName: "openai-codex",
-    authPath: join(tmpdir(), "trevor-does-not-exist", "auth.json"),
+    authPath: join(tmpdir(), "belay-does-not-exist", "auth.json"),
   });
   const error = await resolver.resolveApiKey().then(
     () => null,
@@ -130,6 +130,6 @@ test("persistRefreshedOAuth rejects on an unreadable store (callers persist best
   // resolved a working key. This pins that the failure surfaces as a rejection to swallow, not a
   // silent partial write.
   await assert.rejects(
-    persistRefreshedOAuth(join(tmpdir(), "trevor-does-not-exist", "auth.json"), "anthropic", {}),
+    persistRefreshedOAuth(join(tmpdir(), "belay-does-not-exist", "auth.json"), "anthropic", {}),
   );
 });

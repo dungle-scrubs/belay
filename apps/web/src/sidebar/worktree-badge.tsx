@@ -1,4 +1,4 @@
-import type { WorktreeSummary } from "@trevor/session";
+import type { WorktreeSummary } from "@belay/session";
 import { Copy, FolderGit2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { copyText } from "@/lib/clipboard";

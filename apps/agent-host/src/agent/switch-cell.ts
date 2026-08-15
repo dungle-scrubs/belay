@@ -3,9 +3,9 @@
  * model/reasoning switch request into the loop's step boundary.
  * Not for: applying the switch (loop.ts) or the context-fit guard (context-guard.ts).
  */
-import type { ModelRef, ModelSwitchEndpoint, ModelSwitchInitiator } from "@trevor/session";
+import type { ModelRef, ModelSwitchEndpoint, ModelSwitchInitiator } from "@belay/session";
 
-// The initiator + endpoint shapes are the wire contract (@trevor/session); the host binds to them under
+// The initiator + endpoint shapes are the wire contract (@belay/session); the host binds to them under
 // its local names so a future field add on one side can't silently diverge from the other.
 export type SwitchInitiator = ModelSwitchInitiator;
 export type SwitchEndpoint = ModelSwitchEndpoint;

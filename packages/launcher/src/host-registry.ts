@@ -4,7 +4,7 @@ import { type LauncherFs, readJson, writeJson } from "./fs";
 /**
  * Per-project host lifecycle bookkeeping for the launcher (D-085): ownership records (which pid is
  * answering which session, from where), the reuse/stale/spawn decision, and a per-session lock so two
- * concurrent `trevor` launches can't both spawn a host for the same project. Pure over an injected
+ * concurrent `belay` launches can't both spawn a host for the same project. Pure over an injected
  * `LauncherFs` + small capability callbacks (process-liveness, clock), so every branch is unit-tested
  * without real processes.
  */
@@ -113,7 +113,7 @@ export type LockResult =
   | { readonly acquired: false; readonly heldBy: number };
 
 /**
- * Acquires the per-session launch lock. A live holder (a concurrent `trevor` mid-launch for the same
+ * Acquires the per-session launch lock. A live holder (a concurrent `belay` mid-launch for the same
  * project) blocks - the caller backs off and reuses whatever that launch produces, so two launches
  * never both spawn. A lock left by a DEAD process is stale and taken over. Our own held lock re-acquires.
  */

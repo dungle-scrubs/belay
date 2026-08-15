@@ -1,6 +1,6 @@
 import { basename } from "node:path";
-import type { WorktreeSummary } from "@trevor/session";
-import { projectSessionId } from "@trevor/session";
+import type { WorktreeSummary } from "@belay/session";
+import { projectSessionId } from "@belay/session";
 import {
   addWorktree,
   diffStat,
@@ -24,7 +24,7 @@ import {
 } from "./registry";
 
 /**
- * Orchestrates the Trevor-managed worktree lifecycle (D-091) over the pure registry + git
+ * Orchestrates the Belay-managed worktree lifecycle (D-091) over the pure registry + git
  * layers: it builds the switcher read model, creates/removes worktrees, resolves a switch target,
  * reconciles stale entries, and runs the merge-back/diff inspection. Every external dependency -
  * filesystem, git, clock, id minting, path abbreviation - is injected, so the orchestration is

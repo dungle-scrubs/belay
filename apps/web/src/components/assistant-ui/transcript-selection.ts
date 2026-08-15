@@ -15,7 +15,7 @@
 // selection across churn. <!-- D-003 -->
 export const SEGMENT_ATTR = "data-message-id";
 
-const HIGHLIGHT_NAME = "trevor-transcript-selection";
+const HIGHLIGHT_NAME = "belay-transcript-selection";
 
 /** One endpoint of a logical selection: a segment and a character offset into its text. */
 export type SegmentPoint = { segmentId: string; offset: number };
@@ -173,7 +173,7 @@ export function supportsHighlightApi(): boolean {
 }
 
 /**
- * Paints (or, with a null range, clears) the Trevor-owned transcript highlight. Resolving to
+ * Paints (or, with a null range, clears) the Belay-owned transcript highlight. Resolving to
  * a missing segment clears rather than leaving a stale highlight, so a scrolled-out row shows
  * nothing until it remounts and the next repaint re-resolves it.
  */
@@ -197,7 +197,7 @@ export function paintTranscriptHighlight(
   registry.set(HIGHLIGHT_NAME, new Highlight(domRange));
 }
 
-/** Removes the Trevor-owned transcript highlight (no-op where the API is absent). */
+/** Removes the Belay-owned transcript highlight (no-op where the API is absent). */
 export function clearTranscriptHighlight(): void {
   highlightRegistry()?.delete(HIGHLIGHT_NAME);
 }

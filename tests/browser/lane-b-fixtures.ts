@@ -5,7 +5,7 @@ import {
   PRODUCER_IDS,
   type SessionTransport,
   streamTransport,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * Lane B transcript fixtures (plan 09.2 M3): publish deterministic transcript events straight into the
@@ -101,8 +101,8 @@ function hostOnlineWithJobs(jobs: readonly JobSnapshot[]) {
     },
     commands: [],
     agents: [],
-    cwd: "/Users/kevin/dev/trevor",
-    workspace: "/Users/kevin/dev/trevor",
+    cwd: "/Users/kevin/dev/belay",
+    workspace: "/Users/kevin/dev/belay",
     jobs,
   });
 }
@@ -122,7 +122,7 @@ export function browserJobSnapshot(
   return {
     command: "pnpm test:web --watch",
     source: "bash",
-    cwd: "/Users/kevin/dev/trevor",
+    cwd: "/Users/kevin/dev/belay",
     startedAt: 1,
     status: "running",
     exitCode: null,

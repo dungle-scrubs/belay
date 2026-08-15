@@ -5,17 +5,17 @@ import {
   isAnswerablePrompt,
   runDirectHandoff,
   TurnScheduler,
-} from "@trevor/agent-host/testing";
-import type { RunningServer } from "@trevor/server-kit";
+} from "@belay/agent-host/testing";
+import type { RunningServer } from "@belay/server-kit";
 import {
   decodeTrevorEvent,
   PRODUCER_IDS,
   type SessionEvent,
   events as sessionEvents,
   streamTransport,
-} from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
+} from "@belay/session";
+import { subscribe, waitFor } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**

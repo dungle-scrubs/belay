@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { ModelRef, QuickPickerGroup } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { ModelRef, QuickPickerGroup } from "@trevor/session";
 import { test } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ComposerControls, type ComposerControlsConfig } from "./composer-controls";

@@ -1,4 +1,4 @@
-import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
+import { decodeTrevorEvent, type SessionEvent } from "@belay/session";
 import type { RecallRecord, RecallSessionRef } from "./types";
 
 /**

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { METRIC_NAMES, SPAN_NAMES } from "@trevor/session/telemetry";
-import { recordingTelemetrySink } from "@trevor/test-kit";
+import { METRIC_NAMES, SPAN_NAMES } from "@belay/session/telemetry";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { afterEach, beforeEach, test } from "vitest";
 import { BlobStore, HEX64 } from "./store";
 

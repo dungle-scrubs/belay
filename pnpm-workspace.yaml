@@ -5,11 +5,19 @@ packages:
   - "tests/browser"
 overrides:
   # Pin every Playwright surface to the version baked into the pinned browser container
-  # (mcr.microsoft.com/playwright:v1.50.0-noble), so the host library, @storybook/test-runner's bundled
+  # (mcr.microsoft.com/playwright:v1.62.1-noble), so the host library, @storybook/test-runner's bundled
   # playwright, and the container's pre-installed browsers can never drift (plan 09.2 D-002).
-  playwright: 1.50.0
-  playwright-core: 1.50.0
-  "@playwright/test": 1.50.0
+  playwright: 1.62.1
+  playwright-core: 1.62.1
+  "@playwright/test": 1.62.1
+  # Security overrides for transitive deps with CVEs (pinned to patched ranges).
+  postcss: 8.5.26
+  undici: 7.29.0
+  js-yaml: 3.15.1
+  nanoid: 5.1.16
+  shell-quote: 1.9.0
+  brace-expansion: 5.0.9
+  uuid: 11.1.1
 allowBuilds:
   # The host resolves the ast-grep platform binary directly (tools/ast-grep-bin.ts), so its
   # postinstall wrapper is not needed - skip the build script.

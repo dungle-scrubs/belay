@@ -1,4 +1,4 @@
-import { type ArtifactRef, errorMessage, isLargePaste, type PastePayload } from "@trevor/session";
+import { type ArtifactRef, errorMessage, isLargePaste, type PastePayload } from "@belay/session";
 import { useMemoizedFn } from "ahooks";
 import {
   type ChangeEvent,

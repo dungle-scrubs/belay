@@ -1,5 +1,5 @@
+import type { TrevorEventInput } from "@belay/session";
 import type { TurnHooks } from "@host/agent/loop";
-import type { TrevorEventInput } from "@trevor/session";
 import { afterEach, describe, expect, test } from "vitest";
 import { fakeProvider, runTurn, scriptedStep } from "../support/fake-provider";
 import { type HooksRuntimeHarness, hooksRuntimeHarness } from "./runtime-fixture";

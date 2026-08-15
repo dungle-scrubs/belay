@@ -1,4 +1,4 @@
-import { type InternetSnapshot, isSnapshotStale, relativeTime } from "@trevor/session";
+import { type InternetSnapshot, isSnapshotStale, relativeTime } from "@belay/session";
 import { Loader2, RefreshCw, Wifi, WifiOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 

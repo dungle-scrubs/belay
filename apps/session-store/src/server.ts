@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Server, ServerResponse } from "node:http";
-import { createService, json, type Route, readJson } from "@trevor/server-kit";
+import { createService, json, type Route, readJson } from "@belay/server-kit";
 import {
   DELETE_PATTERN,
   DIAG_PATH,
@@ -16,8 +16,8 @@ import {
   type SessionSummary,
   STREAM_PATTERN,
   summarizeSession,
-} from "@trevor/session";
-import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
+} from "@belay/session";
+import { createTelemetrySink } from "@belay/session/telemetry-file-sink";
 import { WebSocketServer } from "ws";
 import { InventoryProjection } from "./inventory";
 import { SessionLog, StoreCircuitOpenError } from "./log";
@@ -28,7 +28,7 @@ import { SessionHub } from "./session-hub";
  * without listening - so `main.ts` can bind the configured port and tests can bind
  * an ephemeral one against a throwaway database. The server speaks the SAME
  * `/sessions` REST + `/sessions/{id}/stream` contract Tether does, so the shared
- * client (@trevor/session streamTransport) reaches either with only a URL change.
+ * client (@belay/session streamTransport) reaches either with only a URL change.
  *
  *   POST  /sessions                      { sessionId }                 -> { session: { sessionId } }
  *   POST  /sessions/<id>/events          { type, producerId, payload } -> { ok, seq }
@@ -44,11 +44,11 @@ import { SessionHub } from "./session-hub";
  */
 
 // The runtimeKind the agent-host declares on its stream identity (RUNTIME_KIND.host,
-// owned in @trevor/session). Presence tracks THIS runtime - "is a host connected right
+// owned in @belay/session). Presence tracks THIS runtime - "is a host connected right
 // now" - so a browser (RUNTIME_KIND.web) joining never counts as a host.
 const HOST_RUNTIME = RUNTIME_KIND.host;
 
-// The browser (trevor-web :17420) reads/writes cross-origin; the store serves GET/POST.
+// The browser (belay-web :17420) reads/writes cross-origin; the store serves GET/POST.
 const CORS_METHODS = "GET, POST, OPTIONS";
 
 // WebSocket close code 1013 "Try Again Later" - the stream-side twin of the HTTP 503 below.
@@ -239,7 +239,7 @@ export function buildSessionStore(dbPath: string, options: SessionStoreOptions =
     const sessionId = decodeURIComponent(match[1] as string);
 
     // Identity + cursor ride the stream URL; decode them with the same codec the client
-    // encodes with (@trevor/session) so the param names can't drift between the two. A
+    // encodes with (@belay/session) so the param names can't drift between the two. A
     // connection from the agent-host runtime counts toward presence; anything else (a
     // browser) only observes it.
     const { identity, afterSeq } = decodeStreamParams(url.searchParams);

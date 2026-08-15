@@ -1,5 +1,5 @@
+import type { LoopControl, LoopInventoryRow, TaskSnapshot } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { LoopControl, LoopInventoryRow, TaskSnapshot } from "@trevor/session";
 import { useRef } from "react";
 import { expect, test, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";

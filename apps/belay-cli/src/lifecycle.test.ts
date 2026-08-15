@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary } from "@belay/session";
 import { test } from "vitest";
 import {
   expandHome,
@@ -13,7 +13,7 @@ import {
 } from "./lifecycle";
 
 /**
- * D-094 M3: the `trevor` lifecycle subcommands. The filtering + rendering + command flow are pure
+ * D-094 M3: the `belay` lifecycle subcommands. The filtering + rendering + command flow are pure
  * over an injected IO, so these pin the active/archived split, current-project scope, recency order,
  * and the archive/unarchive publish without a running store.
  */
@@ -23,10 +23,10 @@ const NOW = Date.parse("2026-06-27T12:00:00.000Z");
 function summary(over: Partial<SessionSummary> & { sessionId: string }): SessionSummary {
   return {
     title: `session ${over.sessionId}`,
-    cwd: "~/dev/trevor",
-    workspace: "~/dev/trevor",
-    project: "trevor",
-    projectPath: "~/dev/trevor",
+    cwd: "~/dev/belay",
+    workspace: "~/dev/belay",
+    project: "belay",
+    projectPath: "~/dev/belay",
     branch: "main",
     git: null,
     createdAt: "2026-06-25T00:00:00.000Z",
@@ -51,7 +51,7 @@ test("selectSessions lists active current-project sessions newest-first by defau
     summary({ sessionId: "other", project: "otherRepo" }),
   ];
   assert.deepEqual(
-    selectSessions(list, "trevor", { archived: false }).map((s) => s.sessionId),
+    selectSessions(list, "belay", { archived: false }).map((s) => s.sessionId),
     ["b", "a"],
     "archived + other-project excluded; recency desc",
   );
@@ -64,7 +64,7 @@ test("selectSessions with archived:true lists only archived current-project sess
     summary({ sessionId: "filed-other", archived: true, project: "otherRepo" }),
   ];
   assert.deepEqual(
-    selectSessions(list, "trevor", { archived: true }).map((s) => s.sessionId),
+    selectSessions(list, "belay", { archived: true }).map((s) => s.sessionId),
     ["filed"],
   );
 });
@@ -102,8 +102,8 @@ test("runList renders the fetched inventory scoped to the project", async () => 
         summary({ sessionId: "filed", archived: true }),
       ]),
   });
-  const out = await runList(io, "trevor", false);
-  assert.ok(out.includes("Sessions for trevor"));
+  const out = await runList(io, "belay", false);
+  assert.ok(out.includes("Sessions for belay"));
   assert.ok(out.includes("keep"));
   assert.ok(!out.includes("filed"), "archived excluded from the default list");
 });
@@ -171,7 +171,7 @@ test("runStop on a dead-process record cleans up the stale record without signal
 });
 
 test("expandHome expands a leading ~ against home and leaves absolute paths alone", () => {
-  assert.equal(expandHome("~/dev/trevor", "/Users/kevin"), "/Users/kevin/dev/trevor");
+  assert.equal(expandHome("~/dev/belay", "/Users/kevin"), "/Users/kevin/dev/belay");
   assert.equal(expandHome("~", "/Users/kevin"), "/Users/kevin");
   assert.equal(expandHome("/abs/path", "/Users/kevin"), "/abs/path");
   assert.equal(expandHome("relative", "/Users/kevin"), "relative", "a non-~ path is untouched");
@@ -179,12 +179,12 @@ test("expandHome expands a leading ~ against home and leaves absolute paths alon
 
 test("resolveOpenTarget resolves a known session to its expanded workspace root", () => {
   const list = [
-    summary({ sessionId: "s1", workspace: "~/dev/trevor" }),
+    summary({ sessionId: "s1", workspace: "~/dev/belay" }),
     summary({ sessionId: "s2", workspace: "~/dev/other" }),
   ];
   assert.deepEqual(resolveOpenTarget(list, "s1", "/Users/kevin"), {
     sessionId: "s1",
-    root: "/Users/kevin/dev/trevor",
+    root: "/Users/kevin/dev/belay",
   });
 });
 
@@ -197,12 +197,12 @@ test("resolveOpenTarget falls back to cwd when workspace is null", () => {
 });
 
 test("resolveOpenTarget refuses an archived session and points to unarchive (D-094 M2)", () => {
-  const list = [summary({ sessionId: "filed", workspace: "~/dev/trevor", archived: true })];
+  const list = [summary({ sessionId: "filed", workspace: "~/dev/belay", archived: true })];
   const result = resolveOpenTarget(list, "filed", "/Users/kevin");
   assert.ok("error" in result, "an archived session is not openable directly");
   assert.ok(result.error.includes("archived"), "the error names the archived state");
   assert.ok(
-    result.error.includes("trevor unarchive filed"),
+    result.error.includes("belay unarchive filed"),
     "the error points to the unarchive command",
   );
 });
@@ -213,7 +213,7 @@ test("resolveOpenTarget reports a missing id, an unknown session, and a session 
   const unknown = resolveOpenTarget(list, "ghost", "/h");
   assert.ok("error" in unknown && unknown.error.includes("ghost"));
   assert.ok(
-    "error" in unknown && unknown.error.includes("trevor list"),
+    "error" in unknown && unknown.error.includes("belay list"),
     "points to the list command",
   );
   const noRoot = resolveOpenTarget(

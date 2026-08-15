@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { RunningServer } from "@trevor/server-kit";
+import type { RunningServer } from "@belay/server-kit";
 import {
   foldLucidReview,
   formatLucidFeedbackForPrompt,
@@ -10,9 +10,9 @@ import {
   type SessionEvent,
   events as sessionEvents,
   streamTransport,
-} from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
+} from "@belay/session";
+import { subscribe, waitFor } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**

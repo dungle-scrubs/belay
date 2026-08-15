@@ -1,13 +1,13 @@
+import { expandArgs } from "@belay/session";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import { expandArgs } from "@trevor/session";
 import { expandCommandFile } from "./command-file";
 import type { LoadedCommandFile } from "./command-loader";
 import type { InterpolationConfig } from "./interpolation";
 
 /**
  * The expand-on-dispatch SUBMIT branch for file-loaded commands (plan 44.5, M4). When a user invokes a
- * `.trevor/commands/*.md` command, its body is NOT rendered as a `command.result` (the immediate-command
+ * `.belay/commands/*.md` command, its body is NOT rendered as a `command.result` (the immediate-command
  * lane) - it is expanded and SUBMITTED as the turn's prompt, so a custom command drives the model exactly
  * like a typed prompt would.
  *
@@ -19,7 +19,7 @@ import type { InterpolationConfig } from "./interpolation";
  *
  * Responsible for: the interpolate-then-substitute expansion + publishing the expanded body as a prompt,
  * with a dispatch-boundary log and a fail-soft that surfaces an error result instead of throwing.
- * Not for: tokenization/substitution rules (@trevor/session/command-args), interpolation gating
+ * Not for: tokenization/substitution rules (@belay/session/command-args), interpolation gating
  * (command-file.ts / interpolation.ts), loading files (command-loader.ts), or the control-prompt shape
  * (agent/control-prompts.ts - `publish` is that seam, injected here).
  */

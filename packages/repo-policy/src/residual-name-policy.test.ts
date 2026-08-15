@@ -7,9 +7,9 @@ import {
 
 describe("residual name policy", () => {
   const oldSuffix = "V2";
-  const oldTitle = `Trevor ${oldSuffix}`;
-  const oldProject = `trevor${oldSuffix}`;
-  const oldHome = `~/.trevor${oldSuffix}`;
+  const oldTitle = `Belay ${oldSuffix}`;
+  const oldProject = `belay${oldSuffix}`;
+  const oldHome = `~/.belay${oldSuffix}`;
 
   it("scans docs, downstream plan docs, and Claude skills", () => {
     expect(isResidualNamePolicyPath("AGENTS.md")).toBe(true);
@@ -23,14 +23,14 @@ describe("residual name policy", () => {
 
   it("does not scan source files or the active rename plan narrative", () => {
     expect(isResidualNamePolicyPath("apps/web/src/app.tsx")).toBe(false);
-    expect(isResidualNamePolicyPath(".plans/56-rename-to-trevor/implementation.md")).toBe(false);
+    expect(isResidualNamePolicyPath(".plans/56-rename-to-belay/implementation.md")).toBe(false);
   });
 
   it("flags old project names in scanned files with line numbers", () => {
     const files = {
       "AGENTS.md": `${oldTitle}\n${oldHome}\n`,
       ".claude/skills/implement-plan/SKILL.md": `repo /Users/kevin/dev/${oldProject}\n`,
-      ".plans/56-rename-to-trevor/implementation.md": `${oldTitle} is historical here\n`,
+      ".plans/56-rename-to-belay/implementation.md": `${oldTitle} is historical here\n`,
     } as const;
 
     expect(
@@ -45,7 +45,7 @@ describe("residual name policy", () => {
   it("keeps output stable and actionable", () => {
     expect(formatResidualNameViolations([{ path: "AGENTS.md", line: 3, match: oldTitle }])).toBe(
       [
-        "Residual name policy failed: docs and Claude skills must not use old Trevor rename markers.",
+        "Residual name policy failed: docs and Claude skills must not use old Belay rename markers.",
         "",
         `- AGENTS.md:3 contains ${JSON.stringify(oldTitle)}`,
       ].join("\n"),

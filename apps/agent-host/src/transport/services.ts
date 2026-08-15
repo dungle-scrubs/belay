@@ -3,7 +3,7 @@
  * the seams for publishing events to the Tether log.
  */
 
-import type { TrevorEventInput } from "@trevor/session";
+import type { TrevorEventInput } from "@belay/session";
 import { Context, Effect, Layer } from "effect";
 
 /** Publishes one host-authored event to the durable log - the shape of main.ts's `emit`, threaded
@@ -11,7 +11,7 @@ import { Context, Effect, Layer } from "effect";
 export type EmitEvent = (event: TrevorEventInput) => Promise<void>;
 
 /**
- * Publishes one trevor event to the durable Tether log. Modeled as a service (not a
+ * Publishes one belay event to the durable Tether log. Modeled as a service (not a
  * threaded callback) so the turn pipeline declares its need to emit in its `R` channel,
  * `main` provides the live publisher via a Layer, and tests provide a collecting layer.
  * This is the dependency-injection seam between the Effect turn program and the

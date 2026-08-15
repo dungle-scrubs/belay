@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { PublishInput } from "@trevor/session";
+import type { PublishInput } from "@belay/session";
 import { test } from "vitest";
 import { InventoryProjection } from "./inventory";
 import { SessionLog } from "./log";

@@ -1,4 +1,4 @@
-import type { SessionSummary, TangentAnchorSeed } from "@trevor/session";
+import type { SessionSummary, TangentAnchorSeed } from "@belay/session";
 import { useCallback, useRef, useState } from "react";
 import type { TangentSelection } from "@/components/assistant-ui/quote-selection-toolbar";
 import { createTangentSession } from "@/session/use-session";

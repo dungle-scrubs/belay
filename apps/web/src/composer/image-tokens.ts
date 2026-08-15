@@ -3,7 +3,7 @@ import {
   type ImageTokenSpan,
   parseImageTokens,
   imageTokenText as tokenText,
-} from "@trevor/session";
+} from "@belay/session";
 import { positionalTokenDraft } from "./positional-tokens";
 
 /**
@@ -12,13 +12,13 @@ import { positionalTokenDraft } from "./positional-tokens";
  * ref; the displayed number N is purely positional, so removing a token renumbers the rest.
  *
  * The `[Image #N]` token FORMAT (parser, `tokenText`) is the cross-surface contract owned by
- * `@trevor/session` (the host strips the same tokens when projecting to the provider). The editing
+ * `@belay/session` (the host strips the same tokens when projecting to the provider). The editing
  * INVARIANTS (insert/auto-space/atomic-remove/renumber/reconcile) live once in the shared
  * {@link positionalTokenDraft} engine; this module is the image codec (which token FORMAT to edit)
  * plus the thin `ImageDraft`-shaped surface the composer + overlay import.
  */
 
-export type { ImageTokenSpan as TokenSpan } from "@trevor/session";
+export type { ImageTokenSpan as TokenSpan } from "@belay/session";
 // Re-export the shared format pieces so the overlay + tests keep importing from one composer module.
 export { parseImageTokens, tokenText };
 

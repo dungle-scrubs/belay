@@ -1,4 +1,4 @@
-import { storagePathByName, type TrevorPathEnv } from "@trevor/session/node-paths";
+import { storagePathByName, type TrevorPathEnv } from "@belay/session/node-paths";
 
 /**
  * The session-store's identity, declared ONCE: the storage-inventory artifact its DB lives under, the

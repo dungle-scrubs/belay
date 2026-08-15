@@ -2,18 +2,14 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type {
-  McpArgs,
-  McpElicitationRequest,
-  McpSamplingRequest,
-} from "@trevor/agent-host/testing";
+import type { McpArgs, McpElicitationRequest, McpSamplingRequest } from "@belay/agent-host/testing";
 import {
   STDIO_FIXTURE_COMMAND,
   startFixtureHttpServer,
   stdioFixtureArgs,
-} from "@trevor/agent-host/testing/mcp-fixtures";
-import type { RunningServer } from "@trevor/server-kit";
-import type { SessionEvent } from "@trevor/session";
+} from "@belay/agent-host/testing/mcp-fixtures";
+import type { RunningServer } from "@belay/server-kit";
+import type { SessionEvent } from "@belay/session";
 import { Effect } from "effect";
 import { afterAll, beforeAll, describe, test } from "vitest";
 
@@ -21,7 +17,7 @@ import { afterAll, beforeAll, describe, test } from "vitest";
  * S-E2E MCP capability suite (plan 23 M9, D-006 / Gate 3): every supported MCP capability, end
  * to end and hermetic. REAL fixture servers (a spawned stdio child, real node:http servers in
  * plain-JSON and SSE response modes on ephemeral ports) are registered in a REAL
- * `<TREVOR_HOME>/mcp-servers.json` under a temp home, so the exact config path production walks
+ * `<BELAY_HOME>/mcp-servers.json` under a temp home, so the exact config path production walks
  * (node-paths -> boot/paths -> loadMcpServersConfig -> host-runtime singleton) is exercised.
  *
  * Two layers, matching what each proves best:
@@ -36,7 +32,7 @@ import { afterAll, beforeAll, describe, test } from "vitest";
  *     (denied/enabled), status incl. auth_needed, timeout, crash fail-closed + fresh-runtime
  *     recovery, and closed behavior.
  *
- * ORDERING MATTERS: `@trevor/session/node-paths` binds TREVOR_HOME at first evaluation, and
+ * ORDERING MATTERS: `@belay/session/node-paths` binds BELAY_HOME at first evaluation, and
  * both the host testing surface AND the test-kit boot chain (store servers -> telemetry file
  * sink) reach it. So this file's static imports are strictly side-effect-free (node builtins,
  * types, the MCP fixture surface); the env override runs at module scope; and every
@@ -47,26 +43,26 @@ import { afterAll, beforeAll, describe, test } from "vitest";
 
 // --- hermetic home, BEFORE any node-paths-reaching module loads ---
 
-const HOME = mkdtempSync(join(tmpdir(), "trevor-e2e-mcp-home-"));
-const STATE = mkdtempSync(join(tmpdir(), "trevor-e2e-mcp-state-"));
+const HOME = mkdtempSync(join(tmpdir(), "belay-e2e-mcp-home-"));
+const STATE = mkdtempSync(join(tmpdir(), "belay-e2e-mcp-state-"));
 
 /** The D-004 e2e proof: a provider secret sitting in the HOST env that must never reach a child. */
 const FAKE_OPENAI_KEY = "sk-e2e-mcp-secret-that-must-never-leak";
 const BEARER_TOKEN = "fixture-bearer-token";
 
 const SAVED_ENV = {
-  TREVOR_HOME: process.env.TREVOR_HOME,
-  TREVOR_STATE_HOME: process.env.TREVOR_STATE_HOME,
+  BELAY_HOME: process.env.BELAY_HOME,
+  BELAY_STATE_HOME: process.env.BELAY_STATE_HOME,
   OPENAI_API_KEY: process.env.OPENAI_API_KEY,
 };
 
-process.env.TREVOR_HOME = HOME;
-process.env.TREVOR_STATE_HOME = STATE;
+process.env.BELAY_HOME = HOME;
+process.env.BELAY_STATE_HOME = STATE;
 process.env.OPENAI_API_KEY = FAKE_OPENAI_KEY;
 
-type HostTesting = typeof import("@trevor/agent-host/testing");
-type SessionModule = typeof import("@trevor/session");
-type TestKit = typeof import("@trevor/test-kit");
+type HostTesting = typeof import("@belay/agent-host/testing");
+type SessionModule = typeof import("@belay/session");
+type TestKit = typeof import("@belay/test-kit");
 type McpTool = ReturnType<HostTesting["buildMcpTool"]>;
 type FixtureHttpServer = Awaited<ReturnType<typeof startFixtureHttpServer>>;
 
@@ -91,9 +87,9 @@ const stdioServer = (extra: Record<string, unknown> = {}): Record<string, unknow
 });
 
 beforeAll(async () => {
-  session = await import("@trevor/session");
-  kit = await import("@trevor/test-kit");
-  const { bootStore } = await import("@trevor/test-kit/boot");
+  session = await import("@belay/session");
+  kit = await import("@belay/test-kit");
+  const { bootStore } = await import("@belay/test-kit/boot");
 
   [httpJson, httpSse, httpAuth, toolProxy] = await Promise.all([
     startFixtureHttpServer(),
@@ -135,7 +131,7 @@ beforeAll(async () => {
   );
 
   // Only now may the host surface load: its singleton reads mcp-servers.json at import.
-  host = await import("@trevor/agent-host/testing");
+  host = await import("@belay/agent-host/testing");
   store = await bootStore();
 
   runtimeAll = host.createMcpRuntime(host.loadMcpServersConfig().servers);

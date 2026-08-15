@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { tempDir } from "@trevor/test-kit";
-import { type BootedBlob, bootBlob } from "@trevor/test-kit/boot";
+import { tempDir } from "@belay/test-kit";
+import { type BootedBlob, bootBlob } from "@belay/test-kit/boot";
 import { afterEach, test } from "vitest";
 
 /**
@@ -60,8 +60,8 @@ async function put(body: string): Promise<void> {
 }
 
 test("the file exporter writes bounded blob-store telemetry through a real HTTP round-trip", async () => {
-  stateHome = tempDir("trevor-telem-e2e-");
-  setEnv({ TREVOR_STATE_HOME: stateHome, TREVOR_OTEL_EXPORTER: "file" });
+  stateHome = tempDir("belay-telem-e2e-");
+  setEnv({ BELAY_STATE_HOME: stateHome, TREVOR_OTEL_EXPORTER: "file" });
   blob = await bootBlob();
   await put("secret telemetry e2e blob body");
 
@@ -73,7 +73,7 @@ test("the file exporter writes bounded blob-store telemetry through a real HTTP 
     .split("\n")
     .map((line) => JSON.parse(line));
   assert.ok(
-    records.some((r) => r.t === "span" && r.name === "trevor.blob.io"),
+    records.some((r) => r.t === "span" && r.name === "belay.blob.io"),
     "a blob-IO span was exported to the file",
   );
   assert.ok(
@@ -83,9 +83,9 @@ test("the file exporter writes bounded blob-store telemetry through a real HTTP 
 });
 
 test("with telemetry disabled (the default), a booted service writes no otel artifacts", async () => {
-  stateHome = tempDir("trevor-telem-e2e-");
+  stateHome = tempDir("belay-telem-e2e-");
   setEnv({
-    TREVOR_STATE_HOME: stateHome,
+    BELAY_STATE_HOME: stateHome,
     TREVOR_OTEL_EXPORTER: undefined,
     TREVOR_SENTRY_DSN: undefined,
   });

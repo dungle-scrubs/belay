@@ -48,11 +48,11 @@ describe("lsp manager - lifecycle", () => {
     const outcome = await lsp.acquire();
     expect(outcome.kind).toBe("ready");
     if (outcome.kind === "ready") {
-      expect(outcome.server).toBe("trevor-lsp-fixture");
+      expect(outcome.server).toBe("belay-lsp-fixture");
     }
     expect(lsp.status()).toMatchObject({
       status: "ready",
-      server: "trevor-lsp-fixture",
+      server: "belay-lsp-fixture",
       restarts: 0,
     });
   });
@@ -218,7 +218,7 @@ describe("lsp manager - diagnostics through an acquired client", () => {
 
 describe("lsp manager - real TS adapter degradation", () => {
   it("degrades a real TS workspace with no installed server binary to unavailable", async () => {
-    const root = mkdtempSync(join(tmpdir(), "trevor-lsp-manager-"));
+    const root = mkdtempSync(join(tmpdir(), "belay-lsp-manager-"));
     writeFileSync(join(root, "tsconfig.json"), "{}");
     try {
       const lsp = manager({

@@ -2,13 +2,13 @@ import {
   type ToolScriptResult,
   type ToolScriptToolset,
   validateToolScriptRequest,
-} from "@trevor/session";
+} from "@belay/session";
 import {
   SPAN_NAMES,
   safeAttributes,
   safeEmitSpan,
   type TelemetrySink,
-} from "@trevor/session/telemetry";
+} from "@belay/session/telemetry";
 import { Effect, Schema } from "effect";
 import type { Tool, ToolContext } from "../tools/types";
 import { type BridgeExecute, createToolScriptBridge } from "./bridge";
@@ -67,7 +67,7 @@ export interface ToolScriptToolDeps {
   readonly spawn?: (command: readonly string[], cwd: string) => ManagedChild;
 }
 
-/** Emits the `trevor.tool_script` observability span - script hash, sandbox mode, toolsets, bounded counts,
+/** Emits the `belay.tool_script` observability span - script hash, sandbox mode, toolsets, bounded counts,
  *  and failure class. All attributes are low-cardinality + safeAttributes-gated (no script source, paths). */
 function emitToolScriptSpan(
   sink: TelemetrySink,

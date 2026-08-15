@@ -1,4 +1,4 @@
-import { errorMessage } from "@trevor/session";
+import { errorMessage } from "@belay/session";
 
 export class CliStageError extends Error {
   readonly stage: string;

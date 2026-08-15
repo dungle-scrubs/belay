@@ -7,9 +7,9 @@
  * Not for: extraction (processor.ts) or provider continuation (continuation.ts).
  */
 import { createHash } from "node:crypto";
+import type { ArtifactRef } from "@belay/session";
 import { createHostArtifactRuntime, HOST_BLOB_STORE_URL } from "@host/artifacts/runtime";
 import { debug } from "@host/transport/log";
-import type { ArtifactRef } from "@trevor/session";
 import { Schema } from "effect";
 import { simpleTool } from "../shared";
 import type { Tool } from "../types";

@@ -1,5 +1,5 @@
+import type { JobSnapshot, TaskSnapshot } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
 import type { ReactNode } from "react";
 import type { SupportSubagent } from "./support-panel";
 import { SupportPanel } from "./support-panel-view";

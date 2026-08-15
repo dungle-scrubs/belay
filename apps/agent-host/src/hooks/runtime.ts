@@ -1,5 +1,5 @@
 import { statSync } from "node:fs";
-import { TREVOR_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
+import { BELAY_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { debug, log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import {
@@ -210,9 +210,9 @@ export interface HooksRuntimeOptions {
   /** Trust anchor + approval-key scope for project hooks and the hook child cwd (default
    *  WORKSPACE_ROOT). */
   readonly workspaceRoot?: string;
-  /** Trust anchor for user hooks (default TREVOR_HOME). */
+  /** Trust anchor for user hooks (default BELAY_HOME). */
   readonly userConfigDir?: string;
-  /** The V1 user hooks dir the legacy HOOK.md scan checks (M10); default `~/.trevor_legacy/hooks`.
+  /** The V1 user hooks dir the legacy HOOK.md scan checks (M10); default `~/.belay_legacy/hooks`.
    *  Injectable so tests never touch the real legacy home. */
   readonly legacyUserHooksDir?: string;
   /** Runner tunables passed through to every execution; injectable for tests. */
@@ -286,7 +286,7 @@ export function createHooksRuntime(options: HooksRuntimeOptions = {}): HooksRunt
   const roots = options.roots ?? defaultHookDiscoveryRoots();
   const approvalsPath = options.approvalsPath ?? hookApprovalsPath();
   const workspaceRoot = options.workspaceRoot ?? WORKSPACE_ROOT;
-  const userConfigDir = options.userConfigDir ?? TREVOR_HOME;
+  const userConfigDir = options.userConfigDir ?? BELAY_HOME;
   const stats = createHookStats();
 
   // Discovery is lazy and cached for the host's lifetime (the mcp-servers.json posture: config

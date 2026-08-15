@@ -1,5 +1,5 @@
+import type { CommandMenuPayload } from "@belay/session";
 import { fireEvent, render, within } from "@testing-library/react";
-import type { CommandMenuPayload } from "@trevor/session";
 import { expect, test } from "vitest";
 import { CommandMenu } from "./command-menu";
 

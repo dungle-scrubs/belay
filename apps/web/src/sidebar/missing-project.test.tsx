@@ -1,6 +1,6 @@
+import { missingProjectRootReason } from "@belay/session";
+import { sessionSummary } from "@belay/test-kit";
 import { fireEvent, render } from "@testing-library/react";
-import { missingProjectRootReason } from "@trevor/session";
-import { sessionSummary } from "@trevor/test-kit";
 import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";

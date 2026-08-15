@@ -1,5 +1,5 @@
+import type { PastePayload } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { PastePayload } from "@trevor/session";
 import { useState } from "react";
 import { type ComposerDraft, removePasteAt, syncComposerDraft } from "./draft";
 import { PasteTokenOverlay } from "./paste-token-overlay";

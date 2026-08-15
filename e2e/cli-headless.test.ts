@@ -1,14 +1,14 @@
-import { answerProvider, attachFakeHost, hangingProvider } from "@trevor/agent-host/testing";
-import { runCancel, runPrompt, runTranscript } from "@trevor/cli/headless";
-import { createTrevorClient } from "@trevor/sdk";
-import { decodeTrevorEvent, PRODUCER_IDS, streamTransport } from "@trevor/session";
-import { subscribe, waitFor } from "@trevor/test-kit";
-import { bootBlob, bootStore } from "@trevor/test-kit/boot";
+import { answerProvider, attachFakeHost, hangingProvider } from "@belay/agent-host/testing";
+import { runCancel, runPrompt, runTranscript } from "@belay/cli/headless";
+import { createTrevorClient } from "@belay/sdk";
+import { decodeTrevorEvent, PRODUCER_IDS, streamTransport } from "@belay/session";
+import { subscribe, waitFor } from "@belay/test-kit";
+import { bootBlob, bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 /**
- * Plan 28 M11: the headless `trevor` CLI drives prompt / stream / cancel over a REAL local session-store
- * and blob-store, through the exact `@trevor/sdk` workflows the SDK and test-kit use - one protocol, three
+ * Plan 28 M11: the headless `belay` CLI drives prompt / stream / cancel over a REAL local session-store
+ * and blob-store, through the exact `@belay/sdk` workflows the SDK and test-kit use - one protocol, three
  * consumers. A fake-provider host (the same one the eval harness attaches) reacts to the CLI's prompts.
  */
 
@@ -70,7 +70,7 @@ describe("headless CLI over local stores", () => {
     }
   });
 
-  it("cancel: a `trevor cancel <run>` mid-turn resolves the streamed prompt as cancelled", async () => {
+  it("cancel: a `belay cancel <run>` mid-turn resolves the streamed prompt as cancelled", async () => {
     const sessionId = "cli-cancel";
     const transport = streamTransport(store.url);
     await transport.ensureSession(sessionId);

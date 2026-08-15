@@ -506,7 +506,7 @@ function coerceProviderModels(value: unknown): Record<string, ProviderModel> {
   return out;
 }
 
-/** A decoded trevor event: discriminated on `type` with coerced payload fields. */
+/** A decoded belay event: discriminated on `type` with coerced payload fields. */
 // --- the wire-event tables: one definition per event yields the decoded type AND the decoder ---
 //
 // Each event below is a single `wireEvent` spec (see ./wire): its field table IS the payload
@@ -1024,7 +1024,7 @@ const HOST_EVENTS = [
 ] as const;
 
 /**
- * The decoded trevor event union, derived from the wire-event tables above: adding or
+ * The decoded belay event union, derived from the wire-event tables above: adding or
  * changing a field spec IS the type change - there is no second hand-maintained union.
  */
 export type DecodedEvent =
@@ -1052,7 +1052,7 @@ function familyOf(notes: string, entries: readonly WireEventLike[]): EventFamily
   };
 }
 
-const trevorEventRegistry = createProtocolRegistry([
+const belayEventRegistry = createProtocolRegistry([
   familyOf("User, assistant, model, delegation, and workflow turn events.", TRANSCRIPT_EVENTS),
   familyOf("User control, command, and shell/editor events.", USER_CONTROL_EVENTS),
   familyOf("Session lifecycle, lineage, supervisor, and project events.", SESSION_EVENTS),
@@ -1064,15 +1064,21 @@ const trevorEventRegistry = createProtocolRegistry([
 ]);
 
 /**
- * Decodes one raw SessionEvent into a typed trevor event, or `null` for an unrecognized type.
+ * Decodes one raw SessionEvent into a typed belay event, or `null` for an unrecognized type.
  * runId/callId fall back to the event's own id so a missing correlation id never collapses distinct
  * turns together.
  */
-export function decodeTrevorEvent(event: SessionEvent): DecodedEvent | null {
-  return trevorEventRegistry.decode(event);
+export function decodeBelayEvent(event: SessionEvent): DecodedEvent | null {
+  return belayEventRegistry.decode(event);
 }
+
+/** @deprecated Use decodeBelayEvent — kept for backward compat. */
+export const decodeTrevorEvent = decodeBelayEvent;
 
 /** Every wire type the decoder dispatches on, derived from the tables (sorted). The decode
  *  robustness net asserts its seed corpus against this list, so corpus coverage cannot
  *  silently drift from the registry. */
-export const REGISTERED_WIRE_TYPES: readonly string[] = trevorEventRegistry.wireNames();
+export const REGISTERED_WIRE_TYPES: readonly string[] = belayEventRegistry.wireNames();
+
+/** @deprecated Alias */
+export const trevorEventRegistry = belayEventRegistry;

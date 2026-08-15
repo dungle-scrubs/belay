@@ -243,20 +243,20 @@ it.effect("an auth failure is terminal and unchanged (never retried)", () =>
 
 describe("M5: an unknown terminal failure is recorded as a redacted observation", () => {
   let obsHome: string;
-  const savedHome = process.env.TREVOR_STATE_HOME;
-  const savedConfig = process.env.TREVOR_HOME;
+  const savedHome = process.env.BELAY_STATE_HOME;
+  const savedConfig = process.env.BELAY_HOME;
 
   beforeEach(() => {
-    obsHome = mkdtempSync(join(tmpdir(), "trevor-recon-obs-"));
-    process.env.TREVOR_STATE_HOME = obsHome;
+    obsHome = mkdtempSync(join(tmpdir(), "belay-recon-obs-"));
+    process.env.BELAY_STATE_HOME = obsHome;
     // Isolate the config home too, so the corpus migration never imports the developer's real store.
-    process.env.TREVOR_HOME = join(obsHome, "config");
+    process.env.BELAY_HOME = join(obsHome, "config");
   });
 
   afterEach(() => {
     for (const [key, value] of [
-      ["TREVOR_STATE_HOME", savedHome],
-      ["TREVOR_HOME", savedConfig],
+      ["BELAY_STATE_HOME", savedHome],
+      ["BELAY_HOME", savedConfig],
     ] as const) {
       if (value === undefined) {
         delete process.env[key];

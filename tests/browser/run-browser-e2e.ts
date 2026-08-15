@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:net";
-import { bootStore } from "@trevor/test-kit/boot";
+import { bootStore } from "@belay/test-kit/boot";
 
 /** An OS-assigned free TCP port, so the preview never collides with a dev server on the reserved web
  *  port (or a stray previous run). */
@@ -24,7 +24,7 @@ function freePort(): Promise<number> {
  *   - `TREVOR_E2E_STORE_URL` -> the specs open their own transport to publish the deterministic transcript
  *     events the browser then renders.
  * Booting here (not in a Playwright hook) keeps the order unambiguous: store up BEFORE preview + workers,
- * and torn down after. The web app must already be built (`pnpm --filter @trevor/web build`).
+ * and torn down after. The web app must already be built (`pnpm --filter @belay/web build`).
  */
 async function main(): Promise<number> {
   // No blob-store: the transcript specs publish text-only events and the app never reaches /blob here.

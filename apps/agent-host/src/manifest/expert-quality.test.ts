@@ -1,5 +1,5 @@
-import type { CapabilityManifest, ManifestScope, ManifestSection } from "@trevor/session";
-import { MANIFEST_VERSION } from "@trevor/session";
+import type { CapabilityManifest, ManifestScope, ManifestSection } from "@belay/session";
+import { MANIFEST_VERSION } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import { READ_ONLY_TOOLS } from "../tools";
 import { answerExpertQuery, MAX_EXPERT_SECTIONS, TREVOR_EXPERT_NAME } from "./expert";
@@ -70,7 +70,7 @@ function fakeManifest(scope: ManifestScope): CapabilityManifest {
 const getManifest = (scope: ManifestScope): Promise<CapabilityManifest> =>
   Promise.resolve(fakeManifest(scope));
 
-describe("trevor-expert safety - read-only, no authority, bounded (M9)", () => {
+describe("belay-expert safety - read-only, no authority, bounded (M9)", () => {
   it("is classified read-only in the shared tool vocabulary", () => {
     expect(READ_ONLY_TOOLS.has(TREVOR_EXPERT_NAME)).toBe(true);
   });
@@ -101,7 +101,7 @@ describe("trevor-expert safety - read-only, no authority, bounded (M9)", () => {
   });
 });
 
-describe("trevor-expert answer quality across topics (M9 evals)", () => {
+describe("belay-expert answer quality across topics (M9 evals)", () => {
   const cases: ReadonlyArray<[string, string]> = [
     ["what tools can you run?", "read"],
     ["what slash commands exist?", "/help"],
@@ -131,7 +131,7 @@ describe("trevor-expert answer quality across topics (M9 evals)", () => {
     const answer = await answerExpertQuery("tell me about your rules and policies", {
       getManifest,
     });
-    expect(answer.toLowerCase()).toContain("ask trevor-expert about");
+    expect(answer.toLowerCase()).toContain("ask belay-expert about");
     // Falls back to the core overview (commands/tools), not a made-up rules list.
     expect(answer).toContain("/help");
   });

@@ -1,8 +1,8 @@
 import { join } from "node:path";
-import { idSlug, shortHash } from "@trevor/session";
+import { idSlug, shortHash } from "@belay/session";
 
 /**
- * The Trevor-managed worktree registry (D-091): persistent bookkeeping for worktrees Trevor
+ * The Belay-managed worktree registry (D-091): persistent bookkeeping for worktrees Belay
  * creates under `<state-home>/.worktrees/<repo-hash>/<branch-slug>-<id>`, grouped by base repo.
  * Pure over an injected `WorktreeFs` so every branch (load, add, reconcile stale paths, group)
  * is unit-tested with an in-memory fake. The base-repo identity is the realpath'd repo root,
@@ -23,7 +23,7 @@ export interface WorktreeFs {
 /** A worktree's lifecycle state. "active" is live; "archived" is retained but not offered. */
 export type WorktreeState = "active" | "archived";
 
-/** One Trevor-managed worktree record. */
+/** One Belay-managed worktree record. */
 export interface WorktreeRecord {
   readonly id: string;
   /** Canonical (realpath'd) base repo root - the stable identity, spelling/symlink-independent. */
@@ -37,7 +37,7 @@ export interface WorktreeRecord {
   readonly baseCommit: string;
   /** The latest known commit on the worktree, when read. */
   readonly currentCommit?: string;
-  /** The durable Trevor session bound to this worktree. */
+  /** The durable Belay session bound to this worktree. */
   readonly sessionId: string;
   readonly createdAt: string;
   readonly updatedAt: string;

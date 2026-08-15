@@ -1,4 +1,4 @@
-import { frames, type HostPresence, type StreamEnvelope } from "@trevor/session";
+import { frames, type HostPresence, type StreamEnvelope } from "@belay/session";
 import type { WebSocket } from "ws";
 
 type AttachOptions = {

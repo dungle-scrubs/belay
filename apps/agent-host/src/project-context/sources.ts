@@ -1,6 +1,6 @@
 /**
  * Context source identity for the context subsystem. `ContextSource`/`ContextSourceDiagnostic` are
- * the shared shape; the kind map enumerates the source kinds actually produced. Today only Trevor
+ * the shared shape; the kind map enumerates the source kinds actually produced. Today only Belay
  * rules flow through this shape (AGENTS.md ingestion keeps its own `ContextScope`); add a kind here
  * when a second producer (e.g. CLAUDE.md migration diagnostics) is wired into prompt output, rather
  * than advertising kinds nothing emits.
@@ -9,7 +9,8 @@
  */
 
 export const CONTEXT_SOURCE_KINDS = {
-  trevorRule: "trevor-rule",
+  belayRule: "belay-rule",
+  trevorRule: "belay-rule",
 } as const;
 
 export type ContextSourceKind = (typeof CONTEXT_SOURCE_KINDS)[keyof typeof CONTEXT_SOURCE_KINDS];

@@ -3,7 +3,7 @@
  * Not for: worktree mutations (add/remove/prune/merge) - git.ts owns those.
  */
 import { spawnSync } from "node:child_process";
-import type { GitStatus } from "@trevor/session";
+import type { GitStatus } from "@belay/session";
 
 /**
  * Runs one git command in a fixed cwd and returns its exit status + trimmed stdout.

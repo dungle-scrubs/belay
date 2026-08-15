@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 
 export const ARTIFACT_PANEL_LAYOUTS = ["push", "replace", "overlap"] as const;
 export type ArtifactPanelLayout = (typeof ARTIFACT_PANEL_LAYOUTS)[number];

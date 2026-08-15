@@ -1,4 +1,4 @@
-import { NOOP_SINK, type TelemetrySink } from "@trevor/session/telemetry";
+import { NOOP_SINK, type TelemetrySink } from "@belay/session/telemetry";
 
 /**
  * The telemetry-sink registration seam for `tool_script` observability (plan 16, M8). The tool is a static

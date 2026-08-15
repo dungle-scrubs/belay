@@ -10,8 +10,9 @@
  * (leaf.ts) - the in-fiber turn runner, continuation reprojection, and model resolution.
  * Not for: the leaf's typed-result control logic (leaf.ts) or fan-out over leaves (M3).
  */
+
+import { events, type SessionIdentity, WORKFLOW_LEAF_AGENT_ID } from "@belay/session";
 import { Emit } from "@host/transport/services";
-import { events, type SessionIdentity, WORKFLOW_LEAF_AGENT_ID } from "@trevor/session";
 import { Effect, Either, Layer } from "effect";
 import type { AdmissionPriority } from "../admission/contract";
 import {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { ArtifactRef } from "@belay/session";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type { ArtifactRef } from "@trevor/session";
 import type { ClipboardEvent } from "react";
 import { test, vi } from "vitest";
 import { useComposer } from "./use-composer";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { SessionEvent } from "@trevor/session";
+import type { SessionEvent } from "@belay/session";
 import { test } from "vitest";
 import { nextTangentPrompt, tangentHasUserTurn, tangentTurns } from "./tangent-send";
 
@@ -15,7 +15,7 @@ function ev(type: string, payload: Record<string, unknown>): SessionEvent {
     sessionId: "tangent",
     seq,
     eventId: `e${seq}`,
-    producerId: "trevor-web",
+    producerId: "belay-web",
     createdAt: "2026-07-04T00:00:00.000Z",
     type,
     payload,

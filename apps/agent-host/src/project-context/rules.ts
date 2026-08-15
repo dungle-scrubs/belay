@@ -1,5 +1,5 @@
 /**
- * Responsible for: .trevor/rules collection - frontmatter + folder metadata, globs, inclusion.
+ * Responsible for: .belay/rules collection - frontmatter + folder metadata, globs, inclusion.
  * Not for: AGENTS.md ingestion or per-session lazy state - agents-md.ts / registry.ts own those.
  */
 import { existsSync, readFileSync } from "node:fs";
@@ -9,7 +9,7 @@ import { parse as parseYaml } from "yaml";
 import { type ContextRuleSource, type ContextScope, expandContextImports } from "./agents-md";
 import { CONTEXT_SOURCE_KINDS, type ContextSource, type ContextSourceDiagnostic } from "./sources";
 
-export const RULES_DIR = join(".trevor", "rules");
+export const RULES_DIR = join(".belay", "rules");
 export const RULE_FOLDER_METADATA_FILES = ["metadata.yaml", "metadata.yml"] as const;
 
 export const RULE_INCLUSION_MODES = {
@@ -38,7 +38,7 @@ export interface RuleFolderMetadata {
   readonly title: string | undefined;
 }
 
-export interface TrevorRuleSource extends ContextSource<RuleMetadata> {
+export interface BelayRuleSource extends ContextSource<RuleMetadata> {
   readonly folder: RuleFolderMetadata | undefined;
   readonly inclusionReason: "always" | "file-access";
   readonly metadata: RuleMetadata;
@@ -46,7 +46,7 @@ export interface TrevorRuleSource extends ContextSource<RuleMetadata> {
 
 export interface RulesReport {
   readonly diagnostics: readonly ContextSourceDiagnostic[];
-  readonly rules: readonly TrevorRuleSource[];
+  readonly rules: readonly BelayRuleSource[];
 }
 
 interface ParsedFrontmatter {
@@ -286,14 +286,14 @@ function mergeMetadata(rule: RuleMetadata, folder: RuleFolderMetadata | undefine
   };
 }
 
-export function collectTrevorRuleSources(cwd: string): RulesReport {
+export function collectBelayRuleSources(cwd: string): RulesReport {
   const root = resolve(cwd, RULES_DIR);
   const folderCache = new Map<
     string,
     { diagnostics: readonly ContextSourceDiagnostic[]; metadata: RuleFolderMetadata | undefined }
   >();
   const diagnostics: ContextSourceDiagnostic[] = [];
-  const rules: TrevorRuleSource[] = [];
+  const rules: BelayRuleSource[] = [];
   const seenIds = new Map<string, string>();
 
   for (const path of collectMarkdownFiles(root)) {
@@ -323,13 +323,13 @@ export function collectTrevorRuleSources(cwd: string): RulesReport {
       );
       continue;
     }
-    const source: TrevorRuleSource = {
+    const source: BelayRuleSource = {
       bytes: Buffer.byteLength(parsed.body),
       content: parsed.body,
       diagnostics: sourceDiagnostics,
       folder: folder.metadata,
       inclusionReason: metadata.inclusion === "always" ? "always" : "file-access",
-      kind: CONTEXT_SOURCE_KINDS.trevorRule,
+      kind: CONTEXT_SOURCE_KINDS.belayRule,
       metadata,
       path,
       provenance: relative(cwd, path),
@@ -359,15 +359,15 @@ function globMatches(pattern: string, relativePath: string): boolean {
   return false;
 }
 
-export function ruleMatchesFile(rule: TrevorRuleSource, absFile: string, cwd: string): boolean {
+export function ruleMatchesFile(rule: BelayRuleSource, absFile: string, cwd: string): boolean {
   const rel = relative(cwd, absFile);
   const globs = rule.metadata.globs.length > 0 ? rule.metadata.globs : (rule.folder?.globs ?? []);
   return globs.some((pattern) => globMatches(pattern, rel));
 }
 
 export function ruleToContextScope(
-  rule: TrevorRuleSource,
-  scope: Extract<ContextScope["scope"], "trevor-rule" | "below-cwd-rule">,
+  rule: BelayRuleSource,
+  scope: Extract<ContextScope["scope"], "belay-rule" | "below-cwd-rule">,
 ): ContextScope {
   return {
     bytes: rule.bytes,
@@ -377,7 +377,7 @@ export function ruleToContextScope(
   };
 }
 
-export function ruleToReportSource(rule: TrevorRuleSource): ContextRuleSource {
+export function ruleToReportSource(rule: BelayRuleSource): ContextRuleSource {
   return {
     bytes: rule.bytes,
     folder: rule.folder?.title,
@@ -388,38 +388,43 @@ export function ruleToReportSource(rule: TrevorRuleSource): ContextRuleSource {
 }
 
 /**
- * Facade for Trevor rules at one cwd: collection, scoped-file matching, and the two transformations
+ * Facade for Belay rules at one cwd: collection, scoped-file matching, and the two transformations
  * registry needs (prompt scopes and report provenance). ContextRegistry owns instances of this class
  * instead of stitching collect/filter/map steps itself.
  */
 export class RuleCollector {
   readonly diagnostics: readonly ContextSourceDiagnostic[];
-  readonly rules: readonly TrevorRuleSource[];
+  readonly rules: readonly BelayRuleSource[];
 
   constructor(private readonly cwd: string) {
-    const report = collectTrevorRuleSources(cwd);
+    const report = collectBelayRuleSources(cwd);
     this.diagnostics = report.diagnostics;
     this.rules = report.rules;
   }
 
-  alwaysRules(): readonly TrevorRuleSource[] {
+  alwaysRules(): readonly BelayRuleSource[] {
     return this.rules.filter((rule) => rule.metadata.inclusion === "always");
   }
 
-  scopedRulesForFile(absFile: string): readonly TrevorRuleSource[] {
+  scopedRulesForFile(absFile: string): readonly BelayRuleSource[] {
     return this.rules.filter(
       (rule) => rule.metadata.inclusion === "scoped" && ruleMatchesFile(rule, absFile, this.cwd),
     );
   }
 
   contextScope(
-    rule: TrevorRuleSource,
-    scope: Extract<ContextScope["scope"], "trevor-rule" | "below-cwd-rule">,
+    rule: BelayRuleSource,
+    scope: Extract<ContextScope["scope"], "belay-rule" | "below-cwd-rule">,
   ): ContextScope {
     return ruleToContextScope(rule, scope);
   }
 
-  reportSource(rule: TrevorRuleSource): ContextRuleSource {
+  reportSource(rule: BelayRuleSource): ContextRuleSource {
     return ruleToReportSource(rule);
   }
 }
+
+/** @deprecated Use BelayRuleSource */
+export type TrevorRuleSource = BelayRuleSource;
+/** @deprecated Use collectBelayRuleSources */
+export const collectTrevorRuleSources = collectBelayRuleSources;

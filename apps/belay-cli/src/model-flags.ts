@@ -1,10 +1,10 @@
-import type { CatalogSnapshot } from "@trevor/sdk";
-import { type CatalogEntry, type ModelRef, queryCatalog } from "@trevor/session";
+import type { CatalogSnapshot } from "@belay/sdk";
+import { type CatalogEntry, type ModelRef, queryCatalog } from "@belay/session";
 
 /**
  * CLI model catalog formatting and `--model` / `--reasoning` validation.
  *
- * Responsible for: terminal-facing model flag syntax, validation errors, and `trevor models` output.
+ * Responsible for: terminal-facing model flag syntax, validation errors, and `belay models` output.
  * Not for: probing providers or choosing host defaults, which stay host-owned.
  */
 
@@ -37,7 +37,7 @@ function resolveEntry(catalog: CatalogSnapshot, rawModel: string): CatalogEntry 
     const modelId = modelParts.join("/");
     const entry = entryForQualified(catalog, sourceId, modelId);
     if (!entry) {
-      throw new ModelFlagError(`unknown model ${rawModel}; run \`trevor models\` to list models`);
+      throw new ModelFlagError(`unknown model ${rawModel}; run \`belay models\` to list models`);
     }
     return entry;
   }
@@ -51,7 +51,7 @@ function resolveEntry(catalog: CatalogSnapshot, rawModel: string): CatalogEntry 
       `ambiguous model ${rawModel}; use one of ${matches.map(qualified).join(", ")}`,
     );
   }
-  throw new ModelFlagError(`unknown model ${rawModel}; run \`trevor models\` to list models`);
+  throw new ModelFlagError(`unknown model ${rawModel}; run \`belay models\` to list models`);
 }
 
 export function resolveModelRef(
@@ -60,7 +60,7 @@ export function resolveModelRef(
 ): ModelRef | undefined {
   if (!input.model) {
     if (input.reasoning) {
-      throw new ModelFlagError("reasoning requires a model; run `trevor models` to list models");
+      throw new ModelFlagError("reasoning requires a model; run `belay models` to list models");
     }
     return undefined;
   }

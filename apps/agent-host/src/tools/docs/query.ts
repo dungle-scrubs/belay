@@ -12,7 +12,7 @@
  * Not for: deciding when a corpus needs a refresh - freshness.ts.
  */
 
-import { idSlug } from "@trevor/session";
+import { idSlug } from "@belay/session";
 import type { Page, PageView, QueryExcerpt } from "./corpus";
 
 /** Max characters of body text a single excerpt carries. */

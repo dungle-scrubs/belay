@@ -1,10 +1,10 @@
-import type { CapabilityManifest, ManifestScope } from "@trevor/session";
+import type { CapabilityManifest, ManifestScope } from "@belay/session";
 
 /**
  * The registration seam for "build the current capability manifest" (plan 14, M6/M8). Mirrors
  * `doctor/source.ts`: main.ts registers ONE accessor at startup - a closure over its live singletons
  * (tool + command + skill + agent registries, the catalog snapshot, the doctor snapshot, runtime facts) -
- * and both the `/trevor-export` command and the built-in `trevor-expert` read the manifest through
+ * and both the `/belay-export` command and the built-in `belay-expert` read the manifest through
  * {@link currentManifest} without importing the host's heavy wiring. A TYPE-only leaf module, so the
  * consumers can depend on it with no cycle back into main.ts.
  *

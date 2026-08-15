@@ -25,7 +25,7 @@ test("/init evidence scan includes repo docs, package scripts, tests, AGENTS, ru
   );
   write(join(root, "vitest.config.ts"), "export default {};");
   write(join(root, "apps", "AGENTS.md"), "nested");
-  write(join(root, ".trevor", "rules", "review.md"), "---\nid: review\n---\nRun tests.");
+  write(join(root, ".belay", "rules", "review.md"), "---\nid: review\n---\nRun tests.");
   write(join(root, "CLAUDE.md"), "legacy");
   write(join(root, "node_modules", "dep", "CLAUDE.md"), "ignored");
 
@@ -35,7 +35,7 @@ test("/init evidence scan includes repo docs, package scripts, tests, AGENTS, ru
   assert.equal(evidence.packageScripts.lint, "biome check .");
   assert.deepEqual(evidence.testConfigs, ["vitest.config.ts"]);
   assert.deepEqual(evidence.existingAgents, ["apps/AGENTS.md"]);
-  assert.deepEqual(evidence.rules, [".trevor/rules/review.md"]);
+  assert.deepEqual(evidence.rules, [".belay/rules/review.md"]);
   assert.deepEqual(evidence.claudeFiles, ["CLAUDE.md"]);
 });
 

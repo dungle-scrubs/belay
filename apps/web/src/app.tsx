@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import {
   type ArtifactRef,
   DEFAULT_SESSION_ID,
@@ -8,7 +7,8 @@ import {
   type ProviderQuestionAnswer,
   type SessionSummary,
   SUPERVISOR_SESSION_ID,
-} from "@trevor/session";
+} from "@belay/session";
+import { useQuery } from "@tanstack/react-query";
 import { useInterval, useLocalStorageState, useMemoizedFn } from "ahooks";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
@@ -128,13 +128,13 @@ import {
 import type { Message } from "./transcript";
 import { TranscriptProjector } from "./transcript";
 
-const PROVIDER_KEY = "trevor.provider";
+const PROVIDER_KEY = "belay.provider";
 // Per-provider chosen reasoning level, and whether to render thinking text at all.
-const REASONING_KEY = "trevor.reasoning";
-const SHOW_THINKING_KEY = "trevor.showThinking";
-const ARTIFACT_PANEL_KEY = "trevor.artifactPanel";
+const REASONING_KEY = "belay.reasoning";
+const SHOW_THINKING_KEY = "belay.showThinking";
+const ARTIFACT_PANEL_KEY = "belay.artifactPanel";
 // Host and browser default to one shared session so they auto-attach with no manual
-// wiring; override with ?session=<id> in the URL. The id is owned in @trevor/session so
+// wiring; override with ?session=<id> in the URL. The id is owned in @belay/session so
 // this and the host's SESSION_ID default cannot drift into two different sessions.
 const DEFAULT_SESSION = DEFAULT_SESSION_ID;
 /** Commands that still WORK when typed but are hidden from the slash autocomplete menu (a dev toggle
@@ -378,9 +378,9 @@ export function App() {
     () => selectHostStatus(readModel, presence, now),
     [readModel, presence, now],
   );
-  // Reflect WHERE we are in the tab/window title (not a bare "Trevor"): the project name - the
+  // Reflect WHERE we are in the tab/window title (not a bare "Belay"): the project name - the
   // host-announced workspace basename when known, else the session-id slug (the `<name>-<hash>` the
-  // launcher mints, hash stripped). The default shared session stays plain "Trevor".
+  // launcher mints, hash stripped). The default shared session stays plain "Belay".
   useEffect(() => {
     document.title = selectTabTitle({ workspace: host.workspace }, target, DEFAULT_SESSION);
   }, [host.workspace, target]);
@@ -958,8 +958,8 @@ export function App() {
 
   const hostCommand =
     target === DEFAULT_SESSION
-      ? "pnpm --filter @trevor/agent-host start"
-      : `SESSION_ID=${target} pnpm --filter @trevor/agent-host start`;
+      ? "pnpm --filter @belay/agent-host start"
+      : `SESSION_ID=${target} pnpm --filter @belay/agent-host start`;
 
   // A known slash command routes to the immediate host lane (runs now, bypassing the
   // model and the queue). Everything else enqueues; the drain effect publishes when

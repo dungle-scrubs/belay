@@ -1,4 +1,3 @@
-import type { Command } from "@host/commands/commands";
 import {
   isManifestSectionId,
   isPromptScope,
@@ -7,18 +6,19 @@ import {
   type ManifestScope,
   type ManifestSectionId,
   renderManifestExport,
-} from "@trevor/session";
+} from "@belay/session";
+import type { Command } from "@host/commands/commands";
 import { currentManifest } from "./source";
 
 /**
- * The host-owned `/trevor-export` command (plan 14, M6, D-002). It exposes the capability manifest in
+ * The host-owned `/belay-export` command (plan 14, M6, D-002). It exposes the capability manifest in
  * bounded human + JSON forms - full, compact, section-scoped, and expert-scoped - reading the live manifest
  * through the {@link currentManifest} seam and formatting with the shared, redaction-applying renderer. The
  * arg parser is pure and unit-tested; the command is a thin shell over it, so the surface stays small.
  *
  * It is READ-ONLY: it composes and prints a description of the host's capabilities and changes nothing.
  *
- * Responsible for: parsing /trevor-export args and shelling the parsed plan into a rendered
+ * Responsible for: parsing /belay-export args and shelling the parsed plan into a rendered
  * manifest export.
  * Not for: composing or redacting the manifest - build.ts and the shared renderer own that.
  */
@@ -34,7 +34,7 @@ export type ParseResult =
   | { readonly ok: false; readonly error: string };
 
 /**
- * Parses `/trevor-export` args into a plan. Flags: `--json` (machine JSON), `--compact` / `--expert`
+ * Parses `/belay-export` args into a plan. Flags: `--json` (machine JSON), `--compact` / `--expert`
  * (budgeted prompt block at that scope), `--full` (default human text), `--section <id>` (one section),
  * `--scope <scope>` (explicit scope override). Unknown flags / bad ids return an explicit error.
  */
@@ -104,24 +104,24 @@ export function parseExportArgs(args: string): ParseResult {
   };
 }
 
-/** Builds the `/trevor-export` command (read-only; composes + prints the capability manifest). */
+/** Builds the `/belay-export` command (read-only; composes + prints the capability manifest). */
 export function buildTrevorExportCommand(): Command<void> {
   return {
     spec: {
-      name: "/trevor-export",
+      name: "/belay-export",
       summary: "Export this host's capability manifest",
-      usage: "/trevor-export [--json] [--compact | --expert] [--section <id>] [--scope <scope>]",
+      usage: "/belay-export [--json] [--compact | --expert] [--section <id>] [--scope <scope>]",
     },
     select: () => undefined,
     run: async (args) => {
       const parsed = parseExportArgs(args);
       if (!parsed.ok) {
-        return { text: `trevor-export: ${parsed.error}`, ok: false };
+        return { text: `belay-export: ${parsed.error}`, ok: false };
       }
       const manifest = await currentManifest(parsed.plan.scope);
       if (!manifest) {
         return {
-          text: "trevor-export: capability manifest is unavailable (no live host on this session)",
+          text: "belay-export: capability manifest is unavailable (no live host on this session)",
           ok: false,
         };
       }

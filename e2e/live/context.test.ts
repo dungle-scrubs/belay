@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { streamTransport } from "@trevor/session";
-import { liveHost } from "@trevor/test-kit";
+import { streamTransport } from "@belay/session";
+import { liveHost } from "@belay/test-kit";
 import { test } from "vitest";
 
 /**

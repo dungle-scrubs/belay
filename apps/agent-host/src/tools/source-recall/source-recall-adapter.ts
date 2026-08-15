@@ -15,7 +15,7 @@ import type {
   SourceRecallCapability,
   SourceRecallFreshness,
   SourceRecallReadiness,
-} from "@trevor/session";
+} from "@belay/session";
 import { Effect } from "effect";
 import {
   MAX_SNIPPET_CHARS,

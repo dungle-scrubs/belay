@@ -1,4 +1,4 @@
-import type { SandboxEnvironment } from "@trevor/session";
+import type { SandboxEnvironment } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import { resolveRunnerLaunch } from "./launch";
 import { SANDBOX_EXEC_PATH } from "./sandbox-profile";

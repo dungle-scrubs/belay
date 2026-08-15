@@ -1,4 +1,4 @@
-import { activeTurnRunId, type ModelRef, type SessionTransport } from "@trevor/session";
+import { activeTurnRunId, type ModelRef, type SessionTransport } from "@belay/session";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useScrollFollow } from "@/hooks/use-scroll-follow";
 import {

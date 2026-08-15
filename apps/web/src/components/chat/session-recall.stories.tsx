@@ -1,5 +1,5 @@
+import type { RecallResult } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { RecallResult } from "@trevor/session";
 import { storyFrame } from "@/components/chat/story-frame";
 import { SessionRecallResults } from "./session-recall";
 

@@ -1,7 +1,7 @@
 /**
  * The session-recall wire contract (D-044): the serializable shape the `session_recall` tool
  * returns as its result, shared by the host (which produces it) and the web (which renders it).
- * Like the rest of the protocol it lives in `@trevor/session` so the two surfaces can never
+ * Like the rest of the protocol it lives in `@belay/session` so the two surfaces can never
  * disagree on the payload. The engine-internal types (records, anchors, neighborhoods) stay in
  * the host; only the result that crosses the boundary is here.
  */

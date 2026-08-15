@@ -1,8 +1,8 @@
-import { expect, test } from "@playwright/test";
 import {
   type VirtualizationPerformanceBudgets,
   writeVirtualizationPerformanceArtifacts,
-} from "@trevor/test-kit/perf-artifacts";
+} from "@belay/test-kit/perf-artifacts";
+import { expect, test } from "@playwright/test";
 import { appendExchange, seedExchanges, storeTransport } from "./lane-b-fixtures";
 
 /**
@@ -77,7 +77,7 @@ test.describe("transcript virtualization perf (nightly / artifact-only)", () => 
         consoleLines,
         screenshotBase64Png: (await page.screenshot()).toString("base64"),
       },
-      process.env.TREVOR_PERF_ARTIFACT_DIR ? { rootDir: process.env.TREVOR_PERF_ARTIFACT_DIR } : {},
+      process.env.BELAY_PERF_ARTIFACT_DIR ? { rootDir: process.env.BELAY_PERF_ARTIFACT_DIR } : {},
     );
 
     // The producer's contract is to MEASURE + emit, not to gate. A breach writes artifacts; the run stays

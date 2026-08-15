@@ -1,4 +1,4 @@
-import type { SessionEvent, SupersedeReason } from "@trevor/session";
+import type { SessionEvent, SupersedeReason } from "@belay/session";
 import { useCallback, useMemo } from "react";
 import {
   foldQueuedSteer,

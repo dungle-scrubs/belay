@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { ChevronLeft, ChevronRight, FileText } from "lucide-react";
 import { type KeyboardEvent, useEffect, useState } from "react";
 import { artifactSrc } from "@/blob";

@@ -1,14 +1,14 @@
 import { readFile } from "node:fs/promises";
-import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
-import { debug } from "@host/transport/log";
-import { msg } from "@host/transport/messages";
 import type {
   CatalogEntry,
   CatalogFreshness,
   SourceStatus,
   SourceSummary,
   SourceType,
-} from "@trevor/session";
+} from "@belay/session";
+import { getSupportedThinkingLevels } from "@earendil-works/pi-ai/compat";
+import { debug } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import { anthropicProvider } from "./anthropic";
 import { codexProviderFromConfig } from "./codex";
 import { lmStudioProvider } from "./lmstudio";

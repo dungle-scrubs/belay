@@ -1,4 +1,4 @@
-import { PRODUCER_IDS, type SessionTransport } from "@trevor/session";
+import { PRODUCER_IDS, type SessionTransport } from "@belay/session";
 import { useMemo } from "react";
 import { sessionTransport, useSessionWithTransport } from "@/session/use-session";
 import { readOnlyToolBatches, toTranscript } from "@/transcript";

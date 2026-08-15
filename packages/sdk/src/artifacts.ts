@@ -1,14 +1,9 @@
-import {
-  type ArtifactRef,
-  type BlobMetaProbe,
-  createArtifactRuntime,
-  HEX64,
-} from "@trevor/session";
+import { type ArtifactRef, type BlobMetaProbe, createArtifactRuntime, HEX64 } from "@belay/session";
 import type { TrevorClient } from "./client";
 
 /**
  * The SDK artifact workflow (plan 28 M3): upload/download/probe over the content-addressed blob store's
- * wire contract, returning structured `ArtifactRef`s and typed failures. It reuses the `@trevor/session`
+ * wire contract, returning structured `ArtifactRef`s and typed failures. It reuses the `@belay/session`
  * blob client (the same isomorphic `fetch` client the host and web use), so the SDK does not re-derive
  * the `/blobs` routes or the hash format. Artifact bytes stay OUT of the session event helpers unless a
  * caller explicitly attaches a ref to a prompt (M3 REFACTOR) - this module only moves bytes.

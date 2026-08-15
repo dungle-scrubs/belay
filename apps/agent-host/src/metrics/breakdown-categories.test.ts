@@ -6,8 +6,8 @@ import {
   type SessionEvent,
   type TrevorEventInput,
   type UsageBreakdown,
-} from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import { BreakdownAccumulator } from "./breakdown";
 
@@ -21,7 +21,7 @@ import { BreakdownAccumulator } from "./breakdown";
  */
 
 const ev = (input: TrevorEventInput): SessionEvent =>
-  storedEvent(input, { seq: 0, eventId: "e0", producerId: "trevor-host" });
+  storedEvent(input, { seq: 0, eventId: "e0", producerId: "belay-host" });
 
 const SAMPLE: UsageBreakdown = {
   input: {

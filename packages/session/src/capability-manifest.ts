@@ -1,9 +1,9 @@
 import { asMaybeString, asOptRecord, oneOf } from "./coerce";
 
 /**
- * The host-owned CAPABILITY MANIFEST contract (plan 14, M1). The manifest answers "what can this Trevor
+ * The host-owned CAPABILITY MANIFEST contract (plan 14, M1). The manifest answers "what can this Belay
  * host do?" as structured, versioned data derived from live registries - never handwritten prose. One
- * schema serves every consumer (humans, clients, subagents, exports, the built-in `trevor-expert`); the
+ * schema serves every consumer (humans, clients, subagents, exports, the built-in `belay-expert`); the
  * {@link ManifestScope} controls density and which capabilities are visible, so "full" and "compact" are
  * the SAME shape at different scopes/caps, not two divergent schemas. That single-source design is what
  * keeps the compact prompt view from drifting away from the full human view (plan 14 M5).
@@ -23,7 +23,7 @@ export const MANIFEST_VERSION = 1;
 /**
  * Who a manifest is generated for. Narrower scopes drop hidden/debug capabilities and cap dynamic
  * sections: `human`/`client` are the full debug/UI views; `compact` is the token-budgeted prompt view;
- * `subagent` and `expert` are scoped slices for a spawned agent and the built-in `trevor-expert`.
+ * `subagent` and `expert` are scoped slices for a spawned agent and the built-in `belay-expert`.
  */
 export type ManifestScope = "human" | "client" | "compact" | "subagent" | "expert";
 

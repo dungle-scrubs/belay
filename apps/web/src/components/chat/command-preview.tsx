@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
  * submit as the prompt - so the `$0`/`$ARGUMENTS` placeholders are resolved before Enter is pressed.
  *
  * Purely presentational: the caller derives the {@link CommandArgPreview} (via `commandArgPreview`, the
- * shared `@trevor/session` `expandArgs` engine) and owns when it shows. Positioning is the caller's too -
+ * shared `@belay/session` `expandArgs` engine) and owns when it shows. Positioning is the caller's too -
  * pass an absolute/`bottom-full` class so it floats above the composer like the slash + file menus.
  */
 export function CommandPreview({

@@ -1,3 +1,5 @@
+import { relativeTime, type WorktreeSummary } from "@belay/session";
+import { resolveTelemetryConfig, safeAttributes } from "@belay/session/telemetry";
 import { isResidencyResourceKey } from "@host/admission/contract";
 import { admissionDoctorSummary } from "@host/admission/doctor";
 import { type AdmissionCaps, snapshotAdmission } from "@host/admission/store";
@@ -33,8 +35,6 @@ import {
 import type { Lease } from "@host/session/lease";
 import { discoverAgents } from "@host/subagents/discovery";
 import { commas } from "@host/transport/messages";
-import { relativeTime, type WorktreeSummary } from "@trevor/session";
-import { resolveTelemetryConfig, safeAttributes } from "@trevor/session/telemetry";
 import type { DoctorRuntimeFacts } from "./build";
 import { hooksAreaFindings, hooksDebugSummary, hooksPeripheralState } from "./hooks-status";
 import { lspDebugSummary, lspPeripheralState, lspStoredDiagnostics } from "./lsp-status";
@@ -222,7 +222,7 @@ export function makeHostFacts(deps: HostFactsDeps) {
   }
 
   /**
-   * The project-context summary for /doctor (D-012): AGENTS.md vs `.trevor/rules` (with inclusion
+   * The project-context summary for /doctor (D-012): AGENTS.md vs `.belay/rules` (with inclusion
    * reasons), bytes used/dropped, plus a `claudeMd` line distinguishing detected CLAUDE.md files,
    * converted pointers, still-to-migrate (required-response), and ignored ones. Count-only - no rule or
    * instruction body is ever dumped. The migration inventory runs on demand (a /doctor build, not per

@@ -26,7 +26,7 @@ import { buildTrevorExportCommand } from "@host/manifest/export-command";
  * literally, so the feature is impossible to trigger accidentally.
  *
  * The runtime NEVER spawns a shell for command-file content. The only interpolation targets are
- * allow-listed, read-only, context-free Trevor slash commands (currently `/trevor-export`), dispatched
+ * allow-listed, read-only, context-free Belay slash commands (currently `/belay-export`), dispatched
  * IN-PROCESS through {@link InterpolationCommandRunner}. Combined with the argv split (a pattern's shell
  * metacharacters stay inside the inert arg blob, see interpolation.ts), this makes shell-metacharacter
  * injection from a command file structurally impossible.
@@ -83,7 +83,7 @@ export interface InterpolationCommandRunner {
  * on construction so the executable map and the string allow-list can never drift apart.
  */
 const INTERPOLATION_COMMAND_BUILDERS: Readonly<Record<string, () => Command<void>>> = {
-  "/trevor-export": buildTrevorExportCommand,
+  "/belay-export": buildTrevorExportCommand,
 };
 
 /**

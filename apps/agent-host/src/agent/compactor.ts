@@ -1,5 +1,5 @@
+import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@belay/session";
 import { CHARS_PER_TOKEN } from "@host/metrics/breakdown";
-import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@trevor/session";
 import { Effect } from "effect";
 import type { ChatMessage, Provider, ProviderError } from "../providers";
 import { planCompaction, SUMMARY_TOKEN_BUDGET } from "./compaction-planner";

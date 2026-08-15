@@ -5,9 +5,9 @@
 import { existsSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { freshSessionId } from "@belay/session";
 import { stripMatchingQuotes } from "@host/boot/args";
 import { msg } from "@host/transport/messages";
-import { freshSessionId } from "@trevor/session";
 
 export interface WorkspaceSwitchFs {
   exists(path: string): boolean;
@@ -100,7 +100,7 @@ export function resolveCdTarget(args: string, options: ResolveCdTargetOptions): 
       cwd,
       sessionId: freshSessionId({
         now: options.now,
-        prefix: basename(cwd) || "trevor",
+        prefix: basename(cwd) || "belay",
         random: options.random,
       }),
       workspace,

@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
-import type { RunningServer } from "@trevor/server-kit";
-import { type SessionEvent, streamTransport } from "@trevor/session";
-import { createWorkflowDriver } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
+import { fakeProvider, publishTurnVia, transportEmit } from "@belay/agent-host/testing";
+import type { RunningServer } from "@belay/server-kit";
+import { type SessionEvent, streamTransport } from "@belay/session";
+import { createWorkflowDriver } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
 
@@ -52,7 +52,7 @@ afterAll(async () => {
 });
 
 test("archive_read runs through the hermetic model/tool/session loop", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "trevor-e2e-archive-read-"));
+  const dir = await mkdtemp(join(tmpdir(), "belay-e2e-archive-read-"));
   try {
     const archivePath = join(dir, "evidence.zip");
     await writeFile(
@@ -95,7 +95,7 @@ test("archive_read runs through the hermetic model/tool/session loop", async () 
 });
 
 test("archive_unpack extracts selected entries through the hermetic model/tool/session loop", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "trevor-e2e-archive-unpack-"));
+  const dir = await mkdtemp(join(tmpdir(), "belay-e2e-archive-unpack-"));
   try {
     const archivePath = join(dir, "evidence.zip");
     const destination = join(dir, "out");

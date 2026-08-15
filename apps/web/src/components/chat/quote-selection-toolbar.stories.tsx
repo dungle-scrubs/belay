@@ -21,7 +21,7 @@ import {
  * never clipped at an edge.
  *
  * `SelectToQuote` is the live, interactive surface (drag across the text). `PersistedHighlight`
- * shows the Trevor-owned highlight (CSS Custom Highlight API) rendered across two items with
+ * shows the Belay-owned highlight (CSS Custom Highlight API) rendered across two items with
  * NO live native selection - the state the plan keeps visible. The remaining stories drive the
  * presentational `SelectionToolbar` directly at fixed anchors so the edge-clamp,
  * stale-selection, and clipboard-failure states are reviewable without a real drag.
@@ -82,7 +82,7 @@ export const SelectToQuote: Story = {
 
 /**
  * The persisted cross-item highlight with NO live native selection. On mount it paints the
- * Trevor-owned highlight (`::highlight(trevor-transcript-selection)`) across a range that
+ * Belay-owned highlight (`::highlight(belay-transcript-selection)`) across a range that
  * starts mid-first-item and ends mid-second-item, then leaves it - exactly the state after the
  * browser collapses the native selection on a transcript re-render. The highlight should stay
  * visible (matching the native selection color) without any text being natively selected.

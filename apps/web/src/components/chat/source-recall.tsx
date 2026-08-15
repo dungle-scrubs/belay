@@ -4,7 +4,7 @@ import {
   type SourceRecallRefreshResult,
   type SourceRecallResult,
   type SourceRecallResultItem,
-} from "@trevor/session";
+} from "@belay/session";
 import { ArrowUpRight } from "lucide-react";
 import { toolActionLabelForTarget } from "@/action-label";
 import { cn } from "@/lib/utils";

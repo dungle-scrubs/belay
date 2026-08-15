@@ -6,7 +6,7 @@ import {
   isControlProducer,
   type ModelRef,
   type SessionEvent,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * The model a host-issued control prompt (auto-continue after a step-cap pause, retry, compact-then-

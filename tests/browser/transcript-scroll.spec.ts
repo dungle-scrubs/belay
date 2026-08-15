@@ -1,5 +1,5 @@
+import { events, HOST_ROLE, PRODUCER_IDS, type SessionTransport } from "@belay/session";
 import { expect, type Locator, type Page, test } from "@playwright/test";
-import { events, HOST_ROLE, PRODUCER_IDS, type SessionTransport } from "@trevor/session";
 import {
   appendExchange,
   completeMixedTool,
@@ -168,8 +168,8 @@ async function announceReadyHost(transport: SessionTransport, sessionId: string)
       },
       commands: [],
       agents: [],
-      cwd: "/Users/kevin/dev/trevor",
-      workspace: "/Users/kevin/dev/trevor",
+      cwd: "/Users/kevin/dev/belay",
+      workspace: "/Users/kevin/dev/belay",
       jobs: [],
     }),
     producerId: HOST,
@@ -214,7 +214,7 @@ async function startFrameScrollSampler(page: Page): Promise<void> {
   await page.evaluate(() => {
     type Sample = FrameScrollSample;
     type SampleWindow = Window & {
-      __trevorStopScrollSampler?: () => Sample[];
+      __belayStopScrollSampler?: () => Sample[];
     };
     const scroller = document.querySelector<HTMLElement>("[data-transcript-scroll]");
     if (!scroller) {
@@ -266,7 +266,7 @@ async function startFrameScrollSampler(page: Page): Promise<void> {
     };
 
     frame = requestAnimationFrame(capture);
-    (window as SampleWindow).__trevorStopScrollSampler = () => {
+    (window as SampleWindow).__belayStopScrollSampler = () => {
       running = false;
       cancelAnimationFrame(frame);
       return samples;
@@ -277,14 +277,14 @@ async function startFrameScrollSampler(page: Page): Promise<void> {
 async function stopFrameScrollSampler(page: Page): Promise<FrameScrollSample[]> {
   return page.evaluate(() => {
     type SampleWindow = Window & {
-      __trevorStopScrollSampler?: () => FrameScrollSample[];
+      __belayStopScrollSampler?: () => FrameScrollSample[];
     };
     const win = window as SampleWindow;
-    const stop = win.__trevorStopScrollSampler;
+    const stop = win.__belayStopScrollSampler;
     if (!stop) {
       throw new Error("scroll sampler was not started");
     }
-    delete win.__trevorStopScrollSampler;
+    delete win.__belayStopScrollSampler;
     return stop();
   });
 }

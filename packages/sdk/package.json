@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/sdk",
+  "name": "@belay/sdk",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,11 +10,11 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/session": "workspace:*"
+    "@belay/session": "workspace:*"
   },
   "devDependencies": {
-    "@trevor/server-kit": "workspace:*",
-    "@trevor/test-kit": "workspace:*",
+    "@belay/server-kit": "workspace:*",
+    "@belay/test-kit": "workspace:*",
     "@types/node": "^26.0.0",
     "typescript": "^6.0.3"
   }

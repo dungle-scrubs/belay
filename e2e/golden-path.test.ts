@@ -4,11 +4,11 @@ import {
   ProviderUnavailable,
   publishTurnVia,
   transportEmit,
-} from "@trevor/agent-host/testing";
-import type { RunningServer } from "@trevor/server-kit";
-import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@trevor/session";
-import { createWorkflowDriver } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
+} from "@belay/agent-host/testing";
+import type { RunningServer } from "@belay/server-kit";
+import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@belay/session";
+import { createWorkflowDriver } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
 

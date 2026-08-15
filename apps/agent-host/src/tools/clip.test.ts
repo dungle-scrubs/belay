@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
+import { events } from "@belay/session";
 import { buildCommandRegistry } from "@host/commands/commands";
 import type { ChatMessage } from "@host/providers/index";
 import { buildTaskTools } from "@host/tools/tasks/tasks";
-import { events } from "@trevor/session";
 import { test } from "vitest";
 import {
   buildClipTurnPrompt,

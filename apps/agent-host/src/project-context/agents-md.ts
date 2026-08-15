@@ -31,8 +31,8 @@ export const MAX_IMPORT_HOPS = 4;
 /** One ingested AGENTS.md: where it sits in the precedence order + its expanded body. */
 export interface ContextScope {
   readonly path: string;
-  /** Precedence band, low to high: user-global < project < trevor-rule < below-cwd < below-cwd-rule. */
-  readonly scope: "user-global" | "project" | "trevor-rule" | "below-cwd" | "below-cwd-rule";
+  /** Precedence band, low to high: user-global < project < belay-rule < below-cwd < below-cwd-rule. */
+  readonly scope: "user-global" | "project" | "belay-rule" | "below-cwd" | "below-cwd-rule";
   /** Expanded (imports inlined) + trimmed body. */
   readonly content: string;
   /** UTF-8 byte length of `content`. */
@@ -47,7 +47,7 @@ export interface ContextScope {
 export const SCOPE_PRECEDENCE: Record<ContextScope["scope"], number> = {
   "user-global": 0,
   project: 1,
-  "trevor-rule": 2,
+  "belay-rule": 2,
   "below-cwd": 3,
   "below-cwd-rule": 4,
 };
@@ -167,7 +167,7 @@ function expandImports(
     .join("\n");
 }
 
-/** Shared importer for AGENTS.md and Trevor rule files. */
+/** Shared importer for AGENTS.md and Belay rule files. */
 export function expandContextImports(text: string, fromDir: string, absPath: string): string {
   return expandImports(text, fromDir, new Set([absPath]), MAX_IMPORT_HOPS).trim();
 }
@@ -264,10 +264,10 @@ export function renderContext(
   }
   kept.reverse(); // restore precedence order: user-global -> project -> rules -> below-cwd
   const hasRules = kept.some(
-    ({ source }) => source.scope === "trevor-rule" || source.scope === "below-cwd-rule",
+    ({ source }) => source.scope === "belay-rule" || source.scope === "below-cwd-rule",
   );
   const intro =
-    `Project context (${hasRules ? "AGENTS.md and .trevor/rules" : "AGENTS.md"}). These are standing instructions for this repository; follow them. ` +
+    `Project context (${hasRules ? "AGENTS.md and .belay/rules" : "AGENTS.md"}). These are standing instructions for this repository; follow them. ` +
     "More specific scopes (closer to the working directory, listed later) take precedence over broader " +
     "ones on any conflict.";
   const sections = kept.map(
@@ -288,7 +288,7 @@ export function renderContext(
 export interface EagerContextOptions {
   readonly cwd: string;
   readonly workspaceRoot: string;
-  /** The user-global AGENTS.md path; overridable for tests. Defaults to `<TREVOR_HOME>/AGENTS.md`. */
+  /** The user-global AGENTS.md path; overridable for tests. Defaults to `<BELAY_HOME>/AGENTS.md`. */
   readonly userGlobal?: string;
   readonly budget?: number;
 }

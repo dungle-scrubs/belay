@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { buildTaskTools, TaskRegistry } from "@host/tools/tasks/tasks";
 import {
   decodeTrevorEvent,
   events,
   type TaskSnapshot,
   type TrevorEventInput,
   taskSnapshotReplaces,
-} from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
+import { buildTaskTools, TaskRegistry } from "@host/tools/tasks/tasks";
 import { Effect } from "effect";
 import { test } from "vitest";
 

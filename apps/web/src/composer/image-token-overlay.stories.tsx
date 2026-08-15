@@ -1,5 +1,5 @@
+import type { ArtifactRef } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { ArtifactRef } from "@trevor/session";
 import { useState } from "react";
 import { ImageTokenOverlay } from "./image-token-overlay";
 

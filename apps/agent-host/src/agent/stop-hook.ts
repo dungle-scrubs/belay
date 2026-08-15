@@ -1,7 +1,7 @@
+import type { TurnStop } from "@belay/session";
 import { asRecord } from "@host/boot/decode";
 import type { StopContext, StopOutcome, StopToolSummaryEntry } from "@host/hooks/runtime";
 import type { ChatMessage } from "@host/providers/index";
-import type { TurnStop } from "@trevor/session";
 
 /**
  * The turn side of the Stop hook seam (plan 25 M7/M8, D-004): the pure helpers publishTurn uses

@@ -31,7 +31,7 @@ describe("interpolation gate defaults disabled (M7, D-003)", () => {
     const config = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
     expect(config.enabled).toBe(true);
     expect([...config.allowedCommands]).toEqual([...DEFAULT_INTERPOLATION_ALLOWLIST]);
-    expect(config.allowedCommands.has("/trevor-export")).toBe(true);
+    expect(config.allowedCommands.has("/belay-export")).toBe(true);
     // The policy is bounded: caps, a timeout, and a fixed cwd.
     expect(config.maxOutputBytes).toBeGreaterThan(0);
     expect(config.timeoutMs).toBeGreaterThan(0);
@@ -40,11 +40,11 @@ describe("interpolation gate defaults disabled (M7, D-003)", () => {
 });
 
 describe("interpolation target allow-listing (M7)", () => {
-  it("permits trevor-export as an interpolation target ONLY when interpolation is enabled", () => {
+  it("permits belay-export as an interpolation target ONLY when interpolation is enabled", () => {
     const off = resolveInterpolationConfig({});
     const on = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
-    expect(isInterpolationTargetAllowed(off, "/trevor-export")).toBe(false);
-    expect(isInterpolationTargetAllowed(on, "/trevor-export")).toBe(true);
+    expect(isInterpolationTargetAllowed(off, "/belay-export")).toBe(false);
+    expect(isInterpolationTargetAllowed(on, "/belay-export")).toBe(true);
   });
 
   it("never permits a non-allow-listed command, even when interpolation is enabled", () => {
@@ -91,21 +91,21 @@ describe("interpolation source provenance + separate gates (plan 40, M1)", () =>
 
 describe("argv split is the shell-injection defense (plan 40, M4/D-007)", () => {
   it("splits a line into command NAME + inert ARG blob", () => {
-    expect(splitInterpolationArgv("/trevor-export --compact")).toEqual({
-      name: "/trevor-export",
+    expect(splitInterpolationArgv("/belay-export --compact")).toEqual({
+      name: "/belay-export",
       args: "--compact",
     });
-    expect(splitInterpolationArgv("/trevor-export")).toEqual({ name: "/trevor-export", args: "" });
+    expect(splitInterpolationArgv("/belay-export")).toEqual({ name: "/belay-export", args: "" });
   });
 
   it("keeps shell metacharacters INSIDE the arg blob, never promoted to the command name", () => {
     // A malicious pattern's `;`, `|`, `$(…)`, backticks all stay in args; the name is just argv[0], so
     // the allow-list gates the real target and the metacharacters never reach a shell.
-    expect(splitInterpolationArgv("/trevor-export; rm -rf /")).toEqual({
-      name: "/trevor-export;",
+    expect(splitInterpolationArgv("/belay-export; rm -rf /")).toEqual({
+      name: "/belay-export;",
       args: "rm -rf /",
     });
-    expect(splitInterpolationArgv("/trevor-export $(rm -rf /)").name).toBe("/trevor-export");
+    expect(splitInterpolationArgv("/belay-export $(rm -rf /)").name).toBe("/belay-export");
     expect(splitInterpolationArgv("/shell | cat /etc/passwd").name).toBe("/shell");
   });
 

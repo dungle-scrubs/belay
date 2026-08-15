@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
-import type { RunningServer } from "@trevor/server-kit";
-import { streamTransport } from "@trevor/session";
-import { type BootedBlob, bootBlob, bootStore } from "@trevor/test-kit/boot";
+import type { RunningServer } from "@belay/server-kit";
+import { streamTransport } from "@belay/session";
+import { type BootedBlob, bootBlob, bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**

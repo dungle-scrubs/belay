@@ -1,4 +1,4 @@
-import { selectSandboxMode } from "@trevor/session";
+import { selectSandboxMode } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import {
   buildDenyFirstProfile,
@@ -10,7 +10,7 @@ import {
 
 const PROFILE_INPUT = {
   runtimePath: "/usr/local/bin/node",
-  scratchDir: "/tmp/trevor-ts-abc",
+  scratchDir: "/tmp/belay-ts-abc",
   readRoots: ["/work/repo"],
 };
 
@@ -30,7 +30,7 @@ describe("deny-first sandbox profile (M4)", () => {
   });
 
   it("confines writes to the scratch dir (blast-radius reduction)", () => {
-    expect(profile).toContain('(allow file-write* (subpath "/tmp/trevor-ts-abc"))');
+    expect(profile).toContain('(allow file-write* (subpath "/tmp/belay-ts-abc"))');
     // No unbounded file-write*.
     expect(profile).not.toMatch(/\(allow file-write\*\)\s*$/m);
   });
@@ -46,13 +46,13 @@ describe("deny-first sandbox profile (M4)", () => {
     // The workspace the read tools operate in is allowed.
     expect(profile).toContain('(allow file-read* (subpath "/work/repo"))');
     // The scratch dir is readable + writable.
-    expect(profile).toContain('(allow file-read* (subpath "/tmp/trevor-ts-abc"))');
+    expect(profile).toContain('(allow file-read* (subpath "/tmp/belay-ts-abc"))');
     // Metadata (stat) stays broadly allowed - it carries no file content.
     expect(profile).toContain("(allow file-read-metadata)");
   });
 
   it("does NOT allow reading the user's home secrets outside the allowlist", () => {
-    // No allow line covers $HOME broadly - the crown jewels (~/.ssh, ~/.pi, ~/.trevor) stay deny-read.
+    // No allow line covers $HOME broadly - the crown jewels (~/.ssh, ~/.pi, ~/.belay) stay deny-read.
     const allowedReadRoots = [
       ...profile.matchAll(/\(allow file-read\* \(subpath "([^"]+)"\)\)/g),
     ].map((m) => m[1]);

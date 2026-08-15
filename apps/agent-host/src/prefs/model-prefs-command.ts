@@ -8,7 +8,7 @@ import {
   setDefaultModel,
   type TrevorEventInput,
   unpinModel,
-} from "@trevor/session";
+} from "@belay/session";
 import type { ModelPrefsFile } from "./model-prefs-store";
 import { toModelPreferences } from "./model-prefs-store";
 
@@ -16,12 +16,12 @@ import { toModelPreferences } from "./model-prefs-store";
  * The host command that mutates the model preference (plan 51). Setting the default and toggling a
  * favorite are host round-trips (the /vim / /style re-announce pattern), not local writes: the browser
  * publishes one of these commands with a JSON {@link ModelRef} arg, the host applies the PURE
- * @trevor/session transition to the persisted `{ default, pinned }` subset, saves it, and re-announces
+ * @belay/session transition to the persisted `{ default, pinned }` subset, saves it, and re-announces
  * `host.online` so every open client re-renders from the fresh preference.
  *
  * Responsible for: the command names, the pure apply (reusing setDefaultModel / pinModel / unpinModel),
  * and the injectable runner (decode -> apply -> persist -> re-announce, or an error result on a bad ref).
- * Not for: persistence/cache (model-prefs-store.ts) or the pure transitions themselves (@trevor/session).
+ * Not for: persistence/cache (model-prefs-store.ts) or the pure transitions themselves (@belay/session).
  */
 
 /** Sets the durable default model (the one a fresh session starts on). */
@@ -50,7 +50,7 @@ export function decodeModelPrefsArg(args: string): ModelRef | null {
 
 /**
  * Pure: applies a set-default or toggle-favorite to the persisted `{ default, pinned }` subset, reusing
- * the @trevor/session transitions (never re-implementing default/pin logic). A favorite toggle removes
+ * the @belay/session transitions (never re-implementing default/pin logic). A favorite toggle removes
  * the ref when already pinned, else adds it. Returns the next subset; the caller persists it.
  */
 export function applyModelPrefsCommand(

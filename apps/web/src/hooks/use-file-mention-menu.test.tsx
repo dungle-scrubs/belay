@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { FileMatch } from "@belay/session";
 import { act, renderHook } from "@testing-library/react";
-import type { FileMatch } from "@trevor/session";
 import { type KeyboardEvent as ReactKeyboardEvent, useRef, useState } from "react";
 import { test } from "vitest";
 import { useFileMentionMenu } from "./use-file-mention-menu";

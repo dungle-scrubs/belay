@@ -92,7 +92,7 @@ test("a disabled hook is counted distinctly in the ready detail", () => {
 
 test("legacy HOOK.md files alone still surface the area (never silently unconfigured)", () => {
   const legacy: LegacyHookFile = {
-    path: `${homedir()}/dev/app/.trevor/hooks/fmt/HOOK.md`,
+    path: `${homedir()}/dev/app/.belay/hooks/fmt/HOOK.md`,
     source: "project",
     executable: true,
   };
@@ -179,7 +179,7 @@ test("legacy HOOK.md files raise the migration warning with abbreviated paths, n
     snapshot([], {
       legacy: [
         {
-          path: `${homedir()}/dev/app/.trevor/hooks/fmt/HOOK.md`,
+          path: `${homedir()}/dev/app/.belay/hooks/fmt/HOOK.md`,
           source: "project",
           executable: true,
         },
@@ -195,7 +195,7 @@ test("legacy HOOK.md files raise the migration warning with abbreviated paths, n
   assert.match(finding?.message ?? "", /HOOK\.md/);
   assert.match(finding?.message ?? "", /never execute/i);
   assert.ok(
-    finding?.message.includes("~/dev/app/.trevor/hooks/fmt/HOOK.md"),
+    finding?.message.includes("~/dev/app/.belay/hooks/fmt/HOOK.md"),
     finding?.message ?? "",
   );
   assert.ok(!finding?.message.includes(homedir()), "home directory is abbreviated");

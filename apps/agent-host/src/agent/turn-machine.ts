@@ -3,14 +3,15 @@
  * terminal assistant.completed minted for cancelled/interrupted/reaped runs.
  * Not for: deciding when turns run - turn-scheduler.ts owns dispatch.
  */
-import { terminationReason } from "@host/session/session-lifecycle";
+
 import {
   type DecodedEvent,
   events,
   type TrevorEventInput,
   type Usage,
   type UsageBreakdown,
-} from "@trevor/session";
+} from "@belay/session";
+import { terminationReason } from "@host/session/session-lifecycle";
 
 type CompletedEvent = Extract<ReturnType<typeof events.assistantCompleted>, { type: string }>;
 type DecodedCompleted = Extract<DecodedEvent, { type: "assistant.completed" }>;

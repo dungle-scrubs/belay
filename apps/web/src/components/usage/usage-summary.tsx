@@ -4,7 +4,7 @@ import {
   type ModelUsage,
   type ProviderUsage,
   type SessionUsage,
-} from "@trevor/session";
+} from "@belay/session";
 import { useTimeout } from "ahooks";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  * usage: totals, a per-provider and per-model breakdown, and typed failure/retry rows, with a
  * copy/export affordance. It is presentational over the {@link SessionUsage} read model - all
  * partitioning (including the per-model-segment split at a mid-turn `model.switched`) lives in
- * `@trevor/session`, so this component never touches the raw event log.
+ * `@belay/session`, so this component never touches the raw event log.
  *
  * Labels stay deliberately honest: `output` tokens and generation time SUM, but context is shown as a
  * peak (`fmtCtx`) because input overlaps across steps and must never read as a sum; a `~` marks any

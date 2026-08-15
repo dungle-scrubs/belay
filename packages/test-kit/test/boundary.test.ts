@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 /**
- * M9 boundary: `@trevor/test-kit` is test infrastructure, not an app and not the SDK. It boots the stores
+ * M9 boundary: `@belay/test-kit` is test infrastructure, not an app and not the SDK. It boots the stores
  * and now binds an SDK client to them, but it must stay bootable WITHOUT the agent-host or the web app -
  * so it may not depend on, or import from, either. A regression (a fixture reaching into the host/web)
  * fails here rather than silently coupling every test to the product it is supposed to drive from outside.
@@ -56,9 +56,9 @@ function importsOf(file: string): string[] {
   return specifiers;
 }
 
-const FORBIDDEN = ["@trevor/agent-host", "@trevor/web"];
+const FORBIDDEN = ["@belay/agent-host", "@belay/web"];
 
-describe("@trevor/test-kit stays test-only", () => {
+describe("@belay/test-kit stays test-only", () => {
   it("does not depend on the agent-host or the web app", () => {
     const deps = manifestDeps("packages/test-kit");
     for (const forbidden of FORBIDDEN) {
@@ -67,7 +67,7 @@ describe("@trevor/test-kit stays test-only", () => {
   });
 
   it("depends on the SDK so it can bind an SDK client to the booted stores", () => {
-    expect(manifestDeps("packages/test-kit")).toContain("@trevor/sdk");
+    expect(manifestDeps("packages/test-kit")).toContain("@belay/sdk");
   });
 
   it("never imports the agent-host or web app from source", () => {

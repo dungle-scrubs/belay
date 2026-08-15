@@ -218,12 +218,12 @@ export const Bash: Story = {
   render: () => (
     <Variants>
       <Variant label="flat (default)">
-        <ToolOutput name="bash" args="pnpm --filter @trevor/web typecheck" output={BASH_OUTPUT} />
+        <ToolOutput name="bash" args="pnpm --filter @belay/web typecheck" output={BASH_OUTPUT} />
       </Variant>
       <Variant label="border">
         <ToolOutput
           name="bash"
-          args="pnpm --filter @trevor/web typecheck"
+          args="pnpm --filter @belay/web typecheck"
           output={BASH_OUTPUT}
           border
         />
@@ -473,8 +473,8 @@ export const FallbackRunning: Story = {
     <Frame>
       <ToolFallback
         toolName="bash"
-        argsSummary="pnpm --filter @trevor/web test"
-        argsText={JSON.stringify({ command: "pnpm --filter @trevor/web test" }, null, 2)}
+        argsSummary="pnpm --filter @belay/web test"
+        argsText={JSON.stringify({ command: "pnpm --filter @belay/web test" }, null, 2)}
         status="running"
         startedAt={Date.now() - 8_000}
       />

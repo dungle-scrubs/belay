@@ -3,7 +3,7 @@ import type {
   ProviderQuestionChoice,
   ProviderQuestionContract,
   ProviderQuestionItem,
-} from "@trevor/session";
+} from "@belay/session";
 import { Check } from "lucide-react";
 import type * as React from "react";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -201,7 +201,7 @@ export function QuestionSurface({
 
   return (
     <section
-      aria-label={title ?? "Question from Trevor"}
+      aria-label={title ?? "Question from Belay"}
       className={cn(
         "flex w-full flex-col gap-4 rounded-xl bg-card p-4 text-foreground shadow-sm",
         className,
@@ -209,7 +209,7 @@ export function QuestionSurface({
       onKeyDown={onSectionKeyDown}
     >
       <header className="flex flex-col gap-1">
-        <h2 className="text-sm font-semibold">{title ?? "Trevor needs your input"}</h2>
+        <h2 className="text-sm font-semibold">{title ?? "Belay needs your input"}</h2>
         {grouped ? (
           <p className="text-xs text-muted-foreground">
             Question {activeIndex + 1} of {contract.questions.length}

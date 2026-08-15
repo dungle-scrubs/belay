@@ -1,6 +1,6 @@
 /**
  * Responsible for: the PURE mapping between the `source-recall` FastAPI daemon's documented JSON
- * shapes (README + src/source_recall/server.py) and Trevor's normalized source-recall model. Kept
+ * shapes (README + src/source_recall/server.py) and Belay's normalized source-recall model. Kept
  * separate from request execution (M3 REFACTOR) so decoding/normalization is unit-tested without any
  * HTTP, and the adapter stays a thin transport + orchestration layer over these functions.
  *
@@ -11,7 +11,7 @@ import type {
   SourceRecallReadiness,
   SourceRecallRepoStatus,
   SourceRecallResultItem,
-} from "@trevor/session";
+} from "@belay/session";
 
 /** `GET /health` body: `{ ok, repos, uptime_s }`. */
 export interface SrHealthBody {

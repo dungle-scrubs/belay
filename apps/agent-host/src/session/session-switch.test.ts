@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { events, type TrevorEventInput } from "@belay/session";
 import type { EmitEvent } from "@host/transport/services";
-import { events, type TrevorEventInput } from "@trevor/session";
 import { describe, test } from "vitest";
 import { makeSessionSwitch, type SessionSwitchDeps, type WorkspaceTarget } from "./session-switch";
 
@@ -42,7 +42,7 @@ function recordingDeps(
     debugMode: () => false,
     baseRepoFor: (cwd) => {
       calls.push({ name: "baseRepoFor", detail: cwd });
-      return "/dev/trevor";
+      return "/dev/belay";
     },
     publishToSession: async (sessionId, event) => {
       calls.push({ name: "publishToSession", detail: { sessionId, event } });
@@ -56,9 +56,9 @@ function recordingDeps(
 }
 
 const TARGET: WorkspaceTarget = {
-  cwd: "/Users/kevin/dev/.worktrees/trevor/feat-x-abc",
+  cwd: "/Users/kevin/dev/.worktrees/belay/feat-x-abc",
   sessionId: "worktree-session",
-  workspace: "/Users/kevin/dev/.worktrees/trevor/feat-x-abc",
+  workspace: "/Users/kevin/dev/.worktrees/belay/feat-x-abc",
 };
 
 describe("switchToWorkspace worktree stamping (plan 58.2 M1)", () => {
@@ -88,7 +88,7 @@ describe("switchToWorkspace worktree stamping (plan 58.2 M1)", () => {
     assert.ok(publish);
     assert.deepEqual(publish?.detail, {
       sessionId: TARGET.sessionId,
-      event: events.sessionProject({ path: "/dev/trevor" }),
+      event: events.sessionProject({ path: "/dev/belay" }),
     });
 
     const spawn = calls.find((c) => c.name === "spawnReplacementHost");
@@ -174,7 +174,7 @@ describe("createWorktreeSession concurrent path (plan 58.7 M1)", () => {
     const publish = calls.find((c) => c.name === "publishToSession");
     assert.deepEqual(publish?.detail, {
       sessionId: TARGET.sessionId,
-      event: events.sessionProject({ path: "/dev/trevor" }),
+      event: events.sessionProject({ path: "/dev/belay" }),
     });
   });
 
@@ -192,7 +192,7 @@ describe("createWorktreeSession concurrent path (plan 58.7 M1)", () => {
     assert.equal(publishes.length, 2);
     assert.deepEqual(publishes[0]?.detail, {
       sessionId: TARGET.sessionId,
-      event: events.sessionProject({ path: "/dev/trevor" }),
+      event: events.sessionProject({ path: "/dev/belay" }),
     });
     assert.deepEqual(publishes[1]?.detail, {
       sessionId: TARGET.sessionId,

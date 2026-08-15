@@ -5,16 +5,16 @@ import {
   decodeTrevorEvent,
   events,
   toPublishInput,
-} from "@trevor/session";
+} from "@belay/session";
 import { awaitStreamResult } from "./await-stream";
 import type { TrevorClient } from "./client";
 import { SdkError, urlClass } from "./errors";
 
 /**
- * The SDK capability/doctor reads (plan 28 M4). Trevor's capability manifest and `/doctor` snapshot are
+ * The SDK capability/doctor reads (plan 28 M4). Belay's capability manifest and `/doctor` snapshot are
  * host-built and reach a participant over the SESSION PROTOCOL, not the web UI: a client publishes a
  * `user.command` and reads the correlated `command.result` the live host emits. This module wraps that
- * request/response as typed reads - `runCommand` (raw), `exportCapabilities` (the `/trevor-export`
+ * request/response as typed reads - `runCommand` (raw), `exportCapabilities` (the `/belay-export`
  * manifest as structured JSON), and `doctorSnapshot` (the decoded `/doctor` payload) - so a headless
  * consumer discovers capabilities from the host's structured export, never by scraping assistant prose
  * or the web DOM (M4 RED). Each read needs a LIVE host to answer; with none, it times out with a typed
@@ -94,7 +94,7 @@ export type ManifestExport =
   | { readonly format: "text"; readonly text: string };
 
 /**
- * Reads the host's capability manifest via the `/trevor-export` command. In `json` mode it parses the
+ * Reads the host's capability manifest via the `/belay-export` command. In `json` mode it parses the
  * host's structured manifest (the export the manifest plan serves) and returns it typed - capability
  * discovery from a structured source, never from prompt text or the web UI. In `text` mode it returns
  * the human-readable block verbatim. An optional `section` narrows the export.
@@ -116,7 +116,7 @@ export function exportCapabilities(
     .filter((part): part is string => part !== null)
     .join(" ");
   return client.sessionOp("exportCapabilities", sessionId, async () => {
-    const result = await runCommand(client, sessionId, "/trevor-export", args, {
+    const result = await runCommand(client, sessionId, "/belay-export", args, {
       timeoutMs: request?.timeoutMs,
     });
     if (format === "text") {
@@ -131,8 +131,7 @@ export function exportCapabilities(
         backend: "session",
         sessionId,
         backendUrlClass: urlClass(client.sessionUrl),
-        detail:
-          "trevor-export did not return JSON (is the host on a version that supports --json?)",
+        detail: "belay-export did not return JSON (is the host on a version that supports --json?)",
       });
     }
     return { format: "json", manifest: parsed as CapabilityManifest };

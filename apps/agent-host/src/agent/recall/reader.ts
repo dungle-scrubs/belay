@@ -1,12 +1,12 @@
-import { warn } from "@host/transport/log";
-import { msg } from "@host/transport/messages";
 import {
   byRecency,
   type SessionEvent,
   type SessionIdentity,
   type SessionSummary,
   type SessionTransport,
-} from "@trevor/session";
+} from "@belay/session";
+import { warn } from "@host/transport/log";
+import { msg } from "@host/transport/messages";
 import { engineDiagnostic, type SiblingRead, type SiblingSession } from "./engine";
 import type { RecallDiagnostic, RecallSessionRef } from "./types";
 

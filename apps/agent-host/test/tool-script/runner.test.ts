@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_SCRIPT_BUDGETS, type ToolScriptResult } from "@trevor/session";
+import { DEFAULT_TOOL_SCRIPT_BUDGETS, type ToolScriptResult } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import { manageToolScriptRun, type ToolScriptBridge } from "../../src/tool-script/host-manager";
 import { resolveRunnerLaunch } from "../../src/tool-script/launch";

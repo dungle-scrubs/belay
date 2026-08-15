@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/agent-host",
+  "name": "@belay/agent-host",
   "private": true,
   "type": "module",
   "exports": {
@@ -9,26 +9,26 @@
   },
   "scripts": {
     "dev": "tsx watch src/main.ts",
-    "dev:op": "opchain primary --read op run --env-file=${TREVOR_HOME:-$HOME/.trevor}/.env.op -- tsx watch src/main.ts",
+    "dev:op": "opchain primary --read op run --env-file=${BELAY_HOME:-$HOME/.belay}/.env.op -- tsx watch src/main.ts",
     "start": "tsx src/main.ts",
-    "start:op": "opchain primary --read op run --env-file=${TREVOR_HOME:-$HOME/.trevor}/.env.op -- tsx src/main.ts",
+    "start:op": "opchain primary --read op run --env-file=${BELAY_HOME:-$HOME/.belay}/.env.op -- tsx src/main.ts",
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@ast-grep/cli": "0.44.0",
     "@earendil-works/pi-ai": "0.80.6",
-    "@sentry/node": "^10.62.0",
-    "@trevor/session": "workspace:*",
+    "@sentry/node": "^10.70.0",
+    "@belay/session": "workspace:*",
     "@vscode/ripgrep": "1.18.0",
-    "effect": "^3.21.4",
+    "effect": "^3.22.1",
     "web-search": "github:dungle-scrubs/web-search#e2c05fb47f5edb4c181c56b2f4e407bce9942b73",
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@trevor/sdk": "workspace:*",
-    "@trevor/test-kit": "workspace:*",
-    "@types/node": "^26.0.0",
-    "tsx": "^4.22.4",
+    "@belay/sdk": "workspace:*",
+    "@belay/test-kit": "workspace:*",
+    "@types/node": "^26.2.0",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.3"
   }
 }

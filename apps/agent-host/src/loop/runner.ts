@@ -1,4 +1,4 @@
-import type { LoopSpec } from "@trevor/session";
+import type { LoopSpec } from "@belay/session";
 import { runCommand } from "../tools/run-shell";
 import { clipLine } from "../tools/shared";
 

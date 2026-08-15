@@ -1,5 +1,5 @@
-import { type LauncherFs, loadProjectMap } from "@trevor/launcher";
-import type { SupervisorProject } from "@trevor/session";
+import { type LauncherFs, loadProjectMap } from "@belay/launcher";
+import type { SupervisorProject } from "@belay/session";
 
 /**
  * The supervisor's recent-projects reader (plan 44.1): the launcher-owned `projects.json` (root ->

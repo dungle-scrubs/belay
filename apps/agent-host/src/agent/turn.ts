@@ -1,3 +1,17 @@
+import {
+  events,
+  type ProviderDiagnostic,
+  type TrevorEventInput,
+  type TurnStop,
+} from "@belay/session";
+import {
+  METRIC_NAMES,
+  NOOP_SINK,
+  recordMetric,
+  SPAN_NAMES,
+  type TelemetrySink,
+} from "@belay/session/telemetry";
+import type { ProviderTraceWriter } from "@belay/session/telemetry-provider-trace";
 import type { AdmissionPriority } from "@host/admission/contract";
 import {
   AdmissionTurnRef,
@@ -21,20 +35,6 @@ import { createVideoFrameResolver } from "@host/tools/video-inspect/continuation
 import { DeltaBuffer } from "@host/transport/delta-buffer";
 import { warn } from "@host/transport/log";
 import { Emit } from "@host/transport/services";
-import {
-  events,
-  type ProviderDiagnostic,
-  type TrevorEventInput,
-  type TurnStop,
-} from "@trevor/session";
-import {
-  METRIC_NAMES,
-  NOOP_SINK,
-  recordMetric,
-  SPAN_NAMES,
-  type TelemetrySink,
-} from "@trevor/session/telemetry";
-import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Cause, Effect, Exit, Fiber, FiberRef, Option, Runtime, Stream } from "effect";
 import { interpretFiberExit } from "../effect/fiber-exit";
 import { withHookDecisionEvents } from "./hook-events";
@@ -607,7 +607,7 @@ export function publishTurn(
           : {}),
       }),
       handle,
-      // The whole turn is a `trevor.turn` span (provider + model + ok/error/interrupted status); the
+      // The whole turn is a `belay.turn` span (provider + model + ok/error/interrupted status); the
       // per-tool spans nest under it. It wraps the run BEFORE the terminal onExit/catchAll below, so the
       // span sees the real success/failure/cancel exit rather than the swallowed one.
     ).pipe(

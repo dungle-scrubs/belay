@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { ArtifactRef } from "@belay/session";
 import { render, screen, waitFor } from "@testing-library/react";
-import type { ArtifactRef } from "@trevor/session";
 import { test } from "vitest";
 import { LucidArtifactViewer } from "./lucid-viewer";
 
@@ -36,7 +36,7 @@ test("mounts the artifact in a sandboxed iframe INSIDE the panel (M2/M3), not a 
   assert.ok(sandbox.includes("allow-scripts"), "overlay scripts run");
   assert.ok(
     !sandbox.includes("allow-same-origin"),
-    "opaque origin: the artifact can never reach Trevor's realm",
+    "opaque origin: the artifact can never reach Belay's realm",
   );
   const srcdoc = frame.getAttribute("srcdoc") ?? "";
   assert.ok(srcdoc.includes(`data-lucid-id="title"`), "the artifact HTML is embedded");

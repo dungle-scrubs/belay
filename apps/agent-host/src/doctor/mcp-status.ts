@@ -1,5 +1,5 @@
+import { relativeTime } from "@belay/session";
 import type { McpServerStatusEntry } from "@host/mcp/runtime";
-import { relativeTime } from "@trevor/session";
 import { plural, statusHistogram } from "./format";
 import { classifyPeripheral, type PeripheralClassificationRule } from "./peripheral-classifier";
 import type { PeripheralState } from "./probe-input";

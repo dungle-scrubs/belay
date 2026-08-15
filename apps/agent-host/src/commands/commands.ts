@@ -1,3 +1,4 @@
+import type { CommandMenuPayload, CommandSpec } from "@belay/session";
 import {
   buildDoctorCommandResult,
   type DoctorCommandInput,
@@ -16,7 +17,6 @@ import type { ProviderRegistry } from "@host/providers/index";
 import { buildSkillCommand } from "@host/skills/skills";
 import { runCommand } from "@host/tools/run-shell";
 import { msg } from "@host/transport/messages";
-import type { CommandMenuPayload, CommandSpec } from "@trevor/session";
 import type { LoadedCommandFile } from "./command-loader";
 
 /**
@@ -94,7 +94,7 @@ export interface CommandRegistry {
     ctx: CommandContext,
   ): Promise<{ text: string; ok: boolean; menu?: CommandMenuPayload }>;
   /**
-   * The loaded command FILE for `name`, when the name resolves to a `.trevor/commands/*.md` command
+   * The loaded command FILE for `name`, when the name resolves to a `.belay/commands/*.md` command
    * (plan 44.5) - the signal to the dispatch that this name takes the SUBMIT branch (expand its body
    * into a user.message prompt) rather than `run()` (which produces a command.result). `undefined` for
    * a built-in command or an unknown name, so those keep their existing lane.
@@ -109,7 +109,7 @@ const noContext = (): void => undefined;
  * main.ts (sent by the web worktree switcher or typed at the prompt). Declaring the specs here
  * announces them on host.online so they appear in slash autocomplete; their run() is handled by
  * the live host, never this registry's `run()`. Without this they were dispatchable but invisible
- * - untypeable from the prompt (a file-loaded `.trevor/commands/*.md` of the same name is dropped
+ * - untypeable from the prompt (a file-loaded `.belay/commands/*.md` of the same name is dropped
  * by the registry's `byName` guard, since this built-in always wins).
  */
 const WORKTREE_COMMAND_SPECS: readonly CommandSpec[] = [
@@ -332,7 +332,7 @@ function buildJobsStopCommand(): Command {
 export function buildCommandRegistry(
   commandFiles: readonly LoadedCommandFile[] = [],
   /** Command names owned by handlers OUTSIDE this registry - the programmatic dispatcher (`/clear`,
-   *  `/worktree-*`, ...) and the debug specs (`/restart`, `/stop`, ...). A `.trevor/commands/<name>.md`
+   *  `/worktree-*`, ...) and the debug specs (`/restart`, `/stop`, ...). A `.belay/commands/<name>.md`
    *  matching one of these is dropped from file registration: those names dispatch to their real handler,
    *  so announcing a file spec (with a substitution preview) for them would both double-list the name and
    *  advertise behavior the file never runs. The registry's own built-ins are excluded separately (`byName`). */
@@ -400,7 +400,7 @@ export function buildCommandRegistry(
   // /skills is owned by skills.ts (it knows skill discovery); registered here as one line.
   add(buildSkillCommand());
   add(buildStyleCommand());
-  // /trevor-export owns the capability manifest export (plan 14); it reads the live manifest through a
+  // /belay-export owns the capability manifest export (plan 14); it reads the live manifest through a
   // source seam registered by main.ts, so it needs no CommandContext.
   add(buildTrevorExportCommand());
   add(buildVimCommand());
@@ -416,7 +416,7 @@ export function buildCommandRegistry(
 
   const byName = new Map(commands.map((c) => [c.spec.name, c]));
 
-  // File-loaded commands (plan 44.5): register each `.trevor/commands/*.md` command's SPEC so it is
+  // File-loaded commands (plan 44.5): register each `.belay/commands/*.md` command's SPEC so it is
   // announced on host.online (the web menu lists it + `parseCommand` routes it), and hold a name->file
   // map so the dispatch can take the SUBMIT branch. A built-in command of the same name always wins - a
   // dropped-in file can never shadow a real host command handler.

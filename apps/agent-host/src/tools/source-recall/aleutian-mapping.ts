@@ -1,6 +1,6 @@
 /**
  * Responsible for: the PURE mapping between Aleutian Trace's documented HTTP shapes
- * (`/v1/trace/*`: health, ready, tools, init, context, symbol, callers, references) and Trevor's
+ * (`/v1/trace/*`: health, ready, tools, init, context, symbol, callers, references) and Belay's
  * normalized source-recall model. Aleutian is broader than a chunk search - it is a structural
  * call-graph + symbol + context engine - so capability discovery decides which normalized
  * capabilities it advertises, and a graph SymbolInfo / ReferenceInfo maps to the SAME
@@ -13,7 +13,7 @@ import type {
   SourceRecallCapability,
   SourceRecallReadiness,
   SourceRecallResultItem,
-} from "@trevor/session";
+} from "@belay/session";
 
 /** `GET /v1/trace/health` body. */
 export interface AlHealthBody {
@@ -105,7 +105,7 @@ function str(value: unknown, fallback = ""): string {
  * Normalizes discovered Aleutian state into the shared capability set. Reachable+ready grants
  * symbol/graph/context/status; a healthy Weaviate additionally grants semantic search. `mcp`
  * transport (which cannot be HTTP-discovered) advertises the known static graph tool set. This is
- * the ONE place Aleutian's breadth is projected onto Trevor's normalized capabilities (M5).
+ * the ONE place Aleutian's breadth is projected onto Belay's normalized capabilities (M5).
  */
 export function normalizeCapabilities(input: {
   readonly transport: "http" | "mcp";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { ModelRef, ProviderModel } from "@belay/session";
 import { act, renderHook } from "@testing-library/react";
-import type { ModelRef, ProviderModel } from "@trevor/session";
 import { beforeEach, test } from "vitest";
 import type { ModelPrefsView } from "@/derive";
 import { useModelSelection } from "./use-model-selection";
@@ -226,7 +226,7 @@ test("plan 51: select records recents locally but never a default/pinned (host-o
   // No local default/pinned was written - the global blob (if present at all) carries only recents; the
   // host announcement is authoritative for default/favorites (set-default/toggle-favorite are host
   // commands sent directly by the caller, no longer routed through this hook).
-  const globalBlob = localStorage.getItem("trevor.modelPreferences.global");
+  const globalBlob = localStorage.getItem("belay.modelPreferences.global");
   if (globalBlob) {
     const parsed = JSON.parse(globalBlob) as Record<string, unknown>;
     assert.equal("default" in parsed, false, "no local default write");

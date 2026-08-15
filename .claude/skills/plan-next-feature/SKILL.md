@@ -3,14 +3,14 @@ name: plan-next-feature
 as_slash_command: true
 argument-hint: [topic]
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write
-description: "Spec a new Trevor plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present the current Trevor evidence and the existing numbered-plan constraints under /Users/kevin/dev/trevor/.plans, adding Trevor legacy comparison only when the user explicitly asks for it, then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. After writing it, thread the new plan into any later plans whose assumptions it changes (forward-dependency + accommodation), skipping any plan with a live feature branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
+description: "Spec a new Belay plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present the current Belay evidence and the existing numbered-plan constraints under /Users/kevin/dev/belay/.plans, adding Belay legacy comparison only when the user explicitly asks for it, then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. After writing it, thread the new plan into any later plans whose assumptions it changes (forward-dependency + accommodation), skipping any plan with a live feature branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
 ---
 
-# Plan the Next Trevor Feature
+# Plan the Next Belay Feature
 
 ## When to Use This Skill
 
-Use when a new Trevor plan needs to exist - "let's plan git", "what should we build next",
+Use when a new Belay plan needs to exist - "let's plan git", "what should we build next",
 "spec <topic>", or an explicit `/plan-next-feature <topic>`. The typical trigger is reactive: you
 realize mid-implementation of one plan that you need a separate fix or follow-up, and you want it
 queued to run soon. There is no umbrella plan to extract from - plans are simply created as the
@@ -25,15 +25,15 @@ flight (see "Plan placement, numbering, and git policy").
 
 ## Paths
 
-- **Trevor legacy** (optional prior art): `~/dev/trevor_legacy` - read only when the user explicitly
-  asks to compare against legacy Trevor.
-- **Trevor** (this project): `/Users/kevin/dev/trevor` - what does it already do?
-- **Plans**: `/Users/kevin/dev/trevor/.plans/` - **numbered plan directories** `<NN[.n]>-<name>/`
+- **Belay legacy** (optional prior art): `~/dev/belay_legacy` - read only when the user explicitly
+  asks to compare against legacy Belay.
+- **Belay** (this project): `/Users/kevin/dev/belay` - what does it already do?
+- **Plans**: `/Users/kevin/dev/belay/.plans/` - **numbered plan directories** `<NN[.n]>-<name>/`
   (integer slots like `03-...`, decimal slots like `03.1-...`), each a self-contained plan-db
   (`implementation.md`, `progress-report.md`, `plan.db`, `artifacts/`). There is **no single umbrella
-  plan**: the former `.plans/trevor-v2` is retired. Cross-cutting domain vocabulary lives in
-  `/Users/kevin/dev/trevor/CONTEXT.md`; the plan *policy* (not a per-plan index) lives in
-  `/Users/kevin/dev/trevor/AGENTS.md`.
+  plan**: the former `.plans/belay-v2` is retired. Cross-cutting domain vocabulary lives in
+  `/Users/kevin/dev/belay/CONTEXT.md`; the plan *policy* (not a per-plan index) lives in
+  `/Users/kevin/dev/belay/AGENTS.md`.
 - **Planner skill**: `~/.agents/skills/planner` - the lifecycle, decision ledger, RED/GREEN/REFACTOR
   milestone shape, progress accounting, directory/numbering rules, and convergence rules this skill
   must reuse.
@@ -90,7 +90,7 @@ flight (see "Plan placement, numbering, and git policy").
 
 ## Planner Integration
 
-This skill exists because Trevor feature discussions need current Trevor evidence plus existing-plan constraints before a
+This skill exists because Belay feature discussions need current Belay evidence plus existing-plan constraints before a
 plan is written. It does not replace `planner`. It is a front-end decision workflow that must hand the
 recording and progress-report synchronization back to the planner system.
 
@@ -109,7 +109,7 @@ mise x node@22 -- npx tsx ~/.agents/skills/planner/scripts/plan-db.ts <command>
 ```
 
 `plan-db` resolves `.plans/` from the current directory. Read-only surveys (`list-plans`, `status`)
-may run from `/Users/kevin/dev/trevor`, but everything that **writes** plan state in Phase 4
+may run from `/Users/kevin/dev/belay`, but everything that **writes** plan state in Phase 4
 (`init`, `record-decision`, `add-doc`, `add-pass`, `check-progress`, `check-convergence`) must run
 with the cwd set to the throwaway **`main` worktree** from Phase 4 step 9 - so the plan is authored
 on `main` and the shared checkout is never switched.
@@ -134,7 +134,7 @@ IF TOPIC is non-empty:
   THE TOPIC = TOPIC (e.g. "git").
 ELSE:
   Survey the existing numbered plans under .plans/ (their stages via `plan-db list-plans`) and the
-	  AGENTS.md plan policy, plus the obvious Trevor gaps, and PROPOSE the next topic to the user. There is
+	  AGENTS.md plan policy, plus the obvious Belay gaps, and PROPOSE the next topic to the user. There is
   no single roadmap file to read from - confirm the topic with the user before continuing.
 ```
 
@@ -145,22 +145,22 @@ State the chosen topic in one sentence before continuing.
 Investigate the topic in each source and report findings side by side. Read the actual code/plans;
 do not assume from names.
 
-1. **Trevor - what this project already does.** Search `/Users/kevin/dev/trevor` for anything related:
+1. **Belay - what this project already does.** Search `/Users/kevin/dev/belay` for anything related:
    existing tools, host paths, protocol events, web UI, partial support. What exists vs. what's
    missing.
 2. **Plans - what the existing numbered plans say.** What the relevant numbered plans under `.plans/`
    (and `CONTEXT.md` vocabulary) already record about this topic - decisions, constraints, sequencing,
    hard dependencies - if anything. Note any plan this work depends on or overlaps with.
-3. **Trevor legacy - optional prior art.** Include `~/dev/trevor_legacy` only when the user explicitly
-   asks to compare with legacy Trevor. Otherwise skip it entirely.
+3. **Belay legacy - optional prior art.** Include `~/dev/belay_legacy` only when the user explicitly
+   asks to compare with legacy Belay. Otherwise skip it entirely.
 
-Present these as a compact comparison (Trevor / plans, plus legacy only when requested), then surface the open design questions and
+Present these as a compact comparison (Belay / plans, plus legacy only when requested), then surface the open design questions and
 the trade-offs between them. **Stop and discuss - do not write any files yet.**
 
 ### Phase 3 - Decide collaboratively (HARD GATE)
 
 Converge with the user on what the feature should look like: surface, mechanism, scope/cut, where it
-	lives in Trevor's architecture, its hard dependencies on other plans, and how it numbers/sequences against
+	lives in Belay's architecture, its hard dependencies on other plans, and how it numbers/sequences against
 the rest. Once placement is fixed, also name the *downstream* plans the new one changes assumptions for -
 the later plans that will need to accommodate it (threaded in Phase 4 step 9).
 
@@ -270,8 +270,8 @@ the later plans that will need to accommodate it (threaded in Phase 4 step 9).
 ## Instructions
 
 - This skill DECIDES and PLANS; it does not implement. Stop at the plan write.
-- Always read the real Trevor code before claiming what it does - current state is evidence, not a guess.
-  Read Trevor legacy only when the user explicitly requests a legacy comparison.
+- Always read the real Belay code before claiming what it does - current state is evidence, not a guess.
+  Read Belay legacy only when the user explicitly requests a legacy comparison.
 - The decision gate is the point of the skill: the value is deciding the right shape together before
   it becomes plan debt. Never front-run the user's decision by writing the plan early.
 - The planner owns lifecycle integrity. Do not bypass `plan-db`, `check-progress`, or convergence checks when
@@ -292,5 +292,5 @@ the later plans that will need to accommodate it (threaded in Phase 4 step 9).
 - RED/GREEN/REFACTOR milestone tasks are mandatory for new progress-report implementation work. A generic
   product checklist is drift unless each behavior is tied to test-first RED items, matching GREEN
   implementation items, and REFACTOR cleanup.
-- Keep the comparison specific about gaps in Trevor rather than just listing features. If the user explicitly
+- Keep the comparison specific about gaps in Belay rather than just listing features. If the user explicitly
   asks for a legacy comparison, include what legacy got right or wrong as prior art.

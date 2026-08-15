@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { SourceAction } from "@trevor/session";
+import type { SourceAction } from "@belay/session";
 import { test } from "vitest";
 import { sourceActionCommand } from "./source-action";
 

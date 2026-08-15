@@ -1,3 +1,4 @@
+import { events, pendingFollowUps, type SessionEvent } from "@belay/session";
 import { ADMISSION_HEARTBEAT_MS } from "@host/admission/store";
 import type { CompactionCommandsApi } from "@host/agent/compaction-commands";
 import type { TurnMachine } from "@host/agent/turn-machine";
@@ -14,7 +15,6 @@ import {
 import type { Lease } from "@host/session/lease";
 import { log, warn } from "@host/transport/log";
 import type { EmitEvent } from "@host/transport/services";
-import { events, pendingFollowUps, type SessionEvent } from "@trevor/session";
 import { Cause, Effect } from "effect";
 import { envNumber } from "./env";
 import { WORKSPACE_ROOT } from "./paths";

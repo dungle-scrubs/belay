@@ -1,8 +1,8 @@
+import type { CapabilityManifest, ManifestScope } from "@belay/session";
+import { MANIFEST_VERSION } from "@belay/session";
 import { buildTrevorExportCommand } from "@host/manifest/export-command";
 import { registerManifestSource } from "@host/manifest/source";
 import { runCommand } from "@host/tools/run-shell";
-import type { CapabilityManifest, ManifestScope } from "@trevor/session";
-import { MANIFEST_VERSION } from "@trevor/session";
 import { afterEach, describe, expect, it } from "vitest";
 import { type CommandFile, expandCommandFile } from "./command-file";
 import { resolveInterpolationConfig } from "./interpolation";
@@ -10,7 +10,7 @@ import { resolveInterpolationConfig } from "./interpolation";
 /**
  * The prompt + export BOUNDARY tests (plan 40, M7). Interpolation must not leak into the two adjacent
  * lanes: the leading-`!` prompt-shell lane (a user-owned immediate shell command) and the capability
- * export (`/trevor-export`, which must stay independent of the interpolation gate and must never be
+ * export (`/belay-export`, which must stay independent of the interpolation gate and must never be
  * re-interpolated). Also proves the runtime never reintroduces `op://`/secret resolution.
  */
 
@@ -41,9 +41,9 @@ afterEach(() => {
 describe("prompt-shell lane is NOT interpolation (M7)", () => {
   it("a leading-! composer command runs literally as a SHELL command, never as an allow-listed target", async () => {
     // The prompt-shell lane strips the `!` and hands the rest to runCommand (a real shell). So a composer
-    // `!/trevor-export` becomes a shell exec of `/trevor-export` - which is not a binary and fails. It is
+    // `!/belay-export` becomes a shell exec of `/belay-export` - which is not a binary and fails. It is
     // NEVER dispatched as the in-process interpolation target: no gate, no allow-list, no manifest.
-    const shellResult = await runCommand("/trevor-export --json");
+    const shellResult = await runCommand("/belay-export --json");
     expect(shellResult.ok).toBe(false);
     expect(shellResult.output).not.toContain("service");
     expect(shellResult.output).not.toMatch(/manifest/i);
@@ -51,7 +51,7 @@ describe("prompt-shell lane is NOT interpolation (M7)", () => {
 
   it("the SAME !command text expands only through the command-file lane (gate + trust), not the shell lane", async () => {
     registerManifestSource(manifestSource("Tools"));
-    const out = await expandCommandFile(trusted("!/trevor-export --compact"), ON);
+    const out = await expandCommandFile(trusted("!/belay-export --compact"), ON);
     // Through the gated command-file lane the manifest is spliced...
     expect(out.text).toContain("Tools");
     // ...but that lane is reached ONLY via expandCommandFile, never from prompt-shell text.
@@ -59,7 +59,7 @@ describe("prompt-shell lane is NOT interpolation (M7)", () => {
 });
 
 describe("capability export boundary (M7, D-004)", () => {
-  it("/trevor-export output is independent of the interpolation gate", async () => {
+  it("/belay-export output is independent of the interpolation gate", async () => {
     registerManifestSource(manifestSource("Catalog"));
     const command = buildTrevorExportCommand();
     // The export command reads the manifest directly and consults no interpolation gate, so its output is
@@ -91,7 +91,7 @@ describe("no runtime secret resolution is reintroduced (M7)", () => {
     const runner = {
       run: async () => ({ output: "op://vault/item and token sk-ABCDEF1234567890XYZ", ok: true }),
     };
-    const out = await expandCommandFile(trusted("!/trevor-export"), ON, { runner });
+    const out = await expandCommandFile(trusted("!/belay-export"), ON, { runner });
     // The op:// reference is left as inert text and only passed through the SAME generic redactor as any
     // output (which path-collapses it) - it is never fetched or replaced with a resolved secret value.
     expect(out.text).toMatch(/op:/);

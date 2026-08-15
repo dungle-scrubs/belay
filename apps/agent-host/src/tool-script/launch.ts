@@ -1,12 +1,12 @@
 import { spawn } from "node:child_process";
 import { dirname } from "node:path";
-import { WORKSPACE_ROOT } from "@host/boot/paths";
 import {
   fallbackSandboxMode,
   type SandboxEnvironment,
   type SandboxMode,
   selectSandboxMode,
-} from "@trevor/session";
+} from "@belay/session";
+import { WORKSPACE_ROOT } from "@host/boot/paths";
 import {
   buildDenyFirstProfile,
   probeSandboxEnvironment,
@@ -55,7 +55,7 @@ export interface ResolveLaunchConfig {
   /** Whether a sandboxed runtime boots (injectable for tests); defaults to a real `--version` probe. */
   readonly probe?: (profile: string, runtimePath: string) => Promise<boolean>;
   /** Explicitly permit the UNSANDBOXED child-process fallback (reduced isolation). Default: the
-   *  `TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED=1` env opt-in. Without it, no-OS-sandbox is refused. */
+   *  `BELAY_TOOL_SCRIPT_ALLOW_UNSANDBOXED=1` env opt-in. Without it, no-OS-sandbox is refused. */
   readonly allowUnsandboxed?: boolean;
 }
 
@@ -106,7 +106,7 @@ export async function resolveRunnerLaunch(config: ResolveLaunchConfig): Promise<
   const env = config.env ?? probeSandboxEnvironment();
   const runtime = config.runtimeCommand ?? defaultRunnerCommand();
   const allowUnsandboxed =
-    config.allowUnsandboxed ?? process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED === "1";
+    config.allowUnsandboxed ?? process.env.BELAY_TOOL_SCRIPT_ALLOW_UNSANDBOXED === "1";
   const mode = selectSandboxMode(env);
 
   if (mode === "sandbox-exec") {
@@ -137,7 +137,7 @@ export async function resolveRunnerLaunch(config: ResolveLaunchConfig): Promise<
     return {
       ok: false,
       reason:
-        "no OS sandbox available for tool_script; refusing an unsandboxed run (set TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED=1 to permit reduced isolation)",
+        "no OS sandbox available for tool_script; refusing an unsandboxed run (set BELAY_TOOL_SCRIPT_ALLOW_UNSANDBOXED=1 to permit reduced isolation)",
     };
   }
   return { ok: true, command: runtime, sandboxMode: fallbackSandboxMode("sandbox-exec") };

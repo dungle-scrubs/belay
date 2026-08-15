@@ -1,21 +1,16 @@
 import assert from "node:assert/strict";
-import { tangentIsolationReport } from "@host/agent/tangent-isolation";
-import type { ChatMessage, ProviderRegistry } from "@host/providers";
 import {
   events,
   PRODUCER_IDS,
   type SessionEvent,
   type SessionTransport,
   UNKNOWN_INTERNET,
-} from "@trevor/session";
-import { NOOP_SINK } from "@trevor/session/telemetry";
-import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
-import {
-  type RecordingTransport,
-  recordingTransport,
-  storedEvent,
-  waitFor,
-} from "@trevor/test-kit";
+} from "@belay/session";
+import { NOOP_SINK } from "@belay/session/telemetry";
+import { createProviderTraceWriter } from "@belay/session/telemetry-provider-trace";
+import { type RecordingTransport, recordingTransport, storedEvent, waitFor } from "@belay/test-kit";
+import { tangentIsolationReport } from "@host/agent/tangent-isolation";
+import type { ChatMessage, ProviderRegistry } from "@host/providers";
 import { test } from "vitest";
 import { fakeProvider } from "../../test/support/fake-provider";
 import { makeTangentAdoption, type TangentAdoptionDeps } from "./tangent-adoption";

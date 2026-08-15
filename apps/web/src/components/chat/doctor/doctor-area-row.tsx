@@ -1,4 +1,4 @@
-import type { DoctorArea, DoctorAreaId, DoctorFinding, DoctorStatus } from "@trevor/session";
+import type { DoctorArea, DoctorAreaId, DoctorFinding, DoctorStatus } from "@belay/session";
 import {
   Activity,
   ArrowUpCircle,

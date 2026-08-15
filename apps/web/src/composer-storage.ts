@@ -24,9 +24,9 @@ interface HistoryPayload {
   readonly items: readonly string[];
 }
 
-const draftKey = (tabId: string, sessionId: string): string => `trevor.draft.${tabId}.${sessionId}`;
+const draftKey = (tabId: string, sessionId: string): string => `belay.draft.${tabId}.${sessionId}`;
 const historyKey = (tabId: string, sessionId: string): string =>
-  `trevor.history.${tabId}.${sessionId}`;
+  `belay.history.${tabId}.${sessionId}`;
 
 function safeGet(storage: Storage, key: string): string | null {
   try {

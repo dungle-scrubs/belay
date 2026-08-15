@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { type DoctorSnapshot, formatDoctorReport } from "@trevor/session";
-import { doctorArea, doctorSnapshot } from "@trevor/test-kit";
+import { type DoctorSnapshot, formatDoctorReport } from "@belay/session";
+import { doctorArea, doctorSnapshot } from "@belay/test-kit";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { registerDoctorSnapshotSource } from "../doctor/source";
@@ -8,7 +8,7 @@ import { doctorTool } from "./doctor";
 import { executeTool } from "./index";
 
 /**
- * The `doctor` model tool (D-073 M6): a read-only drill-in that returns Trevor's OWN host health
+ * The `doctor` model tool (D-073 M6): a read-only drill-in that returns Belay's OWN host health
  * report. It draws from the registered snapshot source (the host wires it in main.ts; here a test
  * source stands in), renders the sanitized plaintext report the model reads, and degrades a source
  * failure to one clean `error:` line instead of collapsing the turn.
@@ -16,7 +16,7 @@ import { executeTool } from "./index";
 
 const SNAPSHOT: DoctorSnapshot = doctorSnapshot({
   checkedAt: "just now",
-  host: { workspace: "~/dev/trevor", instanceId: "abcd1234", role: "leader" },
+  host: { workspace: "~/dev/belay", instanceId: "abcd1234", role: "leader" },
   areas: [
     doctorArea("core", "ok", {
       label: "Core",
@@ -43,7 +43,7 @@ test("doctor returns the formatted health report from the registered snapshot so
   const result = await Effect.runPromise(executeTool("doctor", "{}"));
   // The model reads the sanitized plaintext report, not the raw JSON struct.
   assert.equal(result, formatDoctorReport(SNAPSHOT));
-  assert.ok(result.includes("Trevor /doctor - Degraded"), "the report headline reflects the warn");
+  assert.ok(result.includes("Belay /doctor - Degraded"), "the report headline reflects the warn");
   assert.ok(result.includes("Host process"), "an area finding is rendered");
 });
 

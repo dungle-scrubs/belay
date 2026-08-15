@@ -8,16 +8,16 @@ import {
   providerQuestionRuntime,
   publishTurnVia,
   transportEmit,
-} from "@trevor/agent-host/testing";
-import type { RunningServer } from "@trevor/server-kit";
+} from "@belay/agent-host/testing";
+import type { RunningServer } from "@belay/server-kit";
 import {
   decodeProviderQuestionContract,
   events as sessionEvents,
   streamTransport,
-} from "@trevor/session";
-import { questionAnswerDrain, subscribe, waitFor } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
-import { buildAnswer, initialDraft } from "@trevor/web/question-view-model";
+} from "@belay/session";
+import { questionAnswerDrain, subscribe, waitFor } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
+import { buildAnswer, initialDraft } from "@belay/web/question-view-model";
 import { Stream } from "effect";
 import { afterAll, afterEach, beforeAll, test } from "vitest";
 
@@ -55,7 +55,7 @@ function write(path: string, content: string): void {
 
 /** A workspace with a root CLAUDE.md (no sibling -> create) and a nested one with a sibling (-> merge). */
 function migrationWorkspace(): string {
-  const root = mkdtempSync(join(tmpdir(), "trevor-migrate-"));
+  const root = mkdtempSync(join(tmpdir(), "belay-migrate-"));
   write(join(root, "CLAUDE.md"), "# Root rules\n\nAlways run the linter before committing.");
   write(join(root, "apps", "CLAUDE.md"), "Nested app rules: prefer pnpm.");
   write(join(root, "apps", "AGENTS.md"), "# Existing app guide\n\nKeep this content.");
@@ -180,7 +180,7 @@ test("migrate_claude_md converts (create + merge) after the user's grouped answe
 });
 
 test("a second migrate_claude_md run finds only pointers and never raises a proposal (idempotent)", async () => {
-  const root = mkdtempSync(join(tmpdir(), "trevor-migrate-done-"));
+  const root = mkdtempSync(join(tmpdir(), "belay-migrate-done-"));
   // The CLAUDE.md is an already-converted pointer (the sentinel is what detection matches).
   write(join(root, "CLAUDE.md"), `# CLAUDE.md\n\n${CLAUDE_POINTER_SENTINEL}\n\nSee AGENTS.md.`);
   write(join(root, "AGENTS.md"), "# Root guide");

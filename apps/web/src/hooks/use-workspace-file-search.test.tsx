@@ -1,7 +1,7 @@
+import type { SessionEvent } from "@belay/session";
+import * as sessionModule from "@belay/session";
+import { events } from "@belay/session";
 import { act, renderHook } from "@testing-library/react";
-import type { SessionEvent } from "@trevor/session";
-import * as sessionModule from "@trevor/session";
-import { events } from "@trevor/session";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import {
   fileIndexFrom,
@@ -13,7 +13,7 @@ import {
 // Partial mock: keep every real export (events builders, decodeTrevorEvent, ...) but wrap
 // searchWorkspaceFiles in a spy so a regression test can assert its CALL COUNT (not just its output)
 // without depending on whether the workspace-package's live bindings are spy-able as plain ESM exports.
-vi.mock("@trevor/session", async (importOriginal) => {
+vi.mock("@belay/session", async (importOriginal) => {
   const actual = await importOriginal<typeof sessionModule>();
   return { ...actual, searchWorkspaceFiles: vi.fn(actual.searchWorkspaceFiles) };
 });

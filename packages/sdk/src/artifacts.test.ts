@@ -1,4 +1,4 @@
-import { recordingTransport } from "@trevor/test-kit";
+import { recordingTransport } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
 import { createTrevorClient } from "./client";
 

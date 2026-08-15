@@ -4,14 +4,14 @@ import {
   type DoctorFinding,
   type DoctorStatus,
   rollupStatus,
-} from "@trevor/session";
+} from "@belay/session";
 import type { ResidencyDoctorSummary } from "../residency/doctor";
 import { area } from "./area";
 import type { DoctorProbeInput, DoctorRootProbe, StoreDiagProbe } from "./probe-input";
 
 /**
  * The machine/platform areas of the /doctor grid: Storage / Roots (per-root health off the root
- * policy, D-005), Local admission (who holds each local runtime plus the resident Trevor-loaded
+ * policy, D-005), Local admission (who holds each local runtime plus the resident Belay-loaded
  * models, plans 11 + 11.1), Telemetry (exporter mode + the redaction self-test, plan 13 M7), and
  * Updates / Version (build facts, with update availability explicitly not probed). Pure folds over
  * {@link DoctorProbeInput} - the probing happened upstream in build.ts / host-facts.ts.
@@ -39,7 +39,7 @@ function rootFact(root: DoctorRootProbe): {
       ? { status: "ok", value: `${root.path} · legacy data present` }
       : { status: "not_checked", value: `${root.path} · none` };
   }
-  // A writable Trevor root (config/state/temp): not-created-yet and unwritable are the only problems.
+  // A writable Belay root (config/state/temp): not-created-yet and unwritable are the only problems.
   const base = !root.exists
     ? { status: "not_checked" as const, value: `${root.path} · not created yet` }
     : root.writable === false
@@ -113,7 +113,7 @@ function storeDiagParts(store: StoreDiagProbe | undefined): {
 
 /**
  * The Storage / Roots area (D-005): one fact per resolved root with its health, plus problem-only
- * findings (an unwritable Trevor root errors; importable ~/.trevor data warns with a migration hint).
+ * findings (an unwritable Belay root errors; importable ~/.belay data warns with a migration hint).
  * External roots read as read-only and never warn; a not-yet-created root is `not_checked`, not an
  * error. The area status rolls up from the per-root fact statuses, and every path is already
  * home-abbreviated by the probe, so no raw home directory leaks into the diagnostics.
@@ -134,7 +134,7 @@ export function storageArea(input: DoctorProbeInput): DoctorArea {
         id: `storage.${root.id}`,
         status: "error",
         title: `${root.label} not writable`,
-        message: "Trevor cannot write this root.",
+        message: "Belay cannot write this root.",
         source: root.path ?? undefined,
         nextAction: { label: "Check permissions on", command: root.path ?? undefined },
       });
@@ -144,10 +144,10 @@ export function storageArea(input: DoctorProbeInput): DoctorArea {
         id: "storage.legacy",
         status: "warn",
         title: "Legacy data",
-        message: "Importable ~/.trevor data is present.",
+        message: "Importable ~/.belay data is present.",
         source: root.path ?? undefined,
         nextAction: {
-          label: "Import ~/.trevor data via migration or set SESSION_STORE_DB / BLOB_STORE_DIR",
+          label: "Import ~/.belay data via migration or set SESSION_STORE_DB / BLOB_STORE_DIR",
         },
       });
     }
@@ -169,7 +169,7 @@ export function storageArea(input: DoctorProbeInput): DoctorArea {
   return area("storage", "Storage / Roots", verdict, findings, facts, statusOverride);
 }
 
-/** Residency findings + facts for the Local-admission area (plan 11.1 M6): the Trevor-loaded models this
+/** Residency findings + facts for the Local-admission area (plan 11.1 M6): the Belay-loaded models this
  *  instance keeps resident, their context caps + live claim counts, and the last eviction. Returns an
  *  empty split when nothing is resident, so the area is idle only when BOTH admission and residency are. */
 function residencyParts(r: ResidencyDoctorSummary | undefined): {
@@ -199,7 +199,7 @@ function residencyParts(r: ResidencyDoctorSummary | undefined): {
 
 /** The local-model admission area (plan 11 M8 + 11.1 M6): who holds each local runtime, how deep the
  *  queue is, the oldest wait, a warn when a crashed holder still occupies a slot - and the resident
- *  Trevor-loaded models (context caps, live claim counts, last eviction). No admission AND no residency
+ *  Belay-loaded models (context caps, live claim counts, last eviction). No admission AND no residency
  *  reads as a clean "idle". */
 export function admissionArea(input: DoctorProbeInput): DoctorArea {
   const a = input.admission;
@@ -333,7 +333,7 @@ export function telemetryArea(input: DoctorProbeInput): DoctorArea {
 export function updatesArea(input: DoctorProbeInput): DoctorArea {
   const b = input.build;
   const facts: DoctorArea["facts"] = [
-    { label: "Trevor", value: b.version ?? "dev build", status: b.version ? "ok" : "not_checked" },
+    { label: "Belay", value: b.version ?? "dev build", status: b.version ? "ok" : "not_checked" },
     { label: "Runtime", value: b.runtime },
     { label: "Node", value: b.node },
   ];
@@ -342,7 +342,7 @@ export function updatesArea(input: DoctorProbeInput): DoctorArea {
     status: b.version ? "ok" : "not_checked",
     title: "Version",
     message: b.version
-      ? `Running Trevor ${b.version}.`
+      ? `Running Belay ${b.version}.`
       : "No build version is embedded (a local dev build).",
   };
   // Update availability is deliberately NOT probed (it would need a network call /doctor does not

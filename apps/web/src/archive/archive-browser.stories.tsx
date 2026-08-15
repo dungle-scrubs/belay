@@ -27,9 +27,9 @@ const NOW = Date.parse("2026-06-29T12:00:00.000Z");
 function row(over: Partial<ArchivedSessionRow> & { sessionId: string }): ArchivedSessionRow {
   return {
     title: `Session ${over.sessionId}`,
-    project: "trevor",
-    projectPath: "/dev/trevor",
-    cwd: "~/dev/trevor",
+    project: "belay",
+    projectPath: "/dev/belay",
+    cwd: "~/dev/belay",
     updatedAt: "2026-06-29T09:00:00.000Z",
     eventCount: 42,
     protectedReason: null,
@@ -203,7 +203,7 @@ export const LongLabels: Story = {
             sessionId: "long",
             title:
               "Investigate the intermittent websocket reconnect storm that surfaces only under heavy parallel host load on the shared session store",
-            cwd: "~/dev/trevor/apps/agent-host/src/very/deeply/nested/path/to/the/module",
+            cwd: "~/dev/belay/apps/agent-host/src/very/deeply/nested/path/to/the/module",
             eventCount: 1284,
           }),
           ...ROWS,

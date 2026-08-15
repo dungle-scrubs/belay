@@ -4,7 +4,7 @@ import {
   type ReadLogOptions,
   type SessionEvent,
   type SourceSummary,
-} from "@trevor/session";
+} from "@belay/session";
 import type { TrevorClient } from "./client";
 
 /**

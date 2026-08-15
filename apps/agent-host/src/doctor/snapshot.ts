@@ -1,4 +1,4 @@
-import type { DoctorSnapshot } from "@trevor/session";
+import type { DoctorSnapshot } from "@belay/session";
 import { internetArea, peripheralArea, webDocsArea } from "./areas-connectivity";
 import { coreArea, sessionArea, toolsArea, workspaceArea } from "./areas-host";
 import { admissionArea, storageArea, telemetryArea, updatesArea } from "./areas-platform";

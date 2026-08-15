@@ -3,9 +3,9 @@ import {
   findListenerPids,
   PROBE_TIMEOUT_MS,
   STORE_READY_TIMEOUT_MS,
-} from "@trevor/launcher";
-import { HEALTH_PATH } from "@trevor/server-kit";
-import { errorMessage } from "@trevor/session";
+} from "@belay/launcher";
+import { HEALTH_PATH } from "@belay/server-kit";
+import { errorMessage } from "@belay/session";
 import {
   SPAN_NAMES,
   type SpanName,
@@ -13,7 +13,7 @@ import {
   safeAttributes,
   safeEmitSpan,
   type TelemetrySink,
-} from "@trevor/session/telemetry";
+} from "@belay/session/telemetry";
 
 /**
  * The supervisor's store watchdog (plan 45.2 M2): poll the session-store's `/health` on an interval

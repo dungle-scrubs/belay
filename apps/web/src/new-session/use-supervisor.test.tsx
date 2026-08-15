@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { act, renderHook } from "@testing-library/react";
 import {
   type ConnectSessionOptions,
   PRODUCER_IDS,
@@ -8,8 +7,9 @@ import {
   SUPERVISOR_SESSION_ID,
   events as sessionEvents,
   type TrevorEventInput,
-} from "@trevor/session";
-import { recordingTransport, storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { recordingTransport, storedEvent } from "@belay/test-kit";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, test, vi } from "vitest";
 import { TAIL_FLUSH_MS } from "@/session/use-session";
 import { useSupervisor } from "./use-supervisor";
@@ -82,9 +82,7 @@ test("opening the picker publishes projects.list.requested and renders the retur
       rec.connects,
       sessionEvents.projectsListResult({
         requestId,
-        projects: [
-          { root: "~/dev/trevor", sessionId: "s1", updatedAt: "2026-07-04T11:00:00.000Z" },
-        ],
+        projects: [{ root: "~/dev/belay", sessionId: "s1", updatedAt: "2026-07-04T11:00:00.000Z" }],
       }),
       1,
     );
@@ -92,7 +90,7 @@ test("opening the picker publishes projects.list.requested and renders the retur
   await flushControl();
   assert.deepEqual(
     result.current.recents.map((r) => r.root),
-    ["~/dev/trevor"],
+    ["~/dev/belay"],
   );
 });
 
@@ -171,7 +169,7 @@ test("a reused host navigates immediately without a host.online wait", async () 
   const { rec, result, onNavigate } = renderSupervisor();
   await act(async () => {});
 
-  act(() => result.current.onPickRecent("~/dev/trevor"));
+  act(() => result.current.onPickRecent("~/dev/belay"));
   const requestId = publishedTo(rec.publishedBy(SUPERVISOR_SESSION_ID), "session.launch.requested")
     ?.payload.requestId as string;
   act(() => {

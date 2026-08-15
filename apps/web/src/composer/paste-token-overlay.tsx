@@ -3,7 +3,7 @@ import {
   parseImageTokens,
   parsePasteTokens,
   pasteLineCount,
-} from "@trevor/session";
+} from "@belay/session";
 import { Copy, X } from "lucide-react";
 import type { KeyboardEvent, ReactNode, RefObject } from "react";
 import { segmentBySpans } from "@/lib/segment-by-spans";

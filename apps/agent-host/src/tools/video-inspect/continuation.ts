@@ -9,8 +9,9 @@
  * this parses is the same shape the web transcript renderer parses - it is the cross-surface
  * contract, so keep it stable.
  */
+
+import { type ArtifactRef, fetchBlobBytes } from "@belay/session";
 import type { ChatImage, ChatMessage } from "@host/providers/index";
-import { type ArtifactRef, fetchBlobBytes } from "@trevor/session";
 import type { VideoFrame } from "./types";
 
 /** Up to this many frames ride back to the model as images (V1 parity); the rest stay as text. */

@@ -1,3 +1,4 @@
+import { events } from "@belay/session";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { supervisor } from "@host/processes/processes";
@@ -7,7 +8,6 @@ import type { SessionSwitchApi } from "@host/session/session-switch";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import { events } from "@trevor/session";
 import { isStopConfirmed } from "./debug-commands";
 
 /**
@@ -138,7 +138,7 @@ export function makeLifecycleCommands(deps: LifecycleCommandsDeps) {
   /**
    * Runs the graceful session teardown (D-094): abort active work (a clean cancelled completion where
    * the turn can still flush), clear the deferred queue so no successor answers stale prompts, and tear
-   * down background jobs - in that order. Shared by the SIGTERM path (`trevor stop`) and the debug
+   * down background jobs - in that order. Shared by the SIGTERM path (`belay stop`) and the debug
    * `/stop` command; the CALLER exits the process afterward (which lapses the lease). The durable log is
    * never touched - nothing here can reach it.
    */
@@ -192,7 +192,7 @@ export function makeLifecycleCommands(deps: LifecycleCommandsDeps) {
   /**
    * The debug `/stop` command (D-094 M4): graceful session shutdown, gated behind debug mode AND an
    * explicit confirm because it ends the session. Bare `/stop` only describes the effect; `/stop
-   * confirm` runs the same teardown as `trevor stop` (SIGTERM), reports what it tore down, then exits so
+   * confirm` runs the same teardown as `belay stop` (SIGTERM), reports what it tore down, then exits so
    * the lease lapses and the launcher reaps the ownership record. History is preserved throughout.
    */
   async function stopCurrentSession(args: string): Promise<void> {

@@ -1,5 +1,5 @@
+import { renderManifestExport } from "@belay/session";
 import type { SkillEntry } from "@host/skills/skills";
-import { renderManifestExport } from "@trevor/session";
 import { describe, expect, it } from "vitest";
 import { assembleManifest, type ManifestDeps } from "./build";
 import { answerExpertQuery } from "./expert";
@@ -47,7 +47,7 @@ function leakyDeps(): ManifestDeps {
     catalog: null,
     runtime: { role: "leader", instanceId: "abc12345" },
     host: { version: "2.0.0" },
-    workspace: { root: "/Users/kevin/dev/trevor", cwd: "/Users/kevin/dev/trevor" },
+    workspace: { root: "/Users/kevin/dev/belay", cwd: "/Users/kevin/dev/belay" },
   };
 }
 
@@ -109,7 +109,7 @@ describe("capability manifest end-to-end: registries -> manifest -> export (M10)
   });
 });
 
-describe("capability manifest end-to-end: manifest -> trevor-expert answer (M10)", () => {
+describe("capability manifest end-to-end: manifest -> belay-expert answer (M10)", () => {
   it("answers a capability question through the registered live source, redacted", async () => {
     registerManifestSource((scope) => assembleManifest(leakyDeps(), scope, AT));
     // The expert routes "skills" -> the skills section and reads the live manifest (default getManifest).

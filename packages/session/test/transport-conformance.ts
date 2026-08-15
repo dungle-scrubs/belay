@@ -18,12 +18,12 @@ export interface ConformanceContext {
   transport(): SessionTransport;
 }
 
-/** Records the latest live-host presence the backend pushes; `kind` "trevor" counts as a host. */
+/** Records the latest live-host presence the backend pushes; `kind` "belay" counts as a host. */
 function presenceWatcher(transport: SessionTransport, sessionId: string, id: string, kind: string) {
   let presence: readonly { instanceId: string }[] | null = null;
   const subscriber = subscribe(transport, sessionId, id, {
     identity:
-      kind === "trevor"
+      kind === "belay"
         ? hostIdentity({ displayName: id, instanceId: id, participantId: id })
         : viewerIdentity({ displayName: id, instanceId: id, participantId: id }),
     onPresence: (hosts) => {
@@ -113,7 +113,7 @@ export function runTransportConformance(ctx: ConformanceContext): void {
     assert.deepEqual(viewer.latest(), []);
 
     // A host connecting pushes the new live set to the viewer.
-    const host = presenceWatcher(transport, "presence", "host-1", "trevor");
+    const host = presenceWatcher(transport, "presence", "host-1", "belay");
     await waitFor(() => (viewer.latest()?.length ?? 0) === 1);
     assert.deepEqual(viewer.latest(), [{ instanceId: "host-1" }]);
 

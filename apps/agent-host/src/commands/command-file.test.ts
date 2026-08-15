@@ -1,6 +1,6 @@
+import type { CapabilityManifest, ManifestScope } from "@belay/session";
+import { MANIFEST_VERSION } from "@belay/session";
 import { registerManifestSource } from "@host/manifest/source";
-import type { CapabilityManifest, ManifestScope } from "@trevor/session";
-import { MANIFEST_VERSION } from "@trevor/session";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   type CommandFile,
@@ -15,7 +15,7 @@ import { resolveInterpolationConfig } from "./interpolation";
 /**
  * The command-file trust contract (M2), the gated expand-on-load boundary (M5), and its structured
  * diagnostics + failure handling (M6). Deterministic: most cases use a fake in-process runner; one case
- * exercises the real default runner (the allow-listed `/trevor-export` wiring) over a registered manifest.
+ * exercises the real default runner (the allow-listed `/belay-export` wiring) over a registered manifest.
  */
 
 const ON = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
@@ -51,15 +51,15 @@ describe("command-file trust contract (M2)", () => {
 describe("command-file interpolation stays literal unless trusted AND gated (M5, fail closed)", () => {
   it("gate OFF: a trusted file with an interpolation site loads LITERALLY (nothing runs)", async () => {
     const runner = fakeRunner({ output: "SHOULD NOT APPEAR", ok: true });
-    const out = await expandCommandFile(file("head\n!/trevor-export\ntail"), OFF, { runner });
-    expect(out.text).toBe("head\n!/trevor-export\ntail");
+    const out = await expandCommandFile(file("head\n!/belay-export\ntail"), OFF, { runner });
+    expect(out.text).toBe("head\n!/belay-export\ntail");
     expect(runner.calls).toHaveLength(0);
   });
 
   it("untrusted root: even with the gate OPEN the body is LITERAL (nothing runs)", async () => {
     const runner = fakeRunner({ output: "SHOULD NOT APPEAR", ok: true });
-    const out = await expandCommandFile(file("!/trevor-export", "untrusted"), ON, { runner });
-    expect(out.text).toBe("!/trevor-export");
+    const out = await expandCommandFile(file("!/belay-export", "untrusted"), ON, { runner });
+    expect(out.text).toBe("!/belay-export");
     expect(runner.calls).toHaveLength(0);
   });
 
@@ -73,18 +73,18 @@ describe("command-file interpolation stays literal unless trusted AND gated (M5,
 describe("command-file interpolation runs ONLY allow-listed targets when enabled (M5)", () => {
   it("expands a !cmd site by splicing the allow-listed command's redacted output", async () => {
     const runner = fakeRunner({ output: "MANIFEST-BODY", ok: true });
-    const out = await expandCommandFile(file("before\n!/trevor-export --compact\nafter"), ON, {
+    const out = await expandCommandFile(file("before\n!/belay-export --compact\nafter"), ON, {
       runner,
     });
     expect(out.text).toBe("before\nMANIFEST-BODY\nafter");
-    expect(runner.calls).toEqual([{ name: "/trevor-export", args: "--compact" }]);
+    expect(runner.calls).toEqual([{ name: "/belay-export", args: "--compact" }]);
   });
 
   it("expands a fenced block that is a single allow-listed command line", async () => {
     const runner = fakeRunner({ output: "BLOCK-EXPORT", ok: true });
-    const out = await expandCommandFile(file("```!\n/trevor-export\n```"), ON, { runner });
+    const out = await expandCommandFile(file("```!\n/belay-export\n```"), ON, { runner });
     expect(out.text).toBe("BLOCK-EXPORT");
-    expect(runner.calls).toEqual([{ name: "/trevor-export", args: "" }]);
+    expect(runner.calls).toEqual([{ name: "/belay-export", args: "" }]);
   });
 
   it("REFUSES a non-allow-listed command (e.g. /shell) - nothing runs, a marker is spliced", async () => {
@@ -97,7 +97,7 @@ describe("command-file interpolation runs ONLY allow-listed targets when enabled
 
   it("REFUSES a multi-line fenced block (fail closed - not a single allow-listed command)", async () => {
     const runner = fakeRunner({ output: "SHOULD NOT RUN", ok: true });
-    const out = await expandCommandFile(file("```!\n/trevor-export\nrm -rf /\n```"), ON, {
+    const out = await expandCommandFile(file("```!\n/belay-export\nrm -rf /\n```"), ON, {
       runner,
     });
     expect(runner.calls).toHaveLength(0);
@@ -105,11 +105,11 @@ describe("command-file interpolation runs ONLY allow-listed targets when enabled
   });
 
   it("shell metacharacters after the command name are handed to the target as an INERT arg blob", async () => {
-    // The name is argv[0] (`/trevor-export`), so it is allow-listed and runs; the `; rm -rf /` is passed
+    // The name is argv[0] (`/belay-export`), so it is allow-listed and runs; the `; rm -rf /` is passed
     // as opaque args and never reaches a shell (the runner dispatches an in-process command).
     const runner = fakeRunner({ output: "OK", ok: true });
-    const out = await expandCommandFile(file("!/trevor-export; rm -rf /"), ON, { runner });
-    // `/trevor-export;` (with the trailing `;`) is NOT the allow-listed name, so it is refused - the
+    const out = await expandCommandFile(file("!/belay-export; rm -rf /"), ON, { runner });
+    // `/belay-export;` (with the trailing `;`) is NOT the allow-listed name, so it is refused - the
     // metacharacter can neither run nor split the command.
     expect(runner.calls).toHaveLength(0);
     expect(out.text).toMatch(/interpolation refused/);
@@ -119,13 +119,13 @@ describe("command-file interpolation runs ONLY allow-listed targets when enabled
 describe("command-file interpolation diagnostics + failure handling (M6)", () => {
   it("emits a redacted, output-free diagnostic for an expanded site", async () => {
     const runner = fakeRunner({ output: "x".repeat(50), ok: true });
-    const out = await expandCommandFile(file("!/trevor-export"), ON, { runner });
+    const out = await expandCommandFile(file("!/belay-export"), ON, { runner });
     expect(out.diagnostics).toHaveLength(1);
     const d = out.diagnostics[0];
     expect(d?.source).toBe("command-file");
     expect(d?.gate).toBe("TREVOR_ENABLE_INTERPOLATION");
     expect(d?.gateOpen).toBe(true);
-    expect(d?.target).toBe("/trevor-export");
+    expect(d?.target).toBe("/belay-export");
     expect(d?.allowed).toBe(true);
     expect(d?.status).toBe("expanded");
     expect(d?.outputBytes).toBe(50);
@@ -136,7 +136,7 @@ describe("command-file interpolation diagnostics + failure handling (M6)", () =>
 
   it("a runner failure (ok:false) is a bounded 'failed' diagnostic, not a throw", async () => {
     const runner = fakeRunner({ output: "error: boom", ok: false });
-    const out = await expandCommandFile(file("!/trevor-export"), ON, { runner });
+    const out = await expandCommandFile(file("!/belay-export"), ON, { runner });
     expect(out.text).toContain("error: boom");
     expect(out.diagnostics[0]?.status).toBe("failed");
   });
@@ -155,7 +155,7 @@ describe("command-file interpolation diagnostics + failure handling (M6)", () =>
       output: "leak /Users/kevin/dev/secret.key token sk-ABCDEF1234567890XYZ",
       ok: true,
     });
-    const out = await expandCommandFile(file("!/trevor-export"), ON, { runner });
+    const out = await expandCommandFile(file("!/belay-export"), ON, { runner });
     expect(out.text).not.toContain("/Users/kevin");
     expect(out.text).not.toContain("sk-ABCDEF");
     expect(JSON.stringify(out.diagnostics)).not.toContain("sk-ABCDEF");
@@ -163,7 +163,7 @@ describe("command-file interpolation diagnostics + failure handling (M6)", () =>
 
   it("caps oversized interpolated output at the byte budget with a truncation marker", async () => {
     const runner = fakeRunner({ output: "z".repeat(ON.maxOutputBytes + 500), ok: true });
-    const out = await expandCommandFile(file("!/trevor-export"), ON, { runner });
+    const out = await expandCommandFile(file("!/belay-export"), ON, { runner });
     expect(out.text.length).toBeLessThanOrEqual(ON.maxOutputBytes + 40);
     expect(out.text).toMatch(/truncat/i);
     expect(out.diagnostics[0]?.truncated).toBe(true);
@@ -187,7 +187,7 @@ describe("the default in-process runner is the allow-list made executable (M4/M5
     expect(result.output).toMatch(/not an allowed interpolation target/);
   });
 
-  it("dispatches the real /trevor-export in-process over a registered manifest", async () => {
+  it("dispatches the real /belay-export in-process over a registered manifest", async () => {
     const manifest: CapabilityManifest = {
       version: MANIFEST_VERSION,
       scope: "compact",
@@ -199,10 +199,10 @@ describe("the default in-process runner is the allow-list made executable (M4/M5
     };
     registerManifestSource((scope: ManifestScope) => Promise.resolve({ ...manifest, scope }));
 
-    const out = await expandCommandFile(file("!/trevor-export --compact"), ON);
+    const out = await expandCommandFile(file("!/belay-export --compact"), ON);
     // The real command rendered the (bounded) manifest into the body, and recorded one expanded site.
     expect(out.text).toContain("Tools");
     expect(out.diagnostics[0]?.status).toBe("expanded");
-    expect(out.diagnostics[0]?.target).toBe("/trevor-export");
+    expect(out.diagnostics[0]?.target).toBe("/belay-export");
   });
 });

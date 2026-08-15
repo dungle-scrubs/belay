@@ -17,9 +17,9 @@ import {
   type SessionSummary,
   type SessionTransport,
   type TrevorEventInput,
-} from "@trevor/session";
-import type { MetricRecord, SpanRecord, TelemetrySink } from "@trevor/session/telemetry";
-import { subscribe, testIdentity, waitFor } from "@trevor/session/testing";
+} from "@belay/session";
+import type { MetricRecord, SpanRecord, TelemetrySink } from "@belay/session/telemetry";
+import { subscribe, testIdentity, waitFor } from "@belay/session/testing";
 
 export {
   joinSession,
@@ -27,20 +27,20 @@ export {
   type TestSubscriber,
   testIdentity,
   waitFor,
-} from "@trevor/session/testing";
+} from "@belay/session/testing";
 
 /**
  * The generic test harness shared by every integration and e2e test (see repo-root AGENTS.md
  * "Testing"): the durable-log envelope + transport fixtures every test stamps, plus the async-poll
- * helper. These depend only on `@trevor/session`, so the web jsdom project can import them too; the
+ * helper. These depend only on `@belay/session`, so the web jsdom project can import them too; the
  * node-only store boot lifecycle (`bootStore`/`bootBlob`, which pulls in the store apps) lives in
- * the separate `@trevor/test-kit/boot` entry. Host-typed helpers (the fake provider, the turn
+ * the separate `@belay/test-kit/boot` entry. Host-typed helpers (the fake provider, the turn
  * driver) live with the host under `apps/agent-host/test/support` so this package stays free of the
  * host's dependencies.
  */
 
 /** A throwaway temp directory under the OS temp root. Caller removes it (or use `withTempDir`). */
-export function tempDir(prefix = "trevor-test-"): string {
+export function tempDir(prefix = "belay-test-"): string {
   return mkdtempSync(join(tmpdir(), prefix));
 }
 

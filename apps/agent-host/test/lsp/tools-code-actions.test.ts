@@ -17,7 +17,7 @@ import { lspFixtureAdapter } from "./fixture-config";
  * bounded SUCCESS strings. Pure decode/render lives in the co-located unit tests.
  */
 
-const root = mkdtempSync(join(tmpdir(), "trevor-lsp-actions-"));
+const root = mkdtempSync(join(tmpdir(), "belay-lsp-actions-"));
 writeFileSync(join(root, "fixable.ts"), "oops line one\nclean line two\n");
 writeFileSync(join(root, "bystander.ts"), "untouched\n");
 afterAll(() => rmSync(root, { recursive: true, force: true }));

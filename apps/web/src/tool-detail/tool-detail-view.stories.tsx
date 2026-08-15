@@ -29,7 +29,7 @@ function model(over: Partial<ToolDetailModel> = {}): ToolDetailModel {
     toolName: "bash",
     status: "done",
     aborted: false,
-    args: '{\n  "command": "ls -la",\n  "cwd": "~/dev/trevor"\n}',
+    args: '{\n  "command": "ls -la",\n  "cwd": "~/dev/belay"\n}',
     output: "total 24\ndrwxr-xr-x  apps\ndrwxr-xr-x  packages\n-rw-r--r--  package.json",
     ...over,
   };
@@ -211,7 +211,7 @@ export const UnknownTool: Story = {
       <ToolDetailView
         model={model({
           toolName: "mcp__github__create_issue",
-          args: '{"repo":"trevor","title":"bug"}',
+          args: '{"repo":"belay","title":"bug"}',
           output: '{"number":123,"url":"https://github.com/..."}',
         })}
         onBack={noop}

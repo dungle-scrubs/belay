@@ -9,7 +9,7 @@
  * Not for: the tool orchestration (tools.ts) or the HTTP transport (http.ts).
  */
 
-import type { SourceRecallDiagnostic } from "@trevor/session";
+import type { SourceRecallDiagnostic } from "@belay/session";
 import { Data } from "effect";
 
 /** The configured backend did not answer (connection refused, DNS, socket error). */

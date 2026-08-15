@@ -45,7 +45,7 @@ test("$ARGUMENTS receives the exact raw args string verbatim (D-002)", async () 
 test("interpolate-then-substitute (D-007): a $0 value containing !cmd lands inert even with interpolation ON", async () => {
   const published: string[] = [];
   const dispatch = makeCommandFileDispatch({
-    // Gate OPEN, so if the ordering were reversed the substituted `!trevor-export` would become an
+    // Gate OPEN, so if the ordering were reversed the substituted `!belay-export` would become an
     // interpolation site and run. It must not: interpolation runs on the trusted body FIRST.
     interpolationConfig: resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" }),
     publish: async (text) => {
@@ -53,8 +53,8 @@ test("interpolate-then-substitute (D-007): a $0 value containing !cmd lands iner
     },
     emitResult: async () => {},
   });
-  await dispatch.submit(file({ id: "/run", body: "Run $0 now" }), "!trevor-export");
-  assert.deepEqual(published, ["Run !trevor-export now"]);
+  await dispatch.submit(file({ id: "/run", body: "Run $0 now" }), "!belay-export");
+  assert.deepEqual(published, ["Run !belay-export now"]);
 });
 
 test("a dispatch failure is fail-soft: it emits an error command.result, never throws", async () => {

@@ -1,4 +1,4 @@
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary } from "@belay/session";
 
 /**
  * Fork LINEAGE derivation (plan 15, M3), pure over the session inventory. A session's `forkedFrom`

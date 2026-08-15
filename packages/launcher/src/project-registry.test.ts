@@ -20,11 +20,11 @@ import {
  * Driven through an in-memory fake fs - no real disk.
  */
 
-const STATE_HOME = "/state/trevor";
+const STATE_HOME = "/state/belay";
 const HOME = "/home/kevin";
 
 test("projectRegistryPath joins stateHome with the registry filename", () => {
-  assert.equal(projectRegistryPath("/state/trevor"), "/state/trevor/project-registry.json");
+  assert.equal(projectRegistryPath("/state/belay"), "/state/belay/project-registry.json");
 });
 
 test("loadProjectRegistry returns empty map for absent file (never throws)", () => {
@@ -59,9 +59,9 @@ test("addProject creates a record with correct displayPath and displayName", () 
 
 test("addProject abbreviates home-relative displayPath", () => {
   const fs = fakeLauncherFs();
-  const path = `${HOME}/dev/trevor`;
+  const path = `${HOME}/dev/belay`;
   const record = addProject(fs, STATE_HOME, path, "2026-06-26T00:00:00Z", HOME);
-  assert.equal(record.displayPath, "~/dev/trevor");
+  assert.equal(record.displayPath, "~/dev/belay");
 });
 
 test("addProject on an existing path bumps updatedAt without duplicating", () => {

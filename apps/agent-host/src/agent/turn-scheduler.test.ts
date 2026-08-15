@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { PRODUCER_IDS, pendingFollowUps, type SessionEvent } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+import { PRODUCER_IDS, pendingFollowUps, type SessionEvent } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import { type ActiveTurn, isAnswerablePrompt, TurnScheduler } from "./turn-scheduler";
 

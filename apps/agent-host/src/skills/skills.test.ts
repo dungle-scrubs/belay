@@ -28,12 +28,12 @@ afterEach(() => {
 
 /** A fresh temp dir holding a project root and a global root. */
 function roots(): { project: SkillRoot; global: SkillRoot; base: string } {
-  const base = mkdtempSync(join(tmpdir(), "trevor-skills-"));
+  const base = mkdtempSync(join(tmpdir(), "belay-skills-"));
   temps.push(base);
   return {
     base,
-    project: { kind: "project", dir: join(base, "project", ".trevor", "skills") },
-    global: { kind: "global", dir: join(base, "global", ".trevor", "skills") },
+    project: { kind: "project", dir: join(base, "project", ".belay", "skills") },
+    global: { kind: "global", dir: join(base, "global", ".belay", "skills") },
   };
 }
 

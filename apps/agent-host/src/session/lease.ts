@@ -1,5 +1,5 @@
 /**
- * Single-authority election for trevor hosts sharing one Tether session.
+ * Single-authority election for belay hosts sharing one Tether session.
  *
  * Every host connects with a distinct participant id (so Tether lets them all
  * coexist and observe the log), but only ONE - the leader - answers turns and
@@ -26,8 +26,8 @@
  * Not for: cwd resource ownership across sessions - session/cwd-lock.ts guards that.
  */
 
+import type { HostRole } from "@belay/session";
 import { debug } from "@host/transport/log";
-import type { HostRole } from "@trevor/session";
 
 /** Lease roles: the wire-visible `HostRole` (leader/standby) plus the private "probing"
  *  start state the lease occupies before it has claimed or deferred. */

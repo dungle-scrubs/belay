@@ -6,16 +6,16 @@
  * emit nothing remote without explicit opt-in.
  *
  * Precedence + guards:
- * - `TREVOR_OTEL_EXPORTER` selects the LOCAL exporter (`none` default, `file`, or `otlp`). Whether an
+ * - `BELAY_OTEL_EXPORTER` selects the LOCAL exporter (`none` default, `file`, or `otlp`). Whether an
  *   `otlp` endpoint may be non-loopback is gated later (M8); here it is only parsed.
- * - `TREVOR_TELEMETRY_REMOTE` is the master switch for ANY remote export; off by default.
- * - Node Sentry uses `TREVOR_SENTRY_DSN` (preferred) then `SENTRY_DSN`; web uses `VITE_TREVOR_SENTRY_DSN`.
+ * - `BELAY_TELEMETRY_REMOTE` is the master switch for ANY remote export; off by default.
+ * - Node Sentry uses `BELAY_SENTRY_DSN` (preferred) then `SENTRY_DSN`; web uses `VITE_BELAY_SENTRY_DSN`.
  * - Under test/CI (`NODE_ENV=test`, `VITEST`, or `CI`) remote telemetry is FORCED off and both Sentry
  *   DSNs are dropped, so running the suite never emits anything remote regardless of the ambient env.
  */
 
 // The shared observability contract (redaction, safe envelopes, span/metric names) is part of the same
-// `@trevor/session/telemetry` surface as the config, so consumers reach both from one import.
+// `@belay/session/telemetry` surface as the config, so consumers reach both from one import.
 export * from "./telemetry-contract";
 
 export type OtelExporter = "none" | "file" | "otlp";
@@ -32,11 +32,11 @@ export interface TelemetryConfig {
   readonly sentryDsn: string | null;
   /** The web (browser) Sentry DSN for error capture, or null when unset or suppressed. */
   readonly webSentryDsn: string | null;
-  /** Opt-in LOCAL provider-attempt JSONL tracing (`TREVOR_PROVIDER_TRACE`). Off by default; local-only
-   *  (under `TREVOR_STATE_HOME`), so it is NOT force-disabled under test/CI - a test opts in explicitly. */
+  /** Opt-in LOCAL provider-attempt JSONL tracing (`BELAY_PROVIDER_TRACE`). Off by default; local-only
+   *  (under `BELAY_STATE_HOME`), so it is NOT force-disabled under test/CI - a test opts in explicitly. */
   readonly providerTrace: boolean;
-  /** The OTLP collector endpoint (`TREVOR_OTEL_ENDPOINT`) when `otelExporter === "otlp"`, else null. A
-   *  NON-loopback endpoint is only honored with `TREVOR_ALLOW_REMOTE_OTEL=1`; without it the exporter is
+  /** The OTLP collector endpoint (`BELAY_OTEL_ENDPOINT`) when `otelExporter === "otlp"`, else null. A
+   *  NON-loopback endpoint is only honored with `BELAY_ALLOW_REMOTE_OTEL=1`; without it the exporter is
    *  downgraded to `none` (a bare checkout never ships traces to a remote collector by accident). */
   readonly otlpEndpoint: string | null;
   /** Why remote telemetry is force-disabled (`test`/`ci`), or null when not suppressed. */
@@ -73,7 +73,7 @@ export function telemetrySuppressedReason(env: TelemetryEnv): TelemetrySuppresse
   return null;
 }
 
-/** Parses `TREVOR_OTEL_EXPORTER` into the local exporter mode; anything unrecognized falls back to `none`. */
+/** Parses `BELAY_OTEL_EXPORTER` into the local exporter mode; anything unrecognized falls back to `none`. */
 function parseExporter(value: string | undefined): OtelExporter {
   const mode = value?.trim().toLowerCase();
   return mode === "file" || mode === "otlp" ? mode : "none";
@@ -96,26 +96,26 @@ export function isLoopbackEndpoint(endpoint: string): boolean {
 export function resolveTelemetryConfig(env: TelemetryEnv = process.env): TelemetryConfig {
   const suppressedReason = telemetrySuppressedReason(env);
   const suppressed = suppressedReason !== null;
-  const requestedExporter = parseExporter(env.TREVOR_OTEL_EXPORTER);
-  const otlpEndpoint = nonEmpty(env.TREVOR_OTEL_ENDPOINT);
+  const requestedExporter = parseExporter(env.BELAY_OTEL_EXPORTER);
+  const otlpEndpoint = nonEmpty(env.BELAY_OTEL_ENDPOINT);
   // A remote (non-loopback) OTLP endpoint is only honored with an explicit opt-in, and never under
   // test/CI - otherwise the exporter is downgraded to `none` so nothing is shipped to a remote collector.
   const otlpRemoteBlocked =
     requestedExporter === "otlp" &&
     otlpEndpoint !== null &&
     !isLoopbackEndpoint(otlpEndpoint) &&
-    !(!suppressed && isTruthy(env.TREVOR_ALLOW_REMOTE_OTEL));
+    !(!suppressed && isTruthy(env.BELAY_ALLOW_REMOTE_OTEL));
   const otelExporter: OtelExporter = otlpRemoteBlocked ? "none" : requestedExporter;
   return {
     otelExporter,
     otlpEndpoint: otelExporter === "otlp" ? otlpEndpoint : null,
     // Remote is off by default and can never be on under test/CI.
-    remoteEnabled: !suppressed && isTruthy(env.TREVOR_TELEMETRY_REMOTE),
+    remoteEnabled: !suppressed && isTruthy(env.BELAY_TELEMETRY_REMOTE),
     // Sentry opts in via a DSN, but test/CI drops it so the suite never reports remotely.
-    sentryDsn: suppressed ? null : nonEmpty(env.TREVOR_SENTRY_DSN ?? env.SENTRY_DSN),
-    webSentryDsn: suppressed ? null : nonEmpty(env.VITE_TREVOR_SENTRY_DSN),
+    sentryDsn: suppressed ? null : nonEmpty(env.BELAY_SENTRY_DSN ?? env.SENTRY_DSN),
+    webSentryDsn: suppressed ? null : nonEmpty(env.VITE_BELAY_SENTRY_DSN),
     // Provider tracing is local-only, so it opts in regardless of the test/CI remote guard.
-    providerTrace: isTruthy(env.TREVOR_PROVIDER_TRACE),
+    providerTrace: isTruthy(env.BELAY_PROVIDER_TRACE),
     suppressedReason,
   };
 }

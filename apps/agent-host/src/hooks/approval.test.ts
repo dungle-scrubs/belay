@@ -151,7 +151,7 @@ describe("approval state - persistence", () => {
 describe("the execution gate (D-006): project/user hooks never execute before approval", () => {
   test("a freshly discovered hook is gated until approved, then gated again when it changes", () => {
     const roots = {
-      projectHooksPath: "/repo/.trevor/hooks.json",
+      projectHooksPath: "/repo/.belay/hooks.json",
       userHooksPath: "/home/user/.config-home/hooks.json",
     };
     const report = discoverHooks(roots, (path) => {

@@ -7,10 +7,11 @@
  * Not for: executing tools or dispatching the segments - the loop (loop.ts) owns that - or
  * hook dispatch semantics (@host/hooks/runtime).
  */
+
+import type { TurnStop } from "@belay/session";
 import type { PreToolUseOutcome } from "@host/hooks/runtime";
 import type { ToolCall } from "@host/providers";
 import { READ_ONLY_TOOLS } from "@host/tools";
-import type { TurnStop } from "@trevor/session";
 import type { GuardrailDecision } from "./tool-guardrails";
 
 /**

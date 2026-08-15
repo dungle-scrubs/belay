@@ -40,20 +40,15 @@ function inventory(items: readonly ClaudeMigrationItem[]): ClaudeMigrationInvent
   return { items, proposalItems: items.filter((i) => i.needsProposal) };
 }
 
-test("diagnostics separate AGENTS.md files from .trevor/rules and count inclusion reasons", () => {
+test("diagnostics separate AGENTS.md files from .belay/rules and count inclusion reasons", () => {
   const diag = collectContextDiagnostics(
     report({
-      files: [
-        "/w/AGENTS.md",
-        "/w/apps/AGENTS.md",
-        "/w/.trevor/rules/a.md",
-        "/w/.trevor/rules/b.md",
-      ],
-      scopes: ["project", "trevor-rule", "below-cwd-rule"],
+      files: ["/w/AGENTS.md", "/w/apps/AGENTS.md", "/w/.belay/rules/a.md", "/w/.belay/rules/b.md"],
+      scopes: ["project", "belay-rule", "below-cwd-rule"],
       bytesUsed: 4096,
       ruleSources: [
-        ruleSource("/w/.trevor/rules/a.md", "always"),
-        ruleSource("/w/.trevor/rules/b.md", "file-access"),
+        ruleSource("/w/.belay/rules/a.md", "always"),
+        ruleSource("/w/.belay/rules/b.md", "file-access"),
       ],
     }),
     inventory([]),
@@ -125,9 +120,9 @@ test("diagnostics summarize by counts and never dump instruction or rule bodies 
   const secretBody = "SECRET RULE BODY: do the dangerous thing";
   const diag = collectContextDiagnostics(
     report({
-      text: `### trevor-rule: /w/.trevor/rules/a.md\n${secretBody}`,
-      files: ["/w/AGENTS.md", "/w/.trevor/rules/a.md"],
-      ruleSources: [ruleSource("/w/.trevor/rules/a.md", "always")],
+      text: `### belay-rule: /w/.belay/rules/a.md\n${secretBody}`,
+      files: ["/w/AGENTS.md", "/w/.belay/rules/a.md"],
+      ruleSources: [ruleSource("/w/.belay/rules/a.md", "always")],
     }),
     inventory([claudeItem({ claudePath: "CLAUDE.md", preview: secretBody })]),
     new Set(),

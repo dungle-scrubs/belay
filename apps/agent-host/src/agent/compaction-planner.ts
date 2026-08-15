@@ -3,14 +3,15 @@
  * choosing the folded prefix + token estimates (COMPACT_WHEN / COMPACT_TO live here).
  * Not for: the summarization model call and the context.compacted event - compactor.ts.
  */
-import { estimateTokens } from "@host/metrics/breakdown";
+
 import {
   type CompactionManifest,
   type DecodedEvent,
   decodeTrevorEvent,
   isAnswerableProducer,
   type SessionEvent,
-} from "@trevor/session";
+} from "@belay/session";
+import { estimateTokens } from "@host/metrics/breakdown";
 import type { ChatMessage } from "../providers";
 import { analyzeBaseline } from "./baseline";
 import { toolCallGrouper } from "./tool-messages";

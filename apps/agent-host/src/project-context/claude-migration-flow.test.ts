@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { ProviderQuestionAnswer, ProviderQuestionContract } from "@trevor/session";
+import type { ProviderQuestionAnswer, ProviderQuestionContract } from "@belay/session";
 import { Effect } from "effect";
 import { test } from "vitest";
 import {

@@ -28,7 +28,7 @@ export interface EvalWorkspaceOptions {
 
 /** Builds the fixture workspace and returns its absolute root. Caller removes it in afterAll. */
 export function createEvalWorkspace(options: EvalWorkspaceOptions): string {
-  const root = mkdtempSync(join(tmpdir(), "trevor-lsp-eval-"));
+  const root = mkdtempSync(join(tmpdir(), "belay-lsp-eval-"));
   writeFileSync(join(root, "tsconfig.json"), '{ "compilerOptions": { "strict": true } }\n');
   for (const [path, content] of Object.entries(options.files)) {
     const absolute = join(root, path);

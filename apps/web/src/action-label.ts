@@ -11,7 +11,7 @@
  * home for the V2 action vocabulary, so tool renderers and the working row can't drift apart.
  */
 
-import type { ToolName } from "@trevor/session";
+import type { ToolName } from "@belay/session";
 import { toolSummary, truncateText } from "./tool-args";
 
 /** Shown when no better structured action is available (the honest, non-guessing default). */

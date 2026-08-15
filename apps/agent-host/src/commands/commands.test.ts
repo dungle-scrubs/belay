@@ -104,7 +104,7 @@ test("/init drafts AGENTS.md from repo evidence without writing", async () => {
   );
   write(join(root, "vitest.config.ts"), "export default {};");
   write(join(root, "apps", "AGENTS.md"), "nested");
-  write(join(root, ".trevor", "rules", "review.md"), "---\nid: review\n---\nRun tests.");
+  write(join(root, ".belay", "rules", "review.md"), "---\nid: review\n---\nRun tests.");
   write(join(root, "CLAUDE.md"), "legacy");
 
   const registry = buildCommandRegistry();
@@ -116,7 +116,7 @@ test("/init drafts AGENTS.md from repo evidence without writing", async () => {
   assert.match(text, /pnpm lint/);
   assert.match(text, /vitest\.config\.ts/);
   assert.match(text, /apps\/AGENTS\.md/);
-  assert.match(text, /\.trevor\/rules\/review\.md/);
+  assert.match(text, /\.belay\/rules\/review\.md/);
   assert.match(text, /CLAUDE\.md/);
   assert.equal(text.includes("```markdown"), true);
 });

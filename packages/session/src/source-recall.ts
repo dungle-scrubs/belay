@@ -2,7 +2,7 @@
  * The indexed source-recall wire contract (plan 38): the serializable shapes the
  * `source_recall`, `source_index_status`, and `source_index_refresh` tools return, shared by the
  * host (which produces them from a provider adapter) and the web (which renders them). Like the
- * rest of the protocol it lives in `@trevor/session` so the two surfaces can never disagree on the
+ * rest of the protocol it lives in `@belay/session` so the two surfaces can never disagree on the
  * payload. The provider-adapter interface, HTTP clients, and mapping stay in the host; only the
  * normalized result that crosses the boundary is here.
  *
@@ -18,7 +18,7 @@
  */
 
 /**
- * The concrete indexed-source backends Trevor speaks to. `source-recall` is the local Python/FastAPI
+ * The concrete indexed-source backends Belay speaks to. `source-recall` is the local Python/FastAPI
  * hybrid BM25+vector chunk daemon (the first concrete adapter); `aleutian` is Aleutian Trace's
  * structural graph/context/symbol intelligence. Both implement one provider contract; other backends
  * can be added by widening this union and adding an adapter.
@@ -29,7 +29,7 @@ export const SOURCE_RECALL_PROVIDER_KINDS = ["source-recall", "aleutian"] as con
 export type SourceRecallProviderKind = (typeof SOURCE_RECALL_PROVIDER_KINDS)[number];
 
 /**
- * The normalized capabilities a provider can advertise after discovery. Trevor's tools depend on
+ * The normalized capabilities a provider can advertise after discovery. Belay's tools depend on
  * these capabilities, never on a backend's raw endpoint set (D-002/D-003): `source-recall` typically
  * offers chunk/semantic search + refresh + status; Aleutian offers symbol/graph/context and, where
  * Weaviate is up, semantic search. Order is the canonical discovery/display order.

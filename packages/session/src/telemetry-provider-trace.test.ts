@@ -14,7 +14,7 @@ import { createProviderTraceWriter } from "./telemetry-provider-trace";
 let dir: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "trevor-ptrace-"));
+  dir = mkdtempSync(join(tmpdir(), "belay-ptrace-"));
 });
 
 afterEach(() => {

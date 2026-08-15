@@ -1,5 +1,5 @@
+import type { ArtifactRef } from "@belay/session";
 import { elementScroll, type Rect, useVirtualizer } from "@tanstack/react-virtual";
-import type { ArtifactRef } from "@trevor/session";
 import {
   memo,
   type RefObject,

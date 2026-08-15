@@ -1,7 +1,7 @@
 import type { Server } from "node:http";
-import { createService, json, type Route, readBody } from "@trevor/server-kit";
-import { BLOB_PATH_PATTERN, BLOBS_PATH } from "@trevor/session/blob-contract";
-import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
+import { createService, json, type Route, readBody } from "@belay/server-kit";
+import { BLOB_PATH_PATTERN, BLOBS_PATH } from "@belay/session/blob-contract";
+import { createTelemetrySink } from "@belay/session/telemetry-file-sink";
 import { BlobStore } from "./store";
 import { heicToJpeg, isHeicMime, looksLikeHeic } from "./transcode";
 
@@ -93,6 +93,6 @@ export function createBlobServer(root: string, maxBytes: number): Server {
     },
   ];
 
-  // The browser (trevor-web) uploads/reads cross-origin, no credentials; blobs add HEAD.
+  // The browser (belay-web) uploads/reads cross-origin, no credentials; blobs add HEAD.
   return createService({ routes, corsMethods: "GET, HEAD, POST, OPTIONS" });
 }

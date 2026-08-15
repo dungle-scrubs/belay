@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { events, PRODUCER_IDS, type SessionEvent, type TrevorEventInput } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { render, waitFor } from "@testing-library/react";
-import { events, PRODUCER_IDS, type SessionEvent, type TrevorEventInput } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
 import { type RefObject, useRef } from "react";
 import { afterEach, beforeEach, describe, test, vi } from "vitest";
 import { VirtualTranscript } from "@/components/chat/virtual-transcript";

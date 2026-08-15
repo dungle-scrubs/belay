@@ -31,7 +31,7 @@ export function lspFixtureSpawnSpec(flags: readonly string[] = []): LspSpawnSpec
 export function lspFixtureAdapter(flags: readonly string[] = []): LanguageServerAdapter {
   return {
     id: "fixture",
-    displayName: "trevor-lsp-fixture",
+    displayName: "belay-lsp-fixture",
     detects: () => true,
     resolveCommand: () => lspFixtureSpawnSpec(flags),
   };

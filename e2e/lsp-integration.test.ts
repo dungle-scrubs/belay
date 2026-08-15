@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createEvalWorkspace, installEvalServer } from "@trevor/agent-host/testing/lsp-fixtures";
-import type { RunningServer } from "@trevor/server-kit";
-import type { SessionEvent } from "@trevor/session";
+import { createEvalWorkspace, installEvalServer } from "@belay/agent-host/testing/lsp-fixtures";
+import type { RunningServer } from "@belay/server-kit";
+import type { SessionEvent } from "@belay/session";
 import { afterAll, beforeAll, describe, test } from "vitest";
 
 /**
@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, test } from "vitest";
  * the unavailable path degrades to bounded text while read/grep keep working IN THE SAME TURN
  * (D-006); the shim then installs mid-suite and the manager's next lazy acquire recovers.
  *
- * ORDERING MATTERS: `@trevor/session/node-paths` binds TREVOR_HOME/TREVOR_WORKSPACE at first
+ * ORDERING MATTERS: `@belay/session/node-paths` binds BELAY_HOME/TREVOR_WORKSPACE at first
  * evaluation, and the host testing surface reaches it (the LSP singleton reads WORKSPACE_ROOT
  * at import). So this file's static imports are strictly side-effect-free (node builtins,
  * types, the LSP fixture-workspace surface); the env override runs at module scope; and every
@@ -31,8 +31,8 @@ import { afterAll, beforeAll, describe, test } from "vitest";
 
 // --- hermetic home + workspace, BEFORE any node-paths-reaching module loads ---
 
-const HOME = mkdtempSync(join(tmpdir(), "trevor-e2e-lsp-home-"));
-const STATE = mkdtempSync(join(tmpdir(), "trevor-e2e-lsp-state-"));
+const HOME = mkdtempSync(join(tmpdir(), "belay-e2e-lsp-home-"));
+const STATE = mkdtempSync(join(tmpdir(), "belay-e2e-lsp-state-"));
 
 // The workspace starts WITHOUT the server shim: the first describe proves the unavailable path
 // through the production adapter's real binary lookup before installEvalServer() flips it.
@@ -72,18 +72,18 @@ const WS = createEvalWorkspace({
 });
 
 const SAVED_ENV = {
-  TREVOR_HOME: process.env.TREVOR_HOME,
-  TREVOR_STATE_HOME: process.env.TREVOR_STATE_HOME,
+  BELAY_HOME: process.env.BELAY_HOME,
+  BELAY_STATE_HOME: process.env.BELAY_STATE_HOME,
   TREVOR_WORKSPACE: process.env.TREVOR_WORKSPACE,
 };
 
-process.env.TREVOR_HOME = HOME;
-process.env.TREVOR_STATE_HOME = STATE;
+process.env.BELAY_HOME = HOME;
+process.env.BELAY_STATE_HOME = STATE;
 process.env.TREVOR_WORKSPACE = WS;
 
-type HostTesting = typeof import("@trevor/agent-host/testing");
-type SessionModule = typeof import("@trevor/session");
-type TestKit = typeof import("@trevor/test-kit");
+type HostTesting = typeof import("@belay/agent-host/testing");
+type SessionModule = typeof import("@belay/session");
+type TestKit = typeof import("@belay/test-kit");
 type Viewer = ReturnType<TestKit["subscribe"]>;
 
 let host: HostTesting;
@@ -92,12 +92,12 @@ let kit: TestKit;
 let store: RunningServer;
 
 beforeAll(async () => {
-  session = await import("@trevor/session");
-  kit = await import("@trevor/test-kit");
-  const { bootStore } = await import("@trevor/test-kit/boot");
+  session = await import("@belay/session");
+  kit = await import("@belay/test-kit");
+  const { bootStore } = await import("@belay/test-kit/boot");
 
   // Only now may the host surface load: its LSP singleton binds WORKSPACE_ROOT at import.
-  host = await import("@trevor/agent-host/testing");
+  host = await import("@belay/agent-host/testing");
   store = await bootStore();
 });
 

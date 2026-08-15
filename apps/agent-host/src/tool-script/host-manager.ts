@@ -6,7 +6,7 @@ import {
   type ToolScriptBudgets,
   type ToolScriptFailureClass,
   type ToolScriptResult,
-} from "@trevor/session";
+} from "@belay/session";
 import { shortSha16 } from "./hash";
 import { resultWithinBudget, summarizeToolOutput } from "./output-budget";
 import type { HostToRunner, RunnerContext, RunnerToHost } from "./protocol";

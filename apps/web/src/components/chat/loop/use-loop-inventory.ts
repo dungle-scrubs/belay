@@ -3,7 +3,7 @@ import {
   type LoopInventoryRow,
   loopSnapshotToInventoryRow,
   type SessionEvent,
-} from "@trevor/session";
+} from "@belay/session";
 import { useMemo } from "react";
 
 export function loopInventoryRowsFromEvents(

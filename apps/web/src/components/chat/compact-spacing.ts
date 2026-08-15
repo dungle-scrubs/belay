@@ -1,4 +1,4 @@
-import { READ_ONLY_TOOL_NAMES } from "@trevor/session";
+import { READ_ONLY_TOOL_NAMES } from "@belay/session";
 import type { TranscriptRow } from "../../transcript-rows";
 
 /**
@@ -10,7 +10,7 @@ import type { TranscriptRow } from "../../transcript-rows";
  *
  * It owns ONLY the spacing taxonomy - what counts as "the same type" for grouping. It does NOT own how
  * a single row projects to its one-line form (that is `compact-display.ts`), nor read-only membership
- * (that is `@trevor/session`, reused here so compact grouping can't drift from concurrent dispatch).
+ * (that is `@belay/session`, reused here so compact grouping can't drift from concurrent dispatch).
  *
  * Tools are the exception to keying by `Message.kind`:
  *  - MCP tools (the `mcp` gateway, or a passthrough `mcp__*` name) key by their own name and are ALWAYS

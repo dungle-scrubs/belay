@@ -5,13 +5,13 @@ import {
   safeAttributes,
   safeEmitSpan,
   type TelemetrySink,
-} from "@trevor/session/telemetry";
+} from "@belay/session/telemetry";
 import { Clock, Effect, type Exit } from "effect";
 import { interpretFiberExit } from "../effect/fiber-exit";
 
 /**
  * The host's Effect-aware span combinator (plan 13, M3). The shared `withSpan`/`withSpanSync` in
- * `@trevor/session/telemetry` are Promise/sync; the agent host runs on Effect, so its boundaries wrap in
+ * `@belay/session/telemetry` are Promise/sync; the agent host runs on Effect, so its boundaries wrap in
  * this instead. It lives in the host (not the shared package) so `effect` never bundles into the
  * browser-facing telemetry module.
  *
@@ -21,7 +21,7 @@ import { interpretFiberExit } from "../effect/fiber-exit";
  * exit is passed through unchanged: a span is observability, never flow control.
  *
  * Responsible for: the Effect-aware span combinator (one finished span per effect exit).
- * Not for: Promise/sync spans - `withSpan`/`withSpanSync` in @trevor/session/telemetry.
+ * Not for: Promise/sync spans - `withSpan`/`withSpanSync` in @belay/session/telemetry.
  */
 export function spanEffect<A, E, R>(
   sink: TelemetrySink,

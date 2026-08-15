@@ -4,8 +4,8 @@
  * state, plus assembled snapshots (healthy, mixed, many findings, not checked,
  * stale, long paths). Shared by the dashboard and area-card stories.
  *
- * Content is Trevor-flavoured on purpose - qwen local + gpt cloud, the
- * ~/.trevor / ~/.pi roots, rg + ast-grep, Firecrawl - so the
+ * Content is Belay-flavoured on purpose - qwen local + gpt cloud, the
+ * ~/.belay / ~/.pi roots, rg + ast-grep, Firecrawl - so the
  * layout is exercised against believable text lengths.
  */
 import {
@@ -14,10 +14,10 @@ import {
   type DoctorHostContext,
   type DoctorSnapshot,
   type DoctorSnapshotState,
-} from "@trevor/session";
+} from "@belay/session";
 
 export const HOST: DoctorHostContext = {
-  workspace: "~/dev/trevor/apps/agent-host",
+  workspace: "~/dev/belay/apps/agent-host",
   instanceId: "1d8e680d",
   role: "leader",
 };
@@ -100,7 +100,7 @@ export const providersAuthMissing: DoctorArea = {
       status: "error",
       title: "GPT-5.5 missing API key",
       message: "No credentials resolved for the cloud provider, so cloud turns will fail.",
-      source: "~/.trevor/.env.op",
+      source: "~/.belay/.env.op",
       nextAction: { label: "Add the key, then reload", command: "opchain primary --read op run" },
     },
   ],
@@ -421,7 +421,7 @@ export const lspUnconfigured: DoctorArea = {
 };
 
 const LSP_MISSING_DETAIL =
-  "typescript-language-server is not installed (checked ~/dev/trevor/node_modules/.bin and " +
+  "typescript-language-server is not installed (checked ~/dev/belay/node_modules/.bin and " +
   "PATH); install: pnpm add -g typescript-language-server";
 
 export const lspMissing: DoctorArea = {
@@ -626,7 +626,7 @@ export const hooksLegacyMigration: DoctorArea = {
       title: "Legacy HOOK.md handlers",
       message:
         "1 legacy V1 HOOK.md file found - these never execute in V2: " +
-        "~/dev/app/.trevor/hooks/fmt/HOOK.md.",
+        "~/dev/app/.belay/hooks/fmt/HOOK.md.",
       nextAction: { label: "Migrate each handler to a hooks.json entry" },
     },
   ],
@@ -640,12 +640,12 @@ export const storageOk: DoctorArea = {
   status: "ok",
   verdict: "All roots resolved and writable.",
   facts: [
-    { label: "config", value: "~/.trevor", status: "ok" },
-    { label: "state", value: "~/.local/state/trevor", status: "ok" },
-    { label: "legacy", value: "~/.trevor · none", status: "not_checked" },
+    { label: "config", value: "~/.belay", status: "ok" },
+    { label: "state", value: "~/.local/state/belay", status: "ok" },
+    { label: "legacy", value: "~/.belay · none", status: "not_checked" },
     { label: "temp", value: "/var/folders/4p/T", status: "ok" },
     { label: "external:pi", value: "~/.pi · external (read-only)", status: "ok" },
-    { label: "external:agents", value: "~/.trevor · external (read-only)", status: "ok" },
+    { label: "external:agents", value: "~/.belay · external (read-only)", status: "ok" },
   ],
 };
 
@@ -655,43 +655,43 @@ export const storageRootInvalid: DoctorArea = {
   status: "error",
   verdict: "A storage root needs attention.",
   facts: [
-    { label: "config", value: "~/.trevor", status: "ok" },
-    { label: "state", value: "~/.local/state/trevor · not writable", status: "error" },
-    { label: "legacy", value: "~/.trevor · none", status: "not_checked" },
+    { label: "config", value: "~/.belay", status: "ok" },
+    { label: "state", value: "~/.local/state/belay · not writable", status: "error" },
+    { label: "legacy", value: "~/.belay · none", status: "not_checked" },
   ],
   findings: [
     {
       id: "storage.state",
       status: "error",
       title: "state not writable",
-      message: "Trevor cannot write this root.",
-      source: "~/.local/state/trevor",
+      message: "Belay cannot write this root.",
+      source: "~/.local/state/belay",
       evidence: "stat: EACCES permission denied\nowner: root  mode: 0755",
-      nextAction: { label: "Check permissions on", command: "~/.local/state/trevor" },
+      nextAction: { label: "Check permissions on", command: "~/.local/state/belay" },
     },
   ],
 };
 
-/** Storage/Roots with leftover ~/.trevor data: a warn finding nudges the import (D-009). */
+/** Storage/Roots with leftover ~/.belay data: a warn finding nudges the import (D-009). */
 export const storageLegacyImportable: DoctorArea = {
   id: "storage",
   label: "Storage / Roots",
   status: "warn",
   verdict: "Legacy data is importable.",
   facts: [
-    { label: "config", value: "~/.trevor", status: "ok" },
-    { label: "state", value: "~/.local/state/trevor", status: "ok" },
-    { label: "legacy", value: "~/.trevor · legacy data (importable)", status: "warn" },
+    { label: "config", value: "~/.belay", status: "ok" },
+    { label: "state", value: "~/.local/state/belay", status: "ok" },
+    { label: "legacy", value: "~/.belay · legacy data (importable)", status: "warn" },
   ],
   findings: [
     {
       id: "storage.legacy",
       status: "warn",
       title: "Legacy data",
-      message: "Importable ~/.trevor data is present.",
-      source: "~/.trevor",
+      message: "Importable ~/.belay data is present.",
+      source: "~/.belay",
       nextAction: {
-        label: "Import ~/.trevor data via migration or set SESSION_STORE_DB / BLOB_STORE_DIR",
+        label: "Import ~/.belay data via migration or set SESSION_STORE_DB / BLOB_STORE_DIR",
       },
     },
   ],
@@ -715,7 +715,7 @@ export const admissionIdle: DoctorArea = {
   ],
 };
 
-/** Resident Trevor-loaded local models with their context caps + live claim counts (plan 11.1). */
+/** Resident Belay-loaded local models with their context caps + live claim counts (plan 11.1). */
 export const admissionResident: DoctorArea = {
   id: "admission",
   label: "Local admission",
@@ -800,7 +800,7 @@ export const workspaceGit: DoctorArea = {
   status: "ok",
   verdict: "Git worktree on main.",
   facts: [
-    { label: "cwd", value: "~/dev/trevor/apps/agent-host" },
+    { label: "cwd", value: "~/dev/belay/apps/agent-host" },
     { label: "branch", value: "main", status: "ok" },
     { label: "status", value: "3 files changed" },
   ],
@@ -856,7 +856,7 @@ export const updatesAvailable: DoctorArea = {
       status: "warn",
       title: "Update available: v2.1.0",
       message: "You're a version behind. Updating is optional but recommended.",
-      nextAction: { label: "Update Trevor", command: "trevor update" },
+      nextAction: { label: "Update Belay", command: "belay update" },
     },
   ],
 };
@@ -1022,7 +1022,7 @@ const storageLongPath: DoctorArea = {
     {
       label: "state",
       value:
-        "~/Library/Application Support/com.example.trevor/v2/state/runs/2026-06-25/durable-loops",
+        "~/Library/Application Support/com.example.belay/v2/state/runs/2026-06-25/durable-loops",
       status: "error",
     },
   ],
@@ -1033,11 +1033,11 @@ const storageLongPath: DoctorArea = {
       title: "Deeply-nested state directory is not writable",
       message: "The resolved root sits several levels deep and must wrap cleanly across lines.",
       source:
-        "/Users/kevin/Library/Application Support/com.example.trevor/v2/state/runs/2026-06-25/durable-loops/loop_7f2a91c4e3b8/checkpoints",
+        "/Users/kevin/Library/Application Support/com.example.belay/v2/state/runs/2026-06-25/durable-loops/loop_7f2a91c4e3b8/checkpoints",
       nextAction: {
         label: "Fix ownership",
         command:
-          'chown -R "$USER" "/Users/kevin/Library/Application Support/com.example.trevor/v2/state"',
+          'chown -R "$USER" "/Users/kevin/Library/Application Support/com.example.belay/v2/state"',
       },
     },
   ],

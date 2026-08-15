@@ -2,16 +2,16 @@
  * Responsible for: building the workspace file INDEX the `@`-file-mention picker searches - the
  * ignore-aware, depth/entry-capped list of workspace-relative POSIX paths. It is the host's
  * file-search primitive: the browser requests it once per session (durable request/result) and
- * fuzzy-filters it locally (see `@trevor/session` file-mention). Built over an INJECTED walk seam so
+ * fuzzy-filters it locally (see `@belay/session` file-mention). Built over an INJECTED walk seam so
  * it is unit-testable without a real tree, and confined to the workspace root (relative paths only,
  * no `..` escape ever reaches the browser).
- * Not for: the fuzzy scoring/ranking (shared + browser-side in `@trevor/session`), the durable
+ * Not for: the fuzzy scoring/ranking (shared + browser-side in `@belay/session`), the durable
  * protocol wiring (main.ts), or reading file contents (paths only).
  */
 import { relative, sep } from "node:path";
+import { type FileMatch, isWorkspaceRelativePath, MAX_FILE_INDEX } from "@belay/session";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
 import { walkContextTree } from "@host/project-context/walk";
-import { type FileMatch, isWorkspaceRelativePath, MAX_FILE_INDEX } from "@trevor/session";
 
 export { MAX_FILE_INDEX };
 

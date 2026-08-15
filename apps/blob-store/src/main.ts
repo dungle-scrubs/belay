@@ -1,5 +1,5 @@
-import { startStore } from "@trevor/server-kit";
-import { RESERVED_PORTS } from "@trevor/session/ports";
+import { startStore } from "@belay/server-kit";
+import { RESERVED_PORTS } from "@belay/session/ports";
 import { BLOB_STORE, blobStoreRoot } from "./config";
 import { createBlobServer } from "./server";
 

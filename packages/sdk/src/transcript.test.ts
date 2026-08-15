@@ -1,5 +1,5 @@
-import { events } from "@trevor/session";
-import { storedLog } from "@trevor/test-kit";
+import { events } from "@belay/session";
+import { storedLog } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
 import { projectTranscript } from "./transcript";
 

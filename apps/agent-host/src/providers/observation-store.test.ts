@@ -20,20 +20,20 @@ import {
 
 const NOW = "2026-06-27T12:00:00.000Z";
 let home: string;
-const savedHome = process.env.TREVOR_STATE_HOME;
-const savedConfig = process.env.TREVOR_HOME;
+const savedHome = process.env.BELAY_STATE_HOME;
+const savedConfig = process.env.BELAY_HOME;
 
 beforeEach(() => {
-  home = mkdtempSync(join(tmpdir(), "trevor-obs-"));
-  process.env.TREVOR_STATE_HOME = home;
-  // Isolate the config home too, so migration never sees the developer's real ~/.trevor.
-  process.env.TREVOR_HOME = join(home, "config");
+  home = mkdtempSync(join(tmpdir(), "belay-obs-"));
+  process.env.BELAY_STATE_HOME = home;
+  // Isolate the config home too, so migration never sees the developer's real ~/.belay.
+  process.env.BELAY_HOME = join(home, "config");
 });
 
 afterEach(() => {
   for (const [key, value] of [
-    ["TREVOR_STATE_HOME", savedHome],
-    ["TREVOR_HOME", savedConfig],
+    ["BELAY_STATE_HOME", savedHome],
+    ["BELAY_HOME", savedConfig],
   ] as const) {
     if (value === undefined) {
       delete process.env[key];
@@ -117,10 +117,10 @@ describe("recordObservation", () => {
   });
 
   it("is best-effort: a write failure returns null and does not throw", async () => {
-    // Point TREVOR_STATE_HOME at a path whose parent is a FILE, so mkdir/write fails.
+    // Point BELAY_STATE_HOME at a path whose parent is a FILE, so mkdir/write fails.
     const filePath = join(home, "not-a-dir");
     writeFileSync(filePath, "x");
-    process.env.TREVOR_STATE_HOME = join(filePath, "nested");
+    process.env.BELAY_STATE_HOME = join(filePath, "nested");
     const rec = await recordObservation(input(), NOW);
     expect(rec).toBeNull();
   });

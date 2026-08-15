@@ -1,4 +1,4 @@
-import type { SourceAction, SourceSummary } from "@trevor/session";
+import type { SourceAction, SourceSummary } from "@belay/session";
 import {
   ExternalLink,
   KeyRound,
@@ -37,7 +37,7 @@ export interface DeviceCodeFlow {
    *  browser+paste flow (the code is returned at the URL and pasted back). */
   readonly userCode?: string;
   /**
-   * Whether this provider's protocol needs the user to paste a code BACK into Trevor (a non-key
+   * Whether this provider's protocol needs the user to paste a code BACK into Belay (a non-key
    * provider code). When true, a small code input is shown; it is never used for an API key.
    */
   readonly acceptsCode?: boolean;
@@ -91,7 +91,7 @@ export function authCopy(source: SourceSummary): { title: string; body: string }
   if (source.type === "local") {
     return {
       title: "Start the local runtime",
-      body: "Trevor connects to a local runtime you run yourself - it does not install or manage it. Start the runtime, then refresh to load its models.",
+      body: "Belay connects to a local runtime you run yourself - it does not install or manage it. Start the runtime, then refresh to load its models.",
     };
   }
   if (source.type === "oauth") {
@@ -102,18 +102,18 @@ export function authCopy(source: SourceSummary): { title: string; body: string }
     return source.auth === "expired"
       ? {
           title: "Your sign-in expired",
-          body: "Re-authenticate through the provider to keep using this subscription. Trevor opens the provider's sign-in; no credentials are entered here.",
+          body: "Re-authenticate through the provider to keep using this subscription. Belay opens the provider's sign-in; no credentials are entered here.",
         }
       : {
           title: `Sign in to ${source.label}`,
-          body: "Authorize this subscription through the provider's sign-in. Trevor opens the host-owned flow; no password or key is entered in this chooser.",
+          body: "Authorize this subscription through the provider's sign-in. Belay opens the host-owned flow; no password or key is entered in this chooser.",
         };
   }
   // Direct API key / gateway: keys live in the host auth store, never pasted here.
   if (source.status === "error") {
     return {
       title: "The configured key was rejected",
-      body: `The key for this source was rejected by the provider. Update it in the host auth store (${HOST_AUTH_STORE}); Trevor never accepts a key typed into the chooser.`,
+      body: `The key for this source was rejected by the provider. Update it in the host auth store (${HOST_AUTH_STORE}); Belay never accepts a key typed into the chooser.`,
     };
   }
   return {

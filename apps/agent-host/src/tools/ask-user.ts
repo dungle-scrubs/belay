@@ -1,4 +1,4 @@
-import { normalizeAskUserInput, type RawAskUserInput } from "@trevor/session";
+import { normalizeAskUserInput, type RawAskUserInput } from "@belay/session";
 import { Schema } from "effect";
 import { providerQuestionRuntime } from "../agent/provider-questions";
 import type { Tool, ToolContext } from "./types";

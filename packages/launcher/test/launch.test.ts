@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
-import { recordingTelemetrySink } from "@trevor/test-kit";
+import { SPAN_NAMES, type TelemetrySink } from "@belay/session/telemetry";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { test } from "vitest";
 import type { LauncherFs } from "../src/fs";
 import { loadHosts, recordHost } from "../src/host-registry";
@@ -57,8 +57,8 @@ function makePlatform(opts: FakeOpts = {}): Spy {
   let spawnPid = 9000;
   const platform: LaunchPlatform = {
     fs,
-    home: "/home/.trevor",
-    configHome: opts.configHome ?? "/home/.trevor",
+    home: "/home/.belay",
+    configHome: opts.configHome ?? "/home/.belay",
     cwd: opts.cwd ?? opts.gitRoot ?? "/work/app",
     pid: opts.pid ?? 1234,
     reporter: { step: () => {} },
@@ -91,9 +91,9 @@ function makePlatform(opts: FakeOpts = {}): Spy {
   // Pre-seat a concurrent live lock holder if requested.
   if (opts.lockHeldByLive) {
     const root = opts.gitRoot ?? "/work/app";
-    const sessionId = resolveSession(fs, "/home/.trevor", root, "t");
+    const sessionId = resolveSession(fs, "/home/.belay", root, "t");
     fs.writeFile(
-      `/home/.trevor/locks/${sessionId}.lock`,
+      `/home/.belay/locks/${sessionId}.lock`,
       JSON.stringify({ pid: opts.lockHeldByLive, acquiredAt: "t" }),
     );
   }
@@ -109,7 +109,7 @@ test("launching into a root that no longer exists rejects with a typed missing-r
   );
   // Nothing was spawned and no host record was written (the pid:-1 ghost from the crash evidence).
   assert.deepEqual(spy.spawned, []);
-  assert.equal(loadHosts(spy.platform.fs, "/home/.trevor")["dead-session"], undefined);
+  assert.equal(loadHosts(spy.platform.fs, "/home/.belay")["dead-session"], undefined);
   // The dead root was NOT (re-)added to the project registry.
   assert.equal(loadProjectRegistry(spy.platform.fs, spy.platform.home).has("/gone/project"), false);
 });
@@ -126,10 +126,10 @@ test("a spawn that fails after the pre-check rejects the launch and records no h
     launch(platform, { session: { sessionId: "toctou-session", root: "/work/app" } }),
     (error: unknown) => isLaunchError(error) && error.code === "spawn-failed",
   );
-  assert.equal(loadHosts(platform.fs, "/home/.trevor")["toctou-session"], undefined);
+  assert.equal(loadHosts(platform.fs, "/home/.belay")["toctou-session"], undefined);
 });
 
-test("a launch emits a trevor.cli.launch span with host action + counts, no paths/session ids/urls", async () => {
+test("a launch emits a belay.cli.launch span with host action + counts, no paths/session ids/urls", async () => {
   const recorder = recordingTelemetrySink();
   const spy = makePlatform({
     gitRoot: "/work/app",
@@ -240,8 +240,8 @@ test("--debug threads the debug flag through to the spawned host", async () => {
 test("a healthy recorded host is reused, not re-spawned", async () => {
   const fs = fakeLauncherFs();
   fs.writeFile("/work/app/.git", "");
-  const sessionId = resolveSession(fs, "/home/.trevor", "/work/app", "t");
-  recordHost(fs, "/home/.trevor", {
+  const sessionId = resolveSession(fs, "/home/.belay", "/work/app", "t");
+  recordHost(fs, "/home/.belay", {
     sessionId,
     pid: 5555,
     root: "/work/app",

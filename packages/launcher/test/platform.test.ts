@@ -10,9 +10,9 @@ import {
   parseListenerPids,
 } from "../src/platform";
 
-test("host spawn command uses opchain when the Trevor env file exists", () => {
+test("host spawn command uses opchain when the Belay env file exists", () => {
   const command = buildHostSpawnCommand({
-    envFile: "/home/.trevor/.env.op",
+    envFile: "/home/.belay/.env.op",
     envFileExists: true,
     hostMain: "/repo/apps/agent-host/src/main.ts",
     nodePath: "/usr/local/bin/node",
@@ -25,7 +25,7 @@ test("host spawn command uses opchain when the Trevor env file exists", () => {
     "--read",
     "op",
     "run",
-    "--env-file=/home/.trevor/.env.op",
+    "--env-file=/home/.belay/.env.op",
     "--",
     "/usr/local/bin/node",
     "/repo/node_modules/tsx/cli.mjs",
@@ -33,13 +33,13 @@ test("host spawn command uses opchain when the Trevor env file exists", () => {
   ]);
   assert.equal(
     command.command,
-    "opchain primary --read op run --env-file=<TREVOR_HOME>/.env.op -- tsx agent-host",
+    "opchain primary --read op run --env-file=<BELAY_HOME>/.env.op -- tsx agent-host",
   );
 });
 
-test("host spawn command falls back to direct node when the Trevor env file is absent", () => {
+test("host spawn command falls back to direct node when the Belay env file is absent", () => {
   const command = buildHostSpawnCommand({
-    envFile: "/home/.trevor/.env.op",
+    envFile: "/home/.belay/.env.op",
     envFileExists: false,
     hostMain: "/repo/apps/agent-host/src/main.ts",
     nodePath: "/usr/local/bin/node",

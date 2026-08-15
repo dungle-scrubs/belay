@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import type { TaskSnapshot, TaskStatus } from "@belay/session";
 import { contextRegistry } from "@host/project-context/registry";
 import { SystemPromptBuilder } from "@host/providers/system-prompt";
-import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { buildTaskTools, TaskRegistry } from "./tasks";

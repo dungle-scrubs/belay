@@ -22,8 +22,8 @@ describe("parseVimPref", () => {
 });
 
 describe("loadVimPref", () => {
-  test("reads an enabled preference from the config file (TREVOR_HOME path is injectable)", () => {
-    const pref = loadVimPref("/home/.trevor/vim.json", () => '{"enabled":true}');
+  test("reads an enabled preference from the config file (BELAY_HOME path is injectable)", () => {
+    const pref = loadVimPref("/home/.belay/vim.json", () => '{"enabled":true}');
     expect(pref).toEqual({ enabled: true, source: "user" });
   });
 
@@ -53,8 +53,8 @@ describe("loadVimPref", () => {
 describe("saveVimPref", () => {
   test("writes a minimal { enabled } JSON to the config path", () => {
     const files = new Map<string, string>();
-    saveVimPref(true, "/home/.trevor/vim.json", (p, c) => void files.set(p, c));
-    expect(files.get("/home/.trevor/vim.json")).toBe('{\n  "enabled": true\n}\n');
+    saveVimPref(true, "/home/.belay/vim.json", (p, c) => void files.set(p, c));
+    expect(files.get("/home/.belay/vim.json")).toBe('{\n  "enabled": true\n}\n');
   });
 });
 

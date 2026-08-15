@@ -11,7 +11,7 @@
  * Not for: the detached durable-run spawn/notify (lifecycle.ts), the DSL interpreter (interpreter.ts),
  * or running a single leaf (leaf-host.ts).
  */
-import { events, type TrevorEventInput } from "@trevor/session";
+import { events, type TrevorEventInput } from "@belay/session";
 import { Effect, Either, Ref } from "effect";
 import { makeBudget } from "./budget";
 import {

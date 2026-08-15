@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { Copy, Download, ExternalLink, Info, PanelRightClose, RotateCcw } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,

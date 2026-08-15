@@ -1,5 +1,5 @@
-import type { ToolScriptResult } from "@trevor/session";
-import { recordingTelemetrySink } from "@trevor/test-kit";
+import type { ToolScriptResult } from "@belay/session";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { buildToolScriptTool, formatToolScriptResult, type ToolScriptToolDeps } from "./tool";
@@ -69,7 +69,7 @@ describe("tool_script fail-closed launch (M4 hardening)", () => {
     expect(out).toContain("tool_script sandbox_launch");
     expect(out).toContain("no OS sandbox available");
     expect(spawned).toBe(false);
-    const span = rec.named("trevor.tool_script")[0];
+    const span = rec.named("belay.tool_script")[0];
     expect(span?.status).toBe("error");
     expect(span?.attributes.failure_class).toBe("sandbox_launch");
   });
@@ -96,12 +96,12 @@ describe("tool_script result formatting (M7)", () => {
 });
 
 describe("tool_script observability span (M8)", () => {
-  it("emits a trevor.tool_script span with script hash, toolsets, and failure class - no script source", async () => {
+  it("emits a belay.tool_script span with script hash, toolsets, and failure class - no script source", async () => {
     const rec = recordingTelemetrySink();
     const tool = buildToolScriptTool({ ...NOOP_DEPS, sink: rec.sink });
     // A validation failure still emits an observability span (no spawn needed to exercise it).
     await Effect.runPromise(tool.execute({ script: "x", toolsets: ["bash"] }, undefined));
-    const spans = rec.named("trevor.tool_script");
+    const spans = rec.named("belay.tool_script");
     expect(spans).toHaveLength(1);
     const span = spans[0];
     expect(span?.status).toBe("error");

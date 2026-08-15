@@ -23,8 +23,8 @@ import {
  */
 
 test("projectSessionId is stable for a given root", () => {
-  const a = projectSessionId("/Users/kevin/dev/trevor");
-  const b = projectSessionId("/Users/kevin/dev/trevor");
+  const a = projectSessionId("/Users/kevin/dev/belay");
+  const b = projectSessionId("/Users/kevin/dev/belay");
   assert.equal(a, b);
 });
 
@@ -60,7 +60,7 @@ test("freshSessionId is timestamped, URL-safe, and entropy-distinct", () => {
   const a = freshSessionId({ now, random: "one" });
   const b = freshSessionId({ now, random: "two" });
 
-  assert.match(a, /^trevor-20260626-123456z-[0-9a-f]{8}$/);
+  assert.match(a, /^belay-20260626-123456z-[0-9a-f]{8}$/);
   assert.equal(a, freshSessionId({ now, random: "one" }));
   assert.notEqual(a, b);
 });
@@ -76,8 +76,8 @@ test("freshSessionId sanitizes custom prefixes", () => {
 
 test("hostIdentity stamps the canonical host runtime kind", () => {
   assert.deepEqual(hostIdentity({ instanceId: "host-1", participantId: "p1" }), {
-    displayName: "trevor-host",
-    runtimeKind: "trevor",
+    displayName: "belay-host",
+    runtimeKind: "belay",
     instanceId: "host-1",
     participantId: "p1",
     capabilities: undefined,

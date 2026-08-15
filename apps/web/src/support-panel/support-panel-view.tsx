@@ -1,4 +1,4 @@
-import type { TaskSnapshot } from "@trevor/session";
+import type { TaskSnapshot } from "@belay/session";
 import { Maximize2, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";

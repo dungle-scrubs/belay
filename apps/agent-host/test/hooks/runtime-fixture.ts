@@ -94,16 +94,16 @@ export function hooksRuntimeHarness(
   userSpecs: FixtureHookSpecs = [],
   options: HarnessOptions = {},
 ): HooksRuntimeHarness {
-  const root = mkdtempSync(join(tmpdir(), "trevor-hooks-rt-"));
+  const root = mkdtempSync(join(tmpdir(), "belay-hooks-rt-"));
   const scratchPath = (name: string): string => join(root, name);
   const project = typeof projectSpecs === "function" ? projectSpecs(scratchPath) : projectSpecs;
   const user = typeof userSpecs === "function" ? userSpecs(scratchPath) : userSpecs;
   const workspaceRoot = join(root, "workspace");
   const userConfigDir = join(root, "user-home");
-  mkdirSync(join(workspaceRoot, ".trevor"), { recursive: true });
+  mkdirSync(join(workspaceRoot, ".belay"), { recursive: true });
   mkdirSync(userConfigDir, { recursive: true });
 
-  const projectHooksPath = join(workspaceRoot, ".trevor", "hooks.json");
+  const projectHooksPath = join(workspaceRoot, ".belay", "hooks.json");
   const userHooksPath = join(userConfigDir, "hooks.json");
   const approvalsPath = join(root, "state", "hook-approvals.json");
   writeFileSync(projectHooksPath, hooksJson(project));
@@ -141,7 +141,7 @@ export function hooksRuntimeHarness(
       approvalsPath,
       workspaceRoot,
       userConfigDir,
-      // Isolate the M10 legacy HOOK.md scan from the developer's real ~/.trevor/hooks.
+      // Isolate the M10 legacy HOOK.md scan from the developer's real ~/.belay/hooks.
       legacyUserHooksDir: join(root, "legacy-user-hooks"),
     }),
     workspaceRoot,

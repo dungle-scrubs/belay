@@ -1,5 +1,5 @@
+import type { SourceSummary } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { SourceSummary } from "@trevor/session";
 import { SourceAuthPanel } from "./source-auth-panel";
 
 /**
@@ -112,7 +112,7 @@ export const DeviceCodeFlowLongUrl: Story = {
         deviceCode={{
           // A realistically long OAuth verification URL (client id + scopes + state token): it must
           // wrap inside the panel, not push past its right edge (53 D-004).
-          verificationUrl: `https://auth.openai.com/oauth/device/authorize?client_id=trevor-desktop&scope=all&state=${"abc123def456".repeat(12)}`,
+          verificationUrl: `https://auth.openai.com/oauth/device/authorize?client_id=belay-desktop&scope=all&state=${"abc123def456".repeat(12)}`,
           userCode: "WDJB-MJHT",
           acceptsCode: true,
         }}
@@ -160,7 +160,7 @@ export const ClaudeSubscriptionDeviceCode: Story = {
           actions: ["authenticate"],
         })}
         deviceCode={{
-          verificationUrl: `https://claude.ai/oauth/authorize?client_id=trevor-desktop&scope=all&state=${"abc123def456".repeat(12)}`,
+          verificationUrl: `https://claude.ai/oauth/authorize?client_id=belay-desktop&scope=all&state=${"abc123def456".repeat(12)}`,
           acceptsCode: true,
         }}
         onAction={noop}

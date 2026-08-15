@@ -3,7 +3,7 @@ import {
   type CommandMenuRow,
   filterMenuRows,
   isSubmenu,
-} from "@trevor/session";
+} from "@belay/session";
 import { useMemo, useState } from "react";
 import { arrowNavIndex } from "@/hooks/use-autocomplete-menu-keys";
 

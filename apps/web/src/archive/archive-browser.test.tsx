@@ -14,9 +14,9 @@ function render(ui: Parameters<typeof rtlRender>[0]): ReturnType<typeof rtlRende
 function row(over: Partial<ArchivedSessionRow> & { sessionId: string }): ArchivedSessionRow {
   return {
     title: `Session ${over.sessionId}`,
-    project: "trevor",
-    projectPath: "/dev/trevor",
-    cwd: "~/dev/trevor",
+    project: "belay",
+    projectPath: "/dev/belay",
+    cwd: "~/dev/belay",
     updatedAt: "2026-06-29T09:00:00.000Z",
     eventCount: 42,
     protectedReason: null,
@@ -182,14 +182,14 @@ test("a per-row error renders row-scoped without removing the other rows", () =>
 describe("project-path filtering (M7)", () => {
   test("a projectFilter shows only the archived sessions for that project path", () => {
     const rows = [
-      row({ sessionId: "a", projectPath: "/dev/trevor" }),
+      row({ sessionId: "a", projectPath: "/dev/belay" }),
       row({ sessionId: "b", projectPath: "/dev/other", project: "other" }),
     ];
     const { getByText, queryByText } = render(
       <ArchiveBrowser
         rows={rows}
         nowMs={NOW}
-        projectFilter="/dev/trevor"
+        projectFilter="/dev/belay"
         onUnarchive={() => {}}
         onDelete={() => {}}
       />,
@@ -201,16 +201,16 @@ describe("project-path filtering (M7)", () => {
   test("the project-filter banner names the project and offers a clear affordance", () => {
     const { getByLabelText, getByText } = render(
       <ArchiveBrowser
-        rows={[row({ sessionId: "a", projectPath: "/dev/trevor" })]}
+        rows={[row({ sessionId: "a", projectPath: "/dev/belay" })]}
         nowMs={NOW}
-        projectFilter="/dev/trevor"
+        projectFilter="/dev/belay"
         onUnarchive={() => {}}
         onDelete={() => {}}
         onClearProjectFilter={() => {}}
       />,
     );
     getByText("Archive for");
-    getByText("/dev/trevor");
+    getByText("/dev/belay");
     getByLabelText("Clear project filter");
   });
 
@@ -218,9 +218,9 @@ describe("project-path filtering (M7)", () => {
     let cleared = 0;
     const { getByLabelText } = render(
       <ArchiveBrowser
-        rows={[row({ sessionId: "a", projectPath: "/dev/trevor" })]}
+        rows={[row({ sessionId: "a", projectPath: "/dev/belay" })]}
         nowMs={NOW}
-        projectFilter="/dev/trevor"
+        projectFilter="/dev/belay"
         onUnarchive={() => {}}
         onDelete={() => {}}
         onClearProjectFilter={() => (cleared += 1)}
@@ -232,7 +232,7 @@ describe("project-path filtering (M7)", () => {
 
   test("without a projectFilter, all archived sessions are shown", () => {
     const rows = [
-      row({ sessionId: "a", projectPath: "/dev/trevor" }),
+      row({ sessionId: "a", projectPath: "/dev/belay" }),
       row({ sessionId: "b", projectPath: "/dev/other", project: "other" }),
     ];
     const { getByText } = render(
@@ -245,7 +245,7 @@ describe("project-path filtering (M7)", () => {
   test("a project filter with no matching rows renders the empty state, not a banner crash", () => {
     const { getByText } = render(
       <ArchiveBrowser
-        rows={[row({ sessionId: "a", projectPath: "/dev/trevor" })]}
+        rows={[row({ sessionId: "a", projectPath: "/dev/belay" })]}
         nowMs={NOW}
         projectFilter="/dev/none"
         onUnarchive={() => {}}

@@ -1,9 +1,9 @@
 {
-  "name": "@trevor/cli",
+  "name": "@belay/cli",
   "private": true,
   "type": "module",
   "bin": {
-    "trevor": "./bin/trevor.mjs"
+    "belay": "./bin/belay.mjs"
   },
   "exports": {
     "./headless": "./src/headless.ts"
@@ -13,12 +13,12 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/launcher": "workspace:*",
-    "@trevor/sdk": "workspace:*",
-    "@trevor/session": "workspace:*"
+    "@belay/launcher": "workspace:*",
+    "@belay/sdk": "workspace:*",
+    "@belay/session": "workspace:*"
   },
   "devDependencies": {
-    "@trevor/test-kit": "workspace:*",
+    "@belay/test-kit": "workspace:*",
     "@types/node": "^26.0.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"

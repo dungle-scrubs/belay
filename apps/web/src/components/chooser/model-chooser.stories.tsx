@@ -1,6 +1,6 @@
+import { type CatalogEntry, modelRefKey, type SourceSummary } from "@belay/session";
+import { LM_STUDIO_LOCAL_ENTRIES } from "@belay/test-kit/lmstudio";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { type CatalogEntry, modelRefKey, type SourceSummary } from "@trevor/session";
-import { LM_STUDIO_LOCAL_ENTRIES } from "@trevor/test-kit/lmstudio";
 import { ModelChooser } from "./model-chooser";
 
 /**

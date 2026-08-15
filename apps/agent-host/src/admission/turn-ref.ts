@@ -1,4 +1,4 @@
-import { events, type TrevorEventInput } from "@trevor/session";
+import { events, type TrevorEventInput } from "@belay/session";
 import { FiberRef } from "effect";
 import type { AdmissionStatusUpdate } from "./runtime";
 import type { LocalAdmissionContext } from "./service";

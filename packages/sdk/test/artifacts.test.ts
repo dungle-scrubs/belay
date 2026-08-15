@@ -1,4 +1,4 @@
-import { type BootedBlob, bootBlob } from "@trevor/test-kit/boot";
+import { type BootedBlob, bootBlob } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTrevorClient } from "../src/index";
 

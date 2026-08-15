@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { TOOL_DESCRIPTORS, type ToolDescriptor } from "@trevor/session";
+import { TOOL_DESCRIPTORS, type ToolDescriptor } from "@belay/session";
 import { test } from "vitest";
 import { MAX_LSP_DEGRADED_DETAIL_CHARS } from "./caps";
 import {

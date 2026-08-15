@@ -1,4 +1,4 @@
-import { extractLoopSpec, type LoopSnapshot, type LoopSpec } from "@trevor/session";
+import { extractLoopSpec, type LoopSnapshot, type LoopSpec } from "@belay/session";
 import {
   cancelLoop,
   completeLoop,

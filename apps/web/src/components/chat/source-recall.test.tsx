@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { fireEvent, render } from "@testing-library/react";
 import type {
   SourceRecallIndexStatus,
   SourceRecallRefreshResult,
   SourceRecallResult,
-} from "@trevor/session";
+} from "@belay/session";
+import { fireEvent, render } from "@testing-library/react";
 import { test } from "vitest";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
 import { SourceRecallRefresh, SourceRecallResults, SourceRecallStatus } from "./source-recall";

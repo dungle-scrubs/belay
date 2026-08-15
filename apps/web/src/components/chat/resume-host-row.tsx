@@ -1,4 +1,4 @@
-import { relativeTime } from "@trevor/session";
+import { relativeTime } from "@belay/session";
 import { AlertTriangle, Loader2, Play, RotateCcw } from "lucide-react";
 import { RELATIVE_TIME_TICK_MS, useNow } from "@/hooks/use-now";
 

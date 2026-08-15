@@ -2,9 +2,6 @@ import { existsSync } from "node:fs";
 import { access, constants } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { abbrevHome } from "@host/boot/paths";
-import { type CwdLockDoctorFact, cwdLockSummary } from "@host/session/cwd-lock";
-import { fmtFields } from "@host/transport/log";
 import {
   DIAG_PATH,
   type DoctorFinding,
@@ -16,11 +13,11 @@ import {
   type SourceSummary,
   type StoreDiagPayload,
   UNKNOWN_INTERNET,
-} from "@trevor/session";
-import { raceTimeout } from "@trevor/session/async";
-import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
-import { type RootCategory, resolveRootPolicy } from "@trevor/session/node-paths";
-import { serviceUrl } from "@trevor/session/ports";
+} from "@belay/session";
+import { raceTimeout } from "@belay/session/async";
+import { nodeMigrationFs, planLegacyMigration } from "@belay/session/legacy-migration";
+import { type RootCategory, resolveRootPolicy } from "@belay/session/node-paths";
+import { serviceUrl } from "@belay/session/ports";
 import {
   NOOP_SINK,
   redactAttributeValue,
@@ -28,7 +25,10 @@ import {
   safeAttributes,
   safeEmitSpan,
   type TelemetrySink,
-} from "@trevor/session/telemetry";
+} from "@belay/session/telemetry";
+import { abbrevHome } from "@host/boot/paths";
+import { type CwdLockDoctorFact, cwdLockSummary } from "@host/session/cwd-lock";
+import { fmtFields } from "@host/transport/log";
 import { Duration, Effect } from "effect";
 import type { AdmissionDoctorSummary } from "../admission/doctor";
 import type { ProviderRegistry } from "../providers";
@@ -273,9 +273,9 @@ async function storageWritable(dir: string): Promise<boolean> {
 
 /**
  * Probes one policy root for the Storage/Roots area: its sanitized path, existence, and (for a
- * writable Trevor root that exists) writability. Writability is `null` where it does not apply
+ * writable Belay root that exists) writability. Writability is `null` where it does not apply
  * (external/legacy roots, the browser store, or a root that does not exist yet); the legacy root
- * additionally reports whether importable ~/.trevor data is present via the migration planner.
+ * additionally reports whether importable ~/.belay data is present via the migration planner.
  */
 async function probeRoot(category: RootCategory): Promise<DoctorRootProbe> {
   const path = category.path === null ? null : abbrevHome(category.path);
@@ -315,7 +315,7 @@ export interface DoctorProbeOptions {
   readonly storeDiagUrl?: string;
   /** A short HTTP budget for the store `/diag` probe. */
   readonly storeDiagTimeoutMs?: number;
-  /** The host telemetry sink for the `trevor.store.diag` span. */
+  /** The host telemetry sink for the `belay.store.diag` span. */
   readonly telemetry?: TelemetrySink;
 }
 
@@ -377,13 +377,13 @@ function emitStoreDiagSpan(
 }
 
 /**
- * The trevor checkout this host's CODE runs from: the nearest ancestor of THIS MODULE holding
+ * The belay checkout this host's CODE runs from: the nearest ancestor of THIS MODULE holding
  * pnpm-workspace.yaml, or null when none is found (an installed/bundled build outside a checkout).
  * Deliberately NOT `process.cwd()`: the launcher spawns the host with cwd = the USER'S PROJECT root,
- * so a cwd-derived sha would be the project's HEAD - and every session opened outside the trevor
- * repo would report a bogus store-code-drift mismatch against the store's trevor-checkout sha.
+ * so a cwd-derived sha would be the project's HEAD - and every session opened outside the belay
+ * repo would report a bogus store-code-drift mismatch against the store's belay-checkout sha.
  */
-function trevorRepoRoot(): string | null {
+function belayRepoRoot(): string | null {
   let dir = dirname(fileURLToPath(import.meta.url));
   for (;;) {
     if (existsSync(join(dir, "pnpm-workspace.yaml"))) {
@@ -398,14 +398,14 @@ function trevorRepoRoot(): string | null {
 }
 
 /** The host-side HEAD for the store drift comparison - only meaningful when read from the SAME
- *  (trevor) repo the store's `startupSha` comes from. With no derivable trevor root the sha is
+ *  (belay) repo the store's `startupSha` comes from. With no derivable belay root the sha is
  *  null (unknown), and the mismatch finding is never emitted on a guess. */
 function readHostSha(opts: DoctorProbeOptions): string | null {
   if (opts.hostSha !== undefined) {
     return opts.hostSha;
   }
   try {
-    const root = trevorRepoRoot();
+    const root = belayRepoRoot();
     return root === null ? null : headCommit(nodeGitRunner(root));
   } catch {
     return null;

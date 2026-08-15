@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@belay/session";
+import { recordingTransport } from "@belay/test-kit";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@trevor/session";
-import { recordingTransport } from "@trevor/test-kit";
 import { test, vi } from "vitest";
 import { LiveTangentShell } from "./live-tangent-shell";
 import type { ActiveTangent } from "./use-tangent";
@@ -21,7 +21,7 @@ const ACTIVE: ActiveTangent = {
 };
 
 let seq = 0;
-function stored(input: TrevorEventInput, producerId = "trevor-web"): SessionEvent {
+function stored(input: TrevorEventInput, producerId = "belay-web"): SessionEvent {
   seq += 1;
   return {
     sessionId: "tangent-1",
@@ -219,7 +219,7 @@ test("fold-back offers a specific assistant reply back to the parent, explicitly
     stored(sessionEvents.userMessage({ text: `> ${QUOTE}\n\nwhy?`, provider: "lmstudio" })),
     stored(
       sessionEvents.assistantCompleted({ runId: "r1", text: "content addressing dedupes bytes" }),
-      "trevor-host",
+      "belay-host",
     ),
   ]);
 

@@ -1,12 +1,12 @@
-# Trevor - Features Ledger
+# Belay - Features Ledger
 
-This is the **implemented-feature ledger** for Trevor: a map of behavior that
+This is the **implemented-feature ledger** for Belay: a map of behavior that
 **currently exists in this repository**, with implementation anchors and validation
 references so a future agent can update it without rediscovering the whole system.
 
 It is **descriptive, not aspirational**. It records what exists now and excludes
 dropped work, unstarted backlog, and roadmap items. Planned work and the architecture /
-roadmap source of truth live under [`.plans/`](.plans/) (the canonical Trevor
+roadmap source of truth live under [`.plans/`](.plans/) (the canonical Belay
 umbrella plan plus the numbered feature plans); per the root [`AGENTS.md`](AGENTS.md)
 planning rule, the canonical plan wins when documents disagree. An entry becomes true
 here only when the behavior is in code or tests.
@@ -34,7 +34,7 @@ lives) · **Validation** (test/e2e evidence). Entries are grouped by product are
 
 ## Session substrate (event log, stores, protocol)
 
-Trevor is a multi-participant system over a durable event log: the browser and the host
+Belay is a multi-participant system over a durable event log: the browser and the host
 are both participants; all state is projected from the log.
 
 | Capability | Implementation anchor | Validation |
@@ -120,7 +120,7 @@ log; pure selectors live in `derive.ts` / `transcript.ts`.
 | `ask_user` question surface (interactive answer, roving keyboard nav, focus-on-mount + on-window-return); a MULTI-question ask renders a SEQUENCED TAB interface (one tab per question, a "Question N of M" counter, answered-tab checkmarks, Enter/Next confirm-and-advance, Left/Right tab nav, per-tab gating + final-tab "go to incomplete"), with one batched `provider.question.answer` on submit; a single question keeps the single-pane layout | `apps/web/src/components/question/question-surface.tsx`, `view-model.ts` (cursor + `questionErrors`/`firstInvalidIndex`) | `question-surface.test.tsx`, `view-model.test.ts` |
 | Resolved-question slim transcript item (asked → answered, raw tool hidden) | `apps/web/src/components/chat/question-item.tsx`, `transcript.ts` | `question-item.test.tsx`, `transcript.test.ts` |
 | Selection→Quote/Copy toolbar (drag-highlight transcript text, viewport-clamped) | `apps/web/src/components/assistant-ui/quote-selection-toolbar.tsx`, `quote-selection-placement.ts` | `quote-selection-toolbar.test.tsx`, `quote-selection-placement.test.ts` |
-| Cross-item transcript selection persistence: shift-extend a selection across transcript items; a Trevor-owned highlight (CSS Custom Highlight API) stays visible after the native selection collapses or rows remount, and clears only on Escape/new selection; Copy/Quote act on the full cross-item range | `apps/web/src/components/assistant-ui/transcript-selection.ts`, `quote-selection-toolbar.tsx`, `chat/transcript-row-view.tsx`, `index.css` | `transcript-selection.test.tsx`, `quote-selection-toolbar.test.tsx`, `transcript-row-view.test.tsx` |
+| Cross-item transcript selection persistence: shift-extend a selection across transcript items; a Belay-owned highlight (CSS Custom Highlight API) stays visible after the native selection collapses or rows remount, and clears only on Escape/new selection; Copy/Quote act on the full cross-item range | `apps/web/src/components/assistant-ui/transcript-selection.ts`, `quote-selection-toolbar.tsx`, `chat/transcript-row-view.tsx`, `index.css` | `transcript-selection.test.tsx`, `quote-selection-toolbar.test.tsx`, `transcript-row-view.test.tsx` |
 | Side panel: context/usage meter, request treemap, workspace identity, worktree count | `apps/web/src/components/panel/side-panel.tsx`, `treemap.tsx`, `workspace-identity.tsx` | panel tests |
 | Session sidebar: list current-project sessions, rename/archive/soft-delete, switch | `apps/web/src/components/panel/session-sidebar.tsx` | `session-sidebar.test.tsx` |
 | Resume chooser + worktree switcher (browser-side UI commands) | `apps/web/src/resume.ts`, `hooks/use-modal-state.ts`, `command-modal/` | `use-modal-state.test.tsx` |
@@ -137,7 +137,7 @@ log; pure selectors live in `derive.ts` / `transcript.ts`.
 
 | Capability | Implementation anchor | Validation |
 |---|---|---|
-| `trevor` CLI: launch + drive the local stack (stores + host + web) | `apps/trevor-cli/` | `e2e/boot.test.ts` |
+| `belay` CLI: launch + drive the local stack (stores + host + web) | `apps/belay-cli/` | `e2e/boot.test.ts` |
 | Headless host harness (boot a host without a browser) | `apps/agent-host/` (testing export), `packages/test-kit/` | `e2e/*.test.ts` |
 
 ## Verification notes

@@ -1,5 +1,5 @@
-import { PRODUCER_IDS } from "@trevor/session";
-import { recordingTransport, sessionSummary } from "@trevor/test-kit";
+import { PRODUCER_IDS } from "@belay/session";
+import { recordingTransport, sessionSummary } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
 import { createTrevorClient } from "./client";
 import { expandHome, resolveOpenTarget, selectSessions } from "./lifecycle";

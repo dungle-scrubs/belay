@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TrevorEventInput } from "@trevor/session";
+import type { TrevorEventInput } from "@belay/session";
 import { test, vi } from "vitest";
 import type { LoginCallbacks } from "./provider-auth";
 import { makeSourceSignIn } from "./source-signin";
@@ -27,7 +27,7 @@ function harness() {
   const emitted: TrevorEventInput[] = [];
   const flows: FakeFlow[] = [];
   let refreshes = 0;
-  const authPathPromise = mkdtemp(join(tmpdir(), "trevor-signin-")).then(async (dir) => {
+  const authPathPromise = mkdtemp(join(tmpdir(), "belay-signin-")).then(async (dir) => {
     const path = join(dir, "auth.json");
     await writeFile(path, JSON.stringify({ other: { key: "keep-me" } }), "utf8");
     return path;

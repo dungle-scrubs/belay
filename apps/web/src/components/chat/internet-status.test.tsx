@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { InternetSnapshot } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { InternetSnapshot } from "@trevor/session";
 import { test } from "vitest";
 import { InternetStatus } from "./internet-status";
 

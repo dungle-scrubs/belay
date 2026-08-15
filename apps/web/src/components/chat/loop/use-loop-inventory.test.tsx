@@ -3,7 +3,7 @@ import {
   type LoopSnapshot,
   type SessionEvent,
   type TrevorEventInput,
-} from "@trevor/session";
+} from "@belay/session";
 import { expect, test } from "vitest";
 import { loopInventoryRowsFromEvents } from "./use-loop-inventory";
 

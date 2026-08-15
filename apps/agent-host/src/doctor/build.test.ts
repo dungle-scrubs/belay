@@ -6,8 +6,8 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { SPAN_NAMES } from "@trevor/session/telemetry";
-import { recordingTelemetrySink } from "@trevor/test-kit";
+import { SPAN_NAMES } from "@belay/session/telemetry";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, test } from "vitest";
 import type { ProviderRegistry } from "../providers";
@@ -25,18 +25,18 @@ import type { DoctorProbeInput } from "./probe-input";
  */
 
 let stateHome: string;
-const savedStateHome = process.env.TREVOR_STATE_HOME;
+const savedStateHome = process.env.BELAY_STATE_HOME;
 
 beforeEach(() => {
-  stateHome = mkdtempSync(join(tmpdir(), "trevor-doctor-build-"));
-  process.env.TREVOR_STATE_HOME = stateHome;
+  stateHome = mkdtempSync(join(tmpdir(), "belay-doctor-build-"));
+  process.env.BELAY_STATE_HOME = stateHome;
 });
 
 afterEach(() => {
   if (savedStateHome === undefined) {
-    delete process.env.TREVOR_STATE_HOME;
+    delete process.env.BELAY_STATE_HOME;
   } else {
-    process.env.TREVOR_STATE_HOME = savedStateHome;
+    process.env.BELAY_STATE_HOME = savedStateHome;
   }
   rmSync(stateHome, { recursive: true, force: true });
 });
@@ -224,16 +224,16 @@ test("a stalled /diag BODY also degrades to unknown within the budget (the abort
   }
 });
 
-test("a host cwd outside the trevor repo never yields a spurious store code-drift finding", async () => {
-  // The trevor checkout's HEAD - the sha the host CODE actually runs from (this test file lives in it).
-  const trevorHead = execFileSync("git", ["rev-parse", "HEAD"], {
+test("a host cwd outside the belay repo never yields a spurious store code-drift finding", async () => {
+  // The belay checkout's HEAD - the sha the host CODE actually runs from (this test file lives in it).
+  const belayHead = execFileSync("git", ["rev-parse", "HEAD"], {
     cwd: dirname(fileURLToPath(import.meta.url)),
     encoding: "utf8",
   }).trim();
 
   // A different git repo with its own distinct HEAD, standing in for the USER'S PROJECT root the
-  // launcher spawns the host into (cwd = project root, not the trevor checkout).
-  const projectDir = mkdtempSync(join(tmpdir(), "trevor-project-"));
+  // launcher spawns the host into (cwd = project root, not the belay checkout).
+  const projectDir = mkdtempSync(join(tmpdir(), "belay-project-"));
   const savedCwd = process.cwd();
   const gitEnv = {
     ...Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_"))),
@@ -250,8 +250,8 @@ test("a host cwd outside the trevor repo never yields a spurious store code-drif
         queries: 1,
         schemaVersion: 1,
         slowQueries: 0,
-        // The store reports the SAME trevor HEAD: healthy, zero drift.
-        startupSha: trevorHead,
+        // The store reports the SAME belay HEAD: healthy, zero drift.
+        startupSha: belayHead,
       }),
     );
   });
@@ -259,10 +259,10 @@ test("a host cwd outside the trevor repo never yields a spurious store code-drif
     git(["init", "-q", "-b", "main"]);
     git(["-c", "user.email=t@t", "-c", "user.name=t", "commit", "--allow-empty", "-q", "-m", "x"]);
     const projectHead = git(["rev-parse", "HEAD"]);
-    assert.notEqual(projectHead, trevorHead, "the project repo genuinely has a different HEAD");
+    assert.notEqual(projectHead, belayHead, "the project repo genuinely has a different HEAD");
     process.chdir(projectDir);
 
-    // No injected hostSha: the REAL resolution path runs, from a cwd that is not the trevor repo.
+    // No injected hostSha: the REAL resolution path runs, from a cwd that is not the belay repo.
     const results = await collectDoctorProbeResults({} as ProviderRegistry, {
       storeDiagTimeoutMs: 1000,
       storeDiagUrl: diagServer.url,
@@ -270,8 +270,8 @@ test("a host cwd outside the trevor repo never yields a spurious store code-drif
     assert.equal(results.storeDiag.kind, "ok");
     assert.equal(
       results.storeDiag.hostSha,
-      trevorHead,
-      "the host sha comes from the trevor checkout the code runs from, never process.cwd()",
+      belayHead,
+      "the host sha comes from the belay checkout the code runs from, never process.cwd()",
     );
 
     const area = storageArea({
@@ -279,7 +279,7 @@ test("a host cwd outside the trevor repo never yields a spurious store code-drif
     } as unknown as DoctorProbeInput);
     assert.ok(
       !(area.findings ?? []).some((f) => f.id === "storage.store.sha"),
-      "no bogus session-store code-drift finding for a session opened outside the trevor repo",
+      "no bogus session-store code-drift finding for a session opened outside the belay repo",
     );
   } finally {
     process.chdir(savedCwd);

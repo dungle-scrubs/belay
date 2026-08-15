@@ -24,13 +24,13 @@ log. Scaffolds live in `artifacts/` and are deliberately kept out of `apps/web/s
 
 - [x] RED: benchmark + pass criteria defined - 2/8/20/50KB messages over realistic ~24B streaming
       deltas; measure per-frame `markdownParts` lex+DOMPurify cost; threshold = coalesced per-frame
-      parse routinely blowing the ~16ms frame budget at lengths Trevor actually streams.
+      parse routinely blowing the ~16ms frame budget at lengths Belay actually streams.
 - [x] GREEN: harness built (`artifacts/markdown-relex-bench.ts`, faithful `markdownParts` replica) and
       run; numbers recorded below.
 - [x] GREEN: Streamdown comparison recorded (documented complexity + on-disk bundle argument; needs a
       real built-chunk delta on the dev machine).
 - [x] Decision: **keep-as-is / NO-GO on Streamdown**; incremental-parse-in-place is the cheaper
-      Trevor-owned alternative if a browser profile ever proves a real length threshold. Follow-up
+      Belay-owned alternative if a browser profile ever proves a real length threshold. Follow-up
       deferred, not opened.
 
 ### M2 - Read-only ExternalStore adapter spike (4)
@@ -48,8 +48,8 @@ log. Scaffolds live in `artifacts/` and are deliberately kept out of `apps/web/s
 
 - [x] RED: two target shapes separated (render `ThreadMessageLike` vs persistence
       `{id,parent_id,format,content}`); lossless-storage vs lossy-view defined.
-- [x] GREEN: all 18 Trevor row kinds mapped; 9 have no native part type; init-before-first-append race
-      checked (Trevor's `append` self-initializes via `ensureSession`, so no race).
+- [x] GREEN: all 18 Belay row kinds mapped; 9 have no native part type; init-before-first-append race
+      checked (Belay's `append` self-initializes via `ensureSession`, so no race).
 - [x] Decision: **lossless as storage bytes, LOSSY as a primitives view**; no adoption implied.
 
 ---
@@ -58,7 +58,7 @@ log. Scaffolds live in `artifacts/` and are deliberately kept out of `apps/web/s
 
 ### M1 - re-lex profiling (D2)
 
-Trevor re-lexes+re-sanitizes the WHOLE message every settled frame (`markdown.tsx:186`
+Belay re-lexes+re-sanitizes the WHOLE message every settled frame (`markdown.tsx:186`
 `markdownParts(deferredText)` -> `marked.lexer` -> `marked.parser` -> `DOMPurify.sanitize`), O(len^2)
 over a turn. Harness `artifacts/markdown-relex-bench.ts` (run from `apps/web`: `cp` it there as
 `__relex-bench.mts`, `npx tsx`, delete). Measured (jsdom+tsx, one parse per settled prefix = upper bound):
@@ -81,9 +81,9 @@ counts) and a real `pnpm add streamdown` + `pnpm --filter web build` chunk-size 
 machine.
 
 Streamdown = block-incremental parse (re-parses only the tail block) -> ~O(len); but bundles a NEW Shiki
-engine (not installed) + KaTeX (already transitive) + Mermaid (already a dep), beside Trevor's tuned lazy
-highlight.js. Not justified for Trevor's single-digit-KB typical answers. Cheaper alt: memoize settled
-leading blocks inside `markdownParts` (Trevor-owned, no new engine).
+engine (not installed) + KaTeX (already transitive) + Mermaid (already a dep), beside Belay's tuned lazy
+highlight.js. Not justified for Belay's single-digit-KB typical answers. Cheaper alt: memoize settled
+leading blocks inside `markdownParts` (Belay-owned, no new engine).
 
 ### M2 - ExternalStore adapter (E4/A14)
 
@@ -91,15 +91,15 @@ Scaffold: read-only `useExternalStoreRuntime({ isRunning:false, messages: toTran
 convertMessage, onNew: throws })` over ONE captured session, under `AssistantRuntimeProvider` +
 `ThreadPrimitive`. Observations:
 
-1. The converter defeats Trevor's per-row structural sharing (projector `dirty`-set identities feeding
+1. The converter defeats Belay's per-row structural sharing (projector `dirty`-set identities feeding
    `React.memo`, transcript.ts:527) unless it carries its own per-row identity cache - it ADDS a layer
    to reach parity the projector already provides (audit E4: "neutral-to-negative unless it replaces,
    not layers on, existing memoization").
-2. Thread-id-sync footgun is real and already solved Trevor-side: `createSessionReadModel` substitutes
+2. Thread-id-sync footgun is real and already solved Belay-side: `createSessionReadModel` substitutes
    `NO_EVENTS` when the log still holds the previous session (projection.ts:90). An ExternalStore layer
    sits at that exact boundary and would need `messages` + `threadList.threadId` to flip atomically or
    render the old thread under the new id - re-introducing the race with no simplification.
-3. `isRunning` must be fed from Trevor (`awaitingResponse`/`activeRunId`), not assistant-ui's
+3. `isRunning` must be fed from Belay (`awaitingResponse`/`activeRunId`), not assistant-ui's
    last-message heuristic, or running state drifts.
 
 Decision: viable-but-non-cheaper bridge (converter + sync hazard on top of an already-memoized
@@ -109,22 +109,22 @@ projector); adapt-only, deferred.
 
 Two shapes: render `ThreadMessageLike` (roles user|assistant|system + closed part set + `data-*`
 escape hatch) vs persistence `{id,parent_id,format,content}` (opaque `content`). Storage is lossless
-(any row serializes into opaque content, incl. `data-trevor-*`). The primitives VIEW is lossy:
+(any row serializes into opaque content, incl. `data-belay-*`). The primitives VIEW is lossy:
 
 - Lossless core (3): user, assistant (text+reasoning), tool (tool-call part).
 - Semi-lossy (5): result (menu payload unrepresentable), delegation, inlineAgent, shell, lucid.
-- No native part type -> `data-trevor-*` custom parts stock primitives ignore (9): recovered, continued,
+- No native part type -> `data-belay-*` custom parts stock primitives ignore (9): recovered, continued,
   reconnecting, guardrail, compacting, question, hookDecision, modelSwitch, limit.
 - Plus the assistant row's usage/breakdown/stop/stepLimit/diagnostic have no first-class field
   (-> `metadata.custom`).
 
-Init-before-first-append race (E8): NONE in Trevor. Store `append` (log.ts:388) calls idempotent
+Init-before-first-append race (E8): NONE in Belay. Store `append` (log.ts:388) calls idempotent
 `ensureSession` synchronously before computing seq/inserting (node:sqlite serial), so the session record
 self-initializes on first append - no separate create-thread round-trip to race. Confirms E8
-`keep-trevor-owned`.
+`keep-belay-owned`.
 
 Decision: adapter is a lossless STORE but a LOSSY VIEW (9/18 kinds + assistant metadata have no native
-part); rendering Trevor's real UI through assistant-ui would mean rebuilding ~half the taxonomy as
+part); rendering Belay's real UI through assistant-ui would mean rebuilding ~half the taxonomy as
 bespoke data-part components. No adoption implied.
 
 ## Accepted/Deferred Follow-Up
@@ -133,11 +133,11 @@ All deferred; NONE opened (research-only). Inputs for future plans:
 
 1. (D2) "Block-incremental markdown parse for large streaming turns" - gated on a real-browser profile
    proving a concrete length where coalesced per-frame parse exceeds one frame for real content.
-   Smallest slice: memoize settled leading blocks in `markdownParts`. Trevor-owned; no Streamdown.
+   Smallest slice: memoize settled leading blocks in `markdownParts`. Belay-owned; no Streamdown.
 2. (E4/A14) Any ExternalStore adapter must (a) replace, not layer on, the existing row memoization, and
    (b) carry the sessionId/threadId atomicity guard from projection.ts:90. Only worth it for access to
-   stock primitives Trevor mostly already exceeds.
-3. (A16) Any adoption must accept that ~half of Trevor's row kinds project only as custom data parts
+   stock primitives Belay mostly already exceeds.
+3. (A16) Any adoption must accept that ~half of Belay's row kinds project only as custom data parts
    (lossy view), not stock primitives.
 
 ## Superseded/Obsolete Checklist Debt

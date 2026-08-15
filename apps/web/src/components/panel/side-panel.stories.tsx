@@ -1,5 +1,5 @@
+import type { GitStatus, UsageBreakdown } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { GitStatus, UsageBreakdown } from "@trevor/session";
 import type { ReactNode } from "react";
 import { HostLaunchStatus } from "@/new-session/host-launch-status";
 import {
@@ -96,7 +96,7 @@ const Footer = (
       worktree
     </button>
     <div className="ml-auto truncate rounded border border-border bg-background px-2 py-1 font-mono text-label tracking-wider text-muted-foreground">
-      trevor-local
+      belay-local
     </div>
   </>
 );
@@ -150,7 +150,7 @@ export const Default: Story = {
   render: renderSidePanel,
   args: {
     title: "auth-flow",
-    subtitle: "session · trevor-local",
+    subtitle: "session · belay-local",
     workspace: "~/proj/api",
     git: cleanMain,
     ctxUsed: 128000,
@@ -168,8 +168,8 @@ export const NoImagesHeavyThinking: Story = {
   render: renderSidePanel,
   args: {
     title: "refactor-loop",
-    subtitle: "session · trevor-local",
-    workspace: "~/dev/trevor",
+    subtitle: "session · belay-local",
+    workspace: "~/dev/belay",
     git: dirtyAhead,
     ctxUsed: 82000,
     ctxMax: 200000,
@@ -194,9 +194,9 @@ export const NoImagesHeavyThinking: Story = {
 export const Empty: Story = {
   render: renderSidePanel,
   args: {
-    title: "trevor-local",
+    title: "belay-local",
     subtitle: "no call yet",
-    workspace: "~/dev/trevor",
+    workspace: "~/dev/belay",
     ctxUsed: 0,
     ctxMax: 200000,
     controls: Controls,
@@ -209,7 +209,7 @@ export const Empty: Story = {
 
 const pressureArgs = {
   title: "auth-flow",
-  subtitle: "session · trevor-local",
+  subtitle: "session · belay-local",
   workspace: "~/proj/api",
   git: cleanMain,
   breakdown,
@@ -264,7 +264,7 @@ export const PressureLongWindow: Story = {
 
 const noHostArgs = {
   title: "auth-flow",
-  subtitle: "session · trevor-local",
+  subtitle: "session · belay-local",
   workspace: "~/proj/api",
   git: cleanMain,
   breakdown,

@@ -1,5 +1,5 @@
-import { SPAN_NAMES } from "@trevor/session/telemetry";
-import { recordingTelemetrySink } from "@trevor/test-kit";
+import { SPAN_NAMES } from "@belay/session/telemetry";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { assert, test } from "vitest";
 import { uploadArtifact } from "./blob";
 import { bootstrapTelemetry, telemetryConfig, telemetrySink } from "./telemetry";
@@ -22,7 +22,7 @@ test("bootstrapTelemetry resolves config and installs a sink (disabled/local -> 
   );
 });
 
-test("uploadArtifact emits a trevor.blob.io upload span with kind + size, never the file name", async () => {
+test("uploadArtifact emits a belay.blob.io upload span with kind + size, never the file name", async () => {
   const recorder = recordingTelemetrySink();
   const file = new File([new Uint8Array([1, 2, 3, 4])], "my-secret-diagram.png", {
     type: "image/png",

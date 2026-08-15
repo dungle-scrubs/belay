@@ -9,10 +9,10 @@ import {
   statSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { idSlug } from "@belay/session";
+import { storagePathByName } from "@belay/session/node-paths";
 import { writeFileAtomic } from "@host/io/atomic-write";
 import { processAlive } from "@host/processes/process-liveness";
-import { idSlug } from "@trevor/session";
-import { storagePathByName } from "@trevor/session/node-paths";
 import {
   type AdmissionAcquireOutcome,
   type AdmissionEstimate,

@@ -1,5 +1,5 @@
 /**
- * @trevor/server-kit - the shared transport layer for Trevor's local stores.
+ * @belay/server-kit - the shared transport layer for Belay's local stores.
  *
  * It owns three things, all purely at the HTTP/socket level:
  *   - HTTP helpers: `cors`, `json`, `readJson`, `readBody` (request/response plumbing).

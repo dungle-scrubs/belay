@@ -64,10 +64,10 @@ test("failed shows the named error and a Retry that fires onRetry", () => {
 test("hint keeps the shell-command fallback and offers no Start button", () => {
   render(
     <HostLaunchStatus
-      state={{ phase: "hint", command: "SESSION_ID=x pnpm --filter @trevor/agent-host start" }}
+      state={{ phase: "hint", command: "SESSION_ID=x pnpm --filter @belay/agent-host start" }}
     />,
   );
-  assert.ok(screen.getByText("SESSION_ID=x pnpm --filter @trevor/agent-host start"));
+  assert.ok(screen.getByText("SESSION_ID=x pnpm --filter @belay/agent-host start"));
   assert.equal(
     screen.queryByRole("button", { name: "Start host" }),
     null,

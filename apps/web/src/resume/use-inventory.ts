@@ -1,5 +1,5 @@
+import { type SessionSummary, streamTransport } from "@belay/session";
 import { useQuery } from "@tanstack/react-query";
-import { type SessionSummary, streamTransport } from "@trevor/session";
 import { useMemoizedFn } from "ahooks";
 import { useMemo } from "react";
 

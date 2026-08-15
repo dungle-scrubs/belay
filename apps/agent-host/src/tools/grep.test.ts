@@ -14,10 +14,10 @@ import { afterAll, test } from "vitest";
  * workspace-relative `path:line:text` shape (no `./` prefix).
  */
 
-const ws = mkdtempSync(join(tmpdir(), "trevor-grep-"));
+const ws = mkdtempSync(join(tmpdir(), "belay-grep-"));
 mkdirSync(join(ws, "src"), { recursive: true });
 mkdirSync(join(ws, "ignored"), { recursive: true });
-// ripgrep honors .gitignore only inside a git repo (the real Trevor workspace is one); init one.
+// ripgrep honors .gitignore only inside a git repo (the real Belay workspace is one); init one.
 // Strip any inherited GIT_* env (a pre-commit hook exports GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE)
 // so `git init` creates a real standalone repo in `ws` instead of attaching to the caller's repo -
 // otherwise `ws` stays un-initialized and ripgrep, finding no repo, would not honor .gitignore.

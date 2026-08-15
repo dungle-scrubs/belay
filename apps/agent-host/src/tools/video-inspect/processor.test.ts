@@ -10,8 +10,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createArtifactRuntime } from "@trevor/session";
-import type { PutBlobResult } from "@trevor/session/blob-contract";
+import { createArtifactRuntime } from "@belay/session";
+import type { PutBlobResult } from "@belay/session/blob-contract";
 import { describe, expect, it } from "vitest";
 import { VideoCancelledError } from "./errors";
 import { inspectVideoFile, type PutFrame } from "./processor";
@@ -73,8 +73,8 @@ describe("inspectVideoFile", () => {
       {
         putFrame,
         env: {
-          TREVOR_FFMPEG_PATH: "/tmp/trevor-missing-ffmpeg",
-          TREVOR_FFPROBE_PATH: "/tmp/trevor-missing-ffprobe",
+          TREVOR_FFMPEG_PATH: "/tmp/belay-missing-ffmpeg",
+          TREVOR_FFPROBE_PATH: "/tmp/belay-missing-ffprobe",
         },
       },
     );
@@ -92,7 +92,7 @@ describe("inspectVideoFile", () => {
     if (!(await ffmpegAvailable())) {
       return;
     }
-    const dir = await mkdtemp(join(tmpdir(), "trevor-video-test-"));
+    const dir = await mkdtemp(join(tmpdir(), "belay-video-test-"));
     try {
       const videoPath = await makeSyntheticVideo(dir, 3);
       const { blobs, putFrame } = memoryStore();
@@ -131,7 +131,7 @@ describe("inspectVideoFile", () => {
     if (!(await ffmpegAvailable())) {
       return;
     }
-    const dir = await mkdtemp(join(tmpdir(), "trevor-video-cap-"));
+    const dir = await mkdtemp(join(tmpdir(), "belay-video-cap-"));
     try {
       const videoPath = await makeSyntheticVideo(dir, 2);
       const { putFrame } = memoryStore();
@@ -154,7 +154,7 @@ describe("inspectVideoFile", () => {
     if (!(await ffmpegAvailable())) {
       return;
     }
-    const dir = await mkdtemp(join(tmpdir(), "trevor-video-bad-"));
+    const dir = await mkdtemp(join(tmpdir(), "belay-video-bad-"));
     try {
       const notVideo = join(dir, "notes.txt");
       await writeFile(notVideo, "this is definitely not a video file");

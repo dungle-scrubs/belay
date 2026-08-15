@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@belay/session";
 import { MAX_LSP_DIAGNOSTICS } from "@host/lsp/caps";
 import type { LspClient } from "@host/lsp/client";
 import { degraded, type LspDiagnostic, type LspServerStatus, ok } from "@host/lsp/contract";
 import type { LspAcquireOutcome, LspManager } from "@host/lsp/manager";
-import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { buildLspDiagnosticsTool, type LspDiagnosticsArgs } from "./lsp-diagnostics";
@@ -20,7 +20,7 @@ import { buildLspDiagnosticsTool, type LspDiagnosticsArgs } from "./lsp-diagnost
  * test/lsp/tools-status-diagnostics.test.ts.
  */
 
-const root = mkdtempSync(join(tmpdir(), "trevor-lsp-diag-unit-"));
+const root = mkdtempSync(join(tmpdir(), "belay-lsp-diag-unit-"));
 writeFileSync(join(root, "open.ts"), "const oops = 1;\n");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 

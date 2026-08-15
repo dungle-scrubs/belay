@@ -1,7 +1,3 @@
-import { discoverSkills } from "@host/skills/skills";
-import type { AgentDefinition } from "@host/subagents/discovery";
-import { resolveAgentTools } from "@host/subagents/discovery";
-import { Emit } from "@host/transport/services";
 import {
   type DecodedEvent,
   decodeTrevorEvent,
@@ -11,7 +7,11 @@ import {
   type SessionEvent,
   type SessionTransport,
   type TrevorEventInput,
-} from "@trevor/session";
+} from "@belay/session";
+import { discoverSkills } from "@host/skills/skills";
+import type { AgentDefinition } from "@host/subagents/discovery";
+import { resolveAgentTools } from "@host/subagents/discovery";
+import { Emit } from "@host/transport/services";
 import { Effect, Layer } from "effect";
 import type { ChatMessage, Provider, ToolDef } from "../providers";
 import { READ_ONLY_TOOLS, TOOL_DEFS } from "../tools";

@@ -14,22 +14,22 @@ function write(path: string): void {
   writeFileSync(path, "x", "utf8");
 }
 
-test("multi-segment ignore entries prune by prefix: .trevor/generated is never visited", () => {
+test("multi-segment ignore entries prune by prefix: .belay/generated is never visited", () => {
   const root = tree();
-  write(join(root, ".trevor", "generated", "CLAUDE.md"));
-  write(join(root, ".trevor", "generated", "deep", "file.md"));
-  write(join(root, ".trevor", "rules", "keep.md"));
+  write(join(root, ".belay", "generated", "CLAUDE.md"));
+  write(join(root, ".belay", "generated", "deep", "file.md"));
+  write(join(root, ".belay", "rules", "keep.md"));
   write(join(root, "src", "keep.ts"));
 
   const files = walkContextTree(root);
 
   assert.ok(
-    files.every((path) => !path.includes(`${join(".trevor", "generated")}`)),
-    `.trevor/generated content leaked into the walk: ${files.join(", ")}`,
+    files.every((path) => !path.includes(`${join(".belay", "generated")}`)),
+    `.belay/generated content leaked into the walk: ${files.join(", ")}`,
   );
   assert.ok(
-    files.some((path) => path.endsWith(join(".trevor", "rules", "keep.md"))),
-    "sibling .trevor/rules content is still walked",
+    files.some((path) => path.endsWith(join(".belay", "rules", "keep.md"))),
+    "sibling .belay/rules content is still walked",
   );
 });
 

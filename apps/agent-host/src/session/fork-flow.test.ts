@@ -1,5 +1,5 @@
+import type { PublishInput, SessionEvent } from "@belay/session";
 import { buildHistory } from "@host/agent/history-projection";
-import type { PublishInput, SessionEvent } from "@trevor/session";
 import { describe, expect, it } from "vitest";
 import { type ForkFlowDeps, forkSession } from "./fork-flow";
 
@@ -22,11 +22,11 @@ function ev(
 
 /** A parent log with two full turns + a session-local control event in the middle. */
 const PARENT: SessionEvent[] = [
-  ev(1, "user.message", "trevor-web", { text: "first question" }),
-  ev(2, "assistant.completed", "trevor-host", { runId: "r1", text: "first answer" }),
-  ev(3, "session.title", "trevor-host", { title: "chat" }),
-  ev(4, "user.message", "trevor-web", { text: "second question" }),
-  ev(5, "assistant.completed", "trevor-host", { runId: "r2", text: "second answer" }),
+  ev(1, "user.message", "belay-web", { text: "first question" }),
+  ev(2, "assistant.completed", "belay-host", { runId: "r1", text: "first answer" }),
+  ev(3, "session.title", "belay-host", { title: "chat" }),
+  ev(4, "user.message", "belay-web", { text: "second question" }),
+  ev(5, "assistant.completed", "belay-host", { runId: "r2", text: "second answer" }),
 ];
 
 /** An in-memory store: reads the parent log, records appends to the child assigning seq/eventId. */
@@ -90,11 +90,11 @@ describe("host fork operation over the normal append API (M2)", () => {
   it("preserves a /clear boundary so a fork does not resurrect explicitly-cleared context", async () => {
     // The parent cleared its context mid-session; the fork must NOT replay the pre-clear turn.
     const withClear: SessionEvent[] = [
-      ev(1, "user.message", "trevor-web", { text: "secret old context" }),
-      ev(2, "assistant.completed", "trevor-host", { runId: "r1", text: "old answer" }),
-      ev(3, "user.command", "trevor-web", { command: "/clear", args: "" }),
-      ev(4, "user.message", "trevor-web", { text: "fresh question" }),
-      ev(5, "assistant.completed", "trevor-host", { runId: "r2", text: "fresh answer" }),
+      ev(1, "user.message", "belay-web", { text: "secret old context" }),
+      ev(2, "assistant.completed", "belay-host", { runId: "r1", text: "old answer" }),
+      ev(3, "user.command", "belay-web", { command: "/clear", args: "" }),
+      ev(4, "user.message", "belay-web", { text: "fresh question" }),
+      ev(5, "assistant.completed", "belay-host", { runId: "r2", text: "fresh answer" }),
     ];
     const { deps, child } = makeStore(withClear);
     await forkSession(deps, { parentSessionId: "parent", forkSeq: 5 });
@@ -107,15 +107,15 @@ describe("host fork operation over the normal append API (M2)", () => {
   it("carries the ACTIVE post-switch model as the child's inherited resume model (M4, D-002)", async () => {
     // A parent whose turn switched model mid-flight: the fork must resume on the switched-to model.
     const withSwitch: SessionEvent[] = [
-      ev(1, "user.message", "trevor-web", { text: "q", provider: "qwen", reasoning: "low" }),
-      ev(2, "model.switched", "trevor-host", {
+      ev(1, "user.message", "belay-web", { text: "q", provider: "qwen", reasoning: "low" }),
+      ev(2, "model.switched", "belay-host", {
         runId: "r1",
         from: { model: "qwen" },
         to: { model: "opus", reasoning: "high" },
         initiator: "manual",
         outcome: "applied",
       }),
-      ev(3, "assistant.completed", "trevor-host", { runId: "r1", text: "a" }),
+      ev(3, "assistant.completed", "belay-host", { runId: "r1", text: "a" }),
     ];
     const { deps } = makeStore(withSwitch);
     const result = await forkSession(deps, { parentSessionId: "parent", forkSeq: 3 });

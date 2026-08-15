@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { RecallResult } from "@belay/session";
 import { render } from "@testing-library/react";
-import type { RecallResult } from "@trevor/session";
 import { test } from "vitest";
 import type { ToolMessage as ToolMessageData } from "@/transcript";
 import { SessionRecallResults } from "./session-recall";

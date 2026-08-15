@@ -1,9 +1,9 @@
-import type { LucidAnchor } from "@trevor/session";
+import type { LucidAnchor } from "@belay/session";
 import { lucidAnchorRuntime } from "./lucid-anchors";
 
 /**
  * The Lucid OVERLAY bootstrap (plan 27, M3): the script injected INTO the sandboxed artifact iframe
- * to make the artifact addressable. It is the only code with the artifact DOM (the parent Trevor panel
+ * to make the artifact addressable. It is the only code with the artifact DOM (the parent Belay panel
  * is cross-origin from the opaque-origin iframe and cannot reach it), so element/range CAPTURE and
  * version re-RESOLUTION run here, and results cross to the parent only as structured messages via
  * `postMessage`. It embeds `lucidAnchorRuntime` (lucid-anchors.ts) VERBATIM via `String(...)` so the
@@ -11,7 +11,7 @@ import { lucidAnchorRuntime } from "./lucid-anchors";
  *
  * Isolation: the iframe is mounted `sandbox="allow-scripts"` with NO `allow-same-origin`, giving it an
  * opaque origin. The overlay runs and can `postMessage` out, but neither the overlay nor any
- * artifact-authored script can reach Trevor's app chrome, cookies, or storage - the artifact's CSS/JS
+ * artifact-authored script can reach Belay's app chrome, cookies, or storage - the artifact's CSS/JS
  * can never affect the host document. The overlay's own highlight styles are scoped to a dedicated
  * `#__lucid_overlay` layer, not injected into the artifact's own stylesheet.
  */

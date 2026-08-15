@@ -11,7 +11,7 @@ import type {
   SessionSummary,
   TaskSnapshot,
   WorktreeSummary,
-} from "@trevor/session";
+} from "@belay/session";
 import { useMemoizedFn } from "ahooks";
 import { Loader2 } from "lucide-react";
 import {
@@ -496,7 +496,7 @@ function PanelHostImpl(props: {
           />
         </div>
       ) : null}
-      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-smui-surface-sunken px-4 [--trevor-reasoning-fade-bg:var(--color-smui-surface-sunken)]">
+      <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-smui-surface-sunken px-4 [--belay-reasoning-fade-bg:var(--color-smui-surface-sunken)]">
         {/* Highlight text in any message (data-message-id) to get a floating Quote action
           that drops the selection into the composer as a markdown blockquote. */}
         <QuoteSelectionToolbar onQuote={composer.quoteSelection} onTangent={onTangent} />

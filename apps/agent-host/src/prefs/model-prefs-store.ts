@@ -1,16 +1,16 @@
-import { loadJsonConfig, writeJsonConfig } from "@host/boot/config";
-import { USER_MODEL_PREFS_JSON } from "@host/boot/paths";
 import {
   decodeModelPreferences,
   EMPTY_PREFERENCES,
   type ModelPreferences,
   type ModelRef,
-} from "@trevor/session";
+} from "@belay/session";
+import { loadJsonConfig, writeJsonConfig } from "@host/boot/config";
+import { USER_MODEL_PREFS_JSON } from "@host/boot/paths";
 
 /**
  * The host-owned model-selection preference store (plan 51). The durable DEFAULT model (the one a fresh
  * session starts on) and the FAVORITES (pinned models) persist as a small `{ default, pinned }` JSON
- * under the config home (`<TREVOR_HOME>/model-prefs.json`), the approved Trevor settings root - portable
+ * under the config home (`<BELAY_HOME>/model-prefs.json`), the approved Belay settings root - portable
  * and shared across every session and browser tab talking to this host. Making them host-owned (not a
  * per-browser localStorage blob) is what closes the "reset to qwen" bug: the default survives a machine
  * switch, a cleared browser store, and a fresh session. Read once at startup, announced on `host.online`,
@@ -20,7 +20,7 @@ import {
  *
  * Responsible for: persisting + caching the `{ default, pinned }` subset (model-prefs.json load/save/cache).
  * Not for: the pure default/pin transitions (setDefaultModel / pinModel / unpinModel live in
- * @trevor/session/model-preferences), the command that drives a mutation (model-prefs-command.ts), or
+ * @belay/session/model-preferences), the command that drives a mutation (model-prefs-command.ts), or
  * any UI.
  */
 
@@ -39,7 +39,7 @@ function toFile(prefs: ModelPreferences): ModelPrefsFile {
   return { default: prefs.default, pinned: prefs.pinned };
 }
 
-/** Lifts the persisted subset into full pure preferences so the @trevor/session transitions apply. */
+/** Lifts the persisted subset into full pure preferences so the @belay/session transitions apply. */
 export function toModelPreferences(file: ModelPrefsFile): ModelPreferences {
   return { ...EMPTY_PREFERENCES, default: file.default, pinned: file.pinned };
 }

@@ -1,4 +1,4 @@
-import { decodeDoctorSnapshot } from "@trevor/session";
+import { decodeDoctorSnapshot } from "@belay/session";
 import { CommandResult } from "../message";
 import { DoctorPanel } from "./doctor-panel";
 

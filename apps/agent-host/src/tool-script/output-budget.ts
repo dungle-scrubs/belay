@@ -1,4 +1,4 @@
-import type { ToolScriptArtifact } from "@trevor/session";
+import type { ToolScriptArtifact } from "@belay/session";
 import { shortSha16 } from "./hash";
 
 /**

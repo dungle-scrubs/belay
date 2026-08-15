@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { frames } from "@trevor/session";
-import { NOOP_SINK, SPAN_NAMES } from "@trevor/session/telemetry";
-import { recordingTelemetrySink, tempDir } from "@trevor/test-kit";
+import { frames } from "@belay/session";
+import { NOOP_SINK, SPAN_NAMES } from "@belay/session/telemetry";
+import { recordingTelemetrySink, tempDir } from "@belay/test-kit";
 import { test } from "vitest";
 import {
   BREAKER_COOLDOWN_MS,
@@ -214,7 +214,7 @@ test("type lookups seek the (sessionId, type) index with no filesort", () => {
 });
 
 test("diag reports unhealthy when the type index is absent and healthy when it is present", () => {
-  const dir = tempDir("trevor-diag-");
+  const dir = tempDir("belay-diag-");
   const path = join(dir, "sessions.db");
   try {
     const log = new SessionLog(path, NOOP_SINK, () => 0, "abc123");
@@ -246,7 +246,7 @@ test("diag reports unhealthy when the type index is absent and healthy when it i
 });
 
 test("the type index is created idempotently on an existing (pre-index) DB", () => {
-  const dir = tempDir("trevor-index-");
+  const dir = tempDir("belay-index-");
   const path = join(dir, "sessions.db");
   try {
     // First open builds the schema + index and lands real data; reopening the same file must not error
@@ -263,7 +263,7 @@ test("the type index is created idempotently on an existing (pre-index) DB", () 
 });
 
 test("opening the log stamps SQLite user_version to the current schema version", () => {
-  const dir = tempDir("trevor-user-version-");
+  const dir = tempDir("belay-user-version-");
   const path = join(dir, "sessions.db");
   try {
     const log = new SessionLog(path);
@@ -321,7 +321,7 @@ test("a fast synchronous query emits no store.slow_query span", () => {
 // ---------------------------------------------------------------------------
 
 test("A-001 spike: node:sqlite's vdbeOp limit caps compiled program size at prepare - it cannot abort runtime scan work", () => {
-  const dir = tempDir("trevor-vdbe-spike-");
+  const dir = tempDir("belay-vdbe-spike-");
   const path = join(dir, "spike.db");
   try {
     // Populate uncapped: 20k rows, enough that a full scan does real runtime work.
@@ -481,7 +481,7 @@ test("the startup warm scan is breaker-exempt: an over-budget cold inventory() n
 });
 
 test("a tripped breaker rejects a write BEFORE any mutation - nothing durable, no seq consumed, dense after recovery", () => {
-  const dir = tempDir("trevor-breaker-write-");
+  const dir = tempDir("belay-breaker-write-");
   const path = join(dir, "sessions.db");
   try {
     const clock = testClock();

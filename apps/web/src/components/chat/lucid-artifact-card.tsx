@@ -1,9 +1,9 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 /**
- * The transcript card for a published LUCID artifact (plan 27, M2/M7): a compact, native Trevor row
+ * The transcript card for a published LUCID artifact (plan 27, M2/M7): a compact, native Belay row
  * that OPENS the addressable artifact in the right-side panel - never a separate `lucid open` browser
  * tab. The transcript stays readable (one quiet card); the review surface lives in the panel.
  */

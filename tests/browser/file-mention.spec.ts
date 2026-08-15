@@ -12,7 +12,7 @@ test("type @, fuzzy-find a file, insert the mention, submit, and see it in the t
 }) => {
   const transport = storeTransport();
   const sessionId = `mention-${test.info().workerIndex}-${Date.now()}`;
-  await seedProjectPath(transport, sessionId, "/Users/kevin/dev/trevor");
+  await seedProjectPath(transport, sessionId, "/Users/kevin/dev/belay");
   await seedFileIndex(transport, sessionId, [
     "apps/web/src/app.tsx",
     "apps/web/src/hooks/use-composer.ts",

@@ -17,7 +17,7 @@ function wire(input: { readonly type: string; readonly payload: unknown }): Sess
   return {
     createdAt: "2026-06-29T00:00:00.000Z",
     eventId: "e1",
-    producerId: "trevor-host",
+    producerId: "belay-host",
     seq: 1,
     sessionId: "s1",
     type: input.type,

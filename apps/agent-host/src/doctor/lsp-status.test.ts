@@ -217,7 +217,7 @@ test("folded details stay bounded even over an unbounded server log tail", () =>
 test("a REAL manager snapshot with no matching adapter folds to unconfigured", async () => {
   const manager = createLspManager({
     adapters: [],
-    defaultWorkspaceRoot: join(homedir(), ".trevor-lsp-doctor-test"),
+    defaultWorkspaceRoot: join(homedir(), ".belay-lsp-doctor-test"),
   });
   try {
     assert.deepEqual(lspPeripheralState(manager.statusSnapshot(), NOW), {

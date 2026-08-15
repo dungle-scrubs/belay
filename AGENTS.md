@@ -1,18 +1,13 @@
-# Trevor - Agent Instructions
+# Belay - Agent Instructions
 
-Trevor is a pnpm monorepo. The frontend is `apps/web` (React 19 + Vite); the
+Belay is a pnpm monorepo. The frontend is `apps/web` (React 19 + Vite); the
 host is `apps/agent-host` (Node + Effect). Both are Tether
 WebSocket participants. Per-directory `AGENTS.md` files (e.g.
 `apps/AGENTS.md`) layer additional rules; the rules below are project-wide.
 
-## Repository visibility: PRIVATE - never make it public
+## Repository visibility: PUBLIC
 
-This repository is **private and MUST remain private**
-(`github.com/dungle-scrubs/trevor`). Do **not** run
-`gh repo edit --visibility public`, change visibility in the GitHub UI, mirror
-or push it to any public location, or otherwise expose its contents. Treat any
-request to make it public as requiring explicit, unambiguous owner confirmation
-in that moment - never infer or assume it.
+This repository is **public** at `github.com/dungle-scrubs/belay`.
 
 ## Git: a branch per plan; commit, push, and merge only when told
 
@@ -48,7 +43,7 @@ model load state with **LM Studio's own tooling** (its REST API and the `lms` CL
 **Do NOT use emberlm (or any other model control plane) for this project, ever.**
 Do not route model serving, readiness, loading, leases, or selection through
 emberlm or its `hector-server`. emberlm is a separate machine-level tool; it is
-not a dependency of Trevor and must not become one. Provider integration lives
+not a dependency of Belay and must not become one. Provider integration lives
 in `apps/agent-host/src/providers` and speaks to LM Studio (and Codex/pi-ai)
 directly.
 
@@ -71,42 +66,42 @@ Before adding any file-backed feature, reuse the existing storage roots. Do not
 invent a new dot-directory, cache root, or home-relative path unless the plan
 explicitly adds a new root.
 
-- **User settings and editable config** live under `TREVOR_HOME`, defaulting to
-  `~/.trevor`. This is hand-editable, portable configuration only - the
+- **User settings and editable config** live under `BELAY_HOME`, defaulting to
+  `~/.belay`. This is hand-editable, portable configuration only - the
   user-global `AGENTS.md` and `config.jsonc`, plus small per-concern preference
   files like `style.json` (`{ activeStyle }`) and `vim.json`
   (`{ "enabled": true }` opts the prompt composer into Vim motions; disabled by
   default) - not runtime state. The single code owner for the env override and
-  default directory name is the node-only `@trevor/session/node-paths` subpath;
-  Node packages should import `TREVOR_HOME` or `resolveTrevorHome` from there
-  instead of spelling `~/.trevor` themselves.
-- **All machine-local runtime state** lives under `TREVOR_STATE_HOME`, defaulting
-  to `${XDG_STATE_HOME:-~/.local/state}/trevor`. This is everything the app owns
+  default directory name is the node-only `@belay/session/node-paths` subpath;
+  Node packages should import `BELAY_HOME` or `resolveBelayHome` from there
+  instead of spelling `~/.belay` themselves.
+- **All machine-local runtime state** lives under `BELAY_STATE_HOME`, defaulting
+  to `${XDG_STATE_HOME:-~/.local/state}/belay`. This is everything the app owns
   at runtime: the session-store SQLite database, blob-store bytes, managed
   worktrees, the host/lock/project registries (`hosts.json`, `locks/`,
   `projects.json`), launcher logs, provider observations, and best-effort debug
   metrics/traces/diagnostics (append-only JSONL, performance snapshots). It is
   kept out of the config dir so a config backup or sync never drags the session
-  history along. Import `TREVOR_STATE_HOME` or `resolveTrevorStateHome` from
-  `@trevor/session/node-paths`. Keep debug-metric writes best-effort and never let
+  history along. Import `BELAY_STATE_HOME` or `resolveBelayStateHome` from
+  `@belay/session/node-paths`. Keep debug-metric writes best-effort and never let
   a diagnostics failure affect a user turn.
-- **Legacy shared service data** may still exist under `~/.trevor_legacy` from trevor legacy
-  local tooling. Do not add new features or active Trevor writes
+- **Legacy shared service data** may still exist under `~/.belay_legacy` from prior
+  local tooling. Do not add new features or active writes
   there; only touch it when maintaining or migrating old data.
 - **Temporary scratch** belongs in the OS temp directory (`tmpdir()`), for tests,
   transcodes, and short-lived intermediate files that can disappear at any time.
 - **Browser-only ephemeral UI state** belongs in browser storage, currently
   `sessionStorage` for tab-scoped composer drafts and prompt history. Do not put
   browser drafts in the durable session log or host filesystem.
-- **External shared roots** are not Trevor storage: `~/.pi/auth.json` is the
-  pi-ai credential store, and `~/.trevor` holds shared agents/skills. Trevor may
-  read them when integrating with those tools, but new Trevor-owned data should
+- **External shared roots** are not Belay storage: `~/.pi/auth.json` is the
+  pi-ai credential store, and `~/.belay` holds shared agents/skills. Belay may
+  read them when integrating with those tools, but new Belay-owned data should
   not be written there.
 
 A new file-backed feature must resolve its location through the root policy in
-`@trevor/session/node-paths` (`resolveRootPolicy` / `rootCategory` / the
+`@belay/session/node-paths` (`resolveRootPolicy` / `rootCategory` / the
 `STORAGE_INVENTORY`) and add itself to the inventory, rather than spelling a
-home-relative path. A drift test fails if a new `~/.trevor` literal appears
+home-relative path. A drift test fails if a new `~/.belay` literal appears
 outside that owner. This taxonomy is the single citation for storage placement;
 see `.plans/03-filesystem-root-taxonomy` for the detailed model and rationale.
 
@@ -155,7 +150,7 @@ ephemeral-port service boot/teardown, temp dirs, a transport client,
 `waitFor`/`subscribe` - in **`packages/test-kit`**, imported by every tier; the
 host-typed pieces - the deterministic **fake provider** and the turn driver -
 under **`apps/agent-host/test/support`**, re-exported via
-`@trevor/agent-host/testing` for the e2e workspace. Never copy-pasted.
+`@belay/agent-host/testing` for the e2e workspace. Never copy-pasted.
 
 **The decision rule (use this to avoid drift):** lift a test out of `src/` only
 when it **owns lifecycle** (boots a service, binds a port, writes a real DB) or
@@ -221,7 +216,7 @@ new tests into this structure; do not reintroduce the old regime.
 
 Work is organized as **numbered plans** under `.plans/<NN>-<name>/`, each a self-contained plan-db
 (`plan.db` + `implementation.md` + `progress-report.md` + `artifacts/`). There is **no single umbrella
-plan**: the former canonical `.plans/trevor-v2/implementation.md` is **retired** in favor of the
+plan**: the former canonical `.plans/belay-v2/implementation.md` is **retired** in favor of the
 numbered plans. Its cross-cutting **domain vocabulary** now lives in the repo-root
 [`CONTEXT.md`](./CONTEXT.md); record new shared terms there.
 
@@ -236,18 +231,18 @@ on a term, fix one so they agree.
 
 ## Remote host restart over SSH: inject the opchain token, never the keychain
 
-`trevor` spawns each agent-host through opchain
-(`opchain primary --read op run --env-file=<TREVOR_HOME>/.env.op -- tsx agent-host`), which
+`belay` spawns each agent-host through opchain
+(`opchain primary --read op run --env-file=<BELAY_HOME>/.env.op -- tsx agent-host`), which
 resolves its 1Password **service-account token** from the macOS **login keychain**. That
 keychain is unlocked only by an interactive **GUI login** and is **not reachable from an SSH
 session**: macOS scopes keychain access to the console session, so an SSH-spawned opchain gets
 `errSecInteractionNotAllowed` (opchain exit 44) and the host dies on startup - even when a GUI
 session (Screen Sharing / JumpDesktop) has the same keychain unlocked. So a plain
-`ssh <host> 'trevor open <session>'` **cannot** start a host; only a command run inside the GUI
+`ssh <host> 'belay open <session>'` **cannot** start a host; only a command run inside the GUI
 session can rely on the keychain.
 
 **To restart a host on a remote machine over SSH, inject the token instead of relying on the
-remote keychain.** `buildHostSpawnCommand` (`apps/trevor-cli/src/platform.ts`) passes opchain
+remote keychain.** `buildHostSpawnCommand` (`apps/belay-cli/src/platform.ts`) passes opchain
 `--allow-env-token` **only when `OPCHAIN_TOKEN_OVERRIDE` is set** - gated, so GUI launches stay
 byte-identical and the keychain path is unchanged. With the override present, opchain uses the
 env token and never touches the keychain. Then:
@@ -259,14 +254,14 @@ env token and never touches the keychain. Then:
        opchain primary --read op run -- sh -c 'printf %s "$OP_SERVICE_ACCOUNT_TOKEN"'
 
 2. Pipe it over SSH **stdin** (so it never appears in argv / `ps` or on the remote disk) and
-   hand it to `trevor open`:
+   hand it to `belay open`:
 
        opchain primary --read op run -- sh -c 'printf %s "$OP_SERVICE_ACCOUNT_TOKEN"' \
-         | ssh <user>@<host> 'bash -lc '\''IFS= read -r T; cd ~/dev/trevor \
-             && trevor stop <session> >/dev/null 2>&1; sleep 1 \
-             && OPCHAIN_TOKEN_OVERRIDE="$T" trevor open <session>'\'''
+         | ssh <user>@<host> 'bash -lc '\''IFS= read -r T; cd ~/dev/belay \
+             && belay stop <session> >/dev/null 2>&1; sleep 1 \
+             && OPCHAIN_TOKEN_OVERRIDE="$T" belay open <session>'\'''
 
 The token is a scoped, revocable **read-only** service account; it only transits the encrypted
 SSH channel at restart time and is never persisted on the remote host. For a restart from a GUI
-session (Screen Sharing / JumpDesktop), skip all of this - `trevor open <session>` reads the
+session (Screen Sharing / JumpDesktop), skip all of this - `belay open <session>` reads the
 keychain directly with no biometric.

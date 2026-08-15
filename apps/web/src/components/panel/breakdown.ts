@@ -1,8 +1,8 @@
-import { rollupBreakdown, type UsageBreakdown } from "@trevor/session";
+import { rollupBreakdown, type UsageBreakdown } from "@belay/session";
 import type { TreemapLeaf } from "./treemap-layout";
 
 /**
- * Adapts the canonical `@trevor/session` breakdown rollup (the single source of the grouping + colors,
+ * Adapts the canonical `@belay/session` breakdown rollup (the single source of the grouping + colors,
  * D-013) into the treemap leaves + legend total for the "data in this call" panel. The only web-local
  * step is resolving each row's semantic color token into a CSS variable; the grouping (tool results,
  * thinking, final response, prompt overhead) and labels are no longer redefined here. The per-tool

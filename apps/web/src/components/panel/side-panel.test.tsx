@@ -12,7 +12,7 @@ test("composes header, breakdown, controls, and footer inside the side drawer", 
       <SidePanelHeader
         title="auth-flow"
         subtitle="session · local"
-        workspace="~/dev/trevor"
+        workspace="~/dev/belay"
         git={{
           branch: "main",
           detached: null,
@@ -30,7 +30,7 @@ test("composes header, breakdown, controls, and footer inside the side drawer", 
   assert.ok(getByLabelText("session detail"));
   assert.ok(getByText("auth-flow"));
   assert.ok(getByText("session · local"));
-  assert.ok(getByText("~/dev/trevor"));
+  assert.ok(getByText("~/dev/belay"));
   assert.ok(getByText("64.0k (50%)"));
   assert.ok(getByText("4.2k tok"));
   assert.ok(getByText("No turn data yet"));

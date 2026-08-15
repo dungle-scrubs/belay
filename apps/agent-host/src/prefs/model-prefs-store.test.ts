@@ -1,5 +1,5 @@
+import { storagePathByName } from "@belay/session/node-paths";
 import { USER_MODEL_PREFS_JSON } from "@host/boot/paths";
-import { storagePathByName } from "@trevor/session/node-paths";
 import { describe, expect, test } from "vitest";
 import {
   EMPTY_MODEL_PREFS,
@@ -15,7 +15,7 @@ import {
  * M1 (plan 51): the host-owned model-selection preference store. It reads a `{ default, pinned }` JSON
  * from `model-prefs.json` under the config home, tolerating a missing/malformed file (both -> the empty
  * preference, reported not thrown) so a bad file never blocks host startup. It reuses the pure
- * @trevor/session decoder + transitions rather than re-implementing default/pin logic. Read/write are
+ * @belay/session decoder + transitions rather than re-implementing default/pin logic. Read/write are
  * injected (no disk); the cached accessor's injected read lets the cache-clear-on-save be observed.
  */
 
@@ -40,7 +40,7 @@ describe("parseModelPrefs", () => {
 
 describe("loadModelPrefs", () => {
   test("reads a persisted default + favorites from the config file (path is injectable)", () => {
-    const prefs = loadModelPrefs("/home/.trevor/model-prefs.json", () =>
+    const prefs = loadModelPrefs("/home/.belay/model-prefs.json", () =>
       JSON.stringify({ default: REF, pinned: [PIN] }),
     );
     expect(prefs).toEqual({ default: REF, pinned: [PIN] });
@@ -64,10 +64,10 @@ describe("saveModelPrefs", () => {
     const files = new Map<string, string>();
     saveModelPrefs(
       { default: REF, pinned: [PIN] },
-      "/home/.trevor/model-prefs.json",
+      "/home/.belay/model-prefs.json",
       (p, c) => void files.set(p, c),
     );
-    const written = files.get("/home/.trevor/model-prefs.json");
+    const written = files.get("/home/.belay/model-prefs.json");
     expect(written).toBeDefined();
     expect(JSON.parse(written ?? "")).toEqual({ default: REF, pinned: [PIN] });
   });
@@ -85,7 +85,7 @@ describe("toModelPreferences", () => {
 });
 
 describe("USER_MODEL_PREFS_JSON path", () => {
-  test("resolves under TREVOR_HOME via the storage inventory (config, not state)", () => {
+  test("resolves under BELAY_HOME via the storage inventory (config, not state)", () => {
     // The host constant and the inventory-resolved path are the same file, so the drift guard's
     // single-owner literal and the store's real target can never diverge.
     expect(USER_MODEL_PREFS_JSON).toBe(storagePathByName("model-prefs"));

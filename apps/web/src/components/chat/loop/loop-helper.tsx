@@ -1,4 +1,4 @@
-import type { CommandPresentation } from "@trevor/session";
+import type { CommandPresentation } from "@belay/session";
 import { cn } from "@/lib/utils";
 import { LoopBuilder } from "./loop-builder";
 import { LoopKeywords } from "./loop-keywords";

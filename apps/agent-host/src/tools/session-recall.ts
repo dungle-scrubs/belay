@@ -1,4 +1,4 @@
-import { RECALL_KINDS, type RecallKind } from "@trevor/session";
+import { RECALL_KINDS, type RecallKind } from "@belay/session";
 import { Schema } from "effect";
 import { recallEngine } from "../agent/recall/engine";
 import type { RecallFilters } from "../agent/recall/types";

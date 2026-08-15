@@ -8,13 +8,13 @@ import {
   type RawAskUserInput,
   type SelectedChoice,
   validateAnswer,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * The write-side view-model for the ask_user question surface: the editable answer DRAFT the user
  * builds while a group is pending, and the pure transforms between it and the wire answer.
  *
- * The READ side is the contract itself (`ProviderQuestionContract` from @trevor/session) - already
+ * The READ side is the contract itself (`ProviderQuestionContract` from @belay/session) - already
  * render-ready, so the surface renders it directly. This module owns the rest, kept out of the
  * component so it is testable without a DOM (M2.5 "split view-model transforms from presentation"):
  *   - `initialDraft` seeds the draft the surface opens with (recommended single-choice pre-selected);

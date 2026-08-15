@@ -1,4 +1,4 @@
-import type { CommandToken } from "@trevor/session";
+import type { CommandToken } from "@belay/session";
 import type { KeyboardEvent } from "react";
 import { cn } from "@/lib/utils";
 import { commandTokenSegments } from "./command-token-segments";

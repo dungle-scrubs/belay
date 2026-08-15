@@ -11,7 +11,7 @@ import { spaceAfter, spaceBefore } from "./token-spacing";
  * This module is pure - no DOM, no React - so the positional-renumber / adjacent-remove / old-number->
  * payload invariants live and are unit-tested ONCE here (through the two token suites that drive it),
  * and a new token kind is a single {@link TokenCodec}, not a third copy of this logic. The token FORMAT
- * (the parser + the token text) is the cross-surface contract owned by `@trevor/session`; a codec just
+ * (the parser + the token text) is the cross-surface contract owned by `@belay/session`; a codec just
  * names which format this engine is editing.
  */
 

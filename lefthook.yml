@@ -13,3 +13,10 @@ pre-commit:
     unit:
       glob: "*.{ts,tsx}"
       run: pnpm test:unit
+
+pre-push:
+  parallel: false
+  commands:
+    trufflehog:
+      run: trufflehog git file://. --only-verified --no-update --fail
+      skip: false

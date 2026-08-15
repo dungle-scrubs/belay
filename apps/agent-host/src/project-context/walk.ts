@@ -9,11 +9,11 @@ import { basename, join, relative } from "node:path";
 /**
  * Directories pruned from every context workspace walk (VCS, deps, build output, generated).
  * Single-segment names (e.g. `node_modules`) prune a directory of that basename at ANY depth;
- * multi-segment entries (e.g. `.trevor/generated`) prune by relative-path prefix from the walk root.
+ * multi-segment entries (e.g. `.belay/generated`) prune by relative-path prefix from the walk root.
  */
 export const CONTEXT_IGNORED_DIRS: ReadonlySet<string> = new Set([
   ".git",
-  ".trevor/generated",
+  ".belay/generated",
   ".turbo",
   "coverage",
   "dist",
@@ -35,7 +35,7 @@ export interface WalkContextOptions {
 
 // The ignore policy, split once by shape: bare names prune by basename anywhere; path entries prune
 // by root-relative prefix. (The old segment-split matcher could never match a multi-segment entry,
-// so `.trevor/generated` was silently walked despite being listed.)
+// so `.belay/generated` was silently walked despite being listed.)
 const IGNORED_NAMES = new Set([...CONTEXT_IGNORED_DIRS].filter((entry) => !entry.includes("/")));
 const IGNORED_PREFIXES = [...CONTEXT_IGNORED_DIRS].filter((entry) => entry.includes("/"));
 

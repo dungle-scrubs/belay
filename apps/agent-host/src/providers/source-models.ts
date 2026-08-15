@@ -3,11 +3,12 @@
  * OpenAI-compatible /v1/models, and the pi-ai static-registry fallback - with staleness.
  * Not for: building catalog entries or source summaries; catalog.ts owns the read model.
  */
+
+import type { SourceType } from "@belay/session";
+import { DEFAULT_LMSTUDIO_URL } from "@belay/session";
 import { getBuiltinModels } from "@earendil-works/pi-ai/providers/all";
 import { debug } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import type { SourceType } from "@trevor/session";
-import { DEFAULT_LMSTUDIO_URL } from "@trevor/session";
 import { type LmStudioModelRecord, parseLmStudioModelList } from "./lmstudio-native";
 
 /** The LM Studio OpenAI-compatible base URL, read at CALL time (not a module constant) so

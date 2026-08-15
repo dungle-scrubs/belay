@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { LucidAnchor } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { LucidAnchor } from "@trevor/session";
 import { test } from "vitest";
 import { LucidChrome } from "./lucid-chrome";
 import {

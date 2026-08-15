@@ -41,7 +41,7 @@ describe("stdio transport - handshake", () => {
     await withTransport(fixtureConfig(), async (transport) => {
       const init = await transport.initialize();
       expect(init.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
-      expect(init.serverInfo).toMatchObject({ name: "trevor-mcp-fixture" });
+      expect(init.serverInfo).toMatchObject({ name: "belay-mcp-fixture" });
       expect(transport.state()).toMatchObject({
         status: "ready",
         initialized: true,
@@ -64,7 +64,7 @@ describe("stdio transport - handshake", () => {
 
   it("classifies a command that cannot spawn as a server crash", async () => {
     await withTransport(
-      fixtureConfig({ command: "/nonexistent/trevor-mcp-fixture-binary", args: [] }),
+      fixtureConfig({ command: "/nonexistent/belay-mcp-fixture-binary", args: [] }),
       async (transport) => {
         await expect(transport.initialize()).rejects.toMatchObject({
           _tag: "McpServerCrashError",
@@ -239,7 +239,7 @@ describe("stdio transport - D-004 env probe", () => {
       ZAI_API_KEY: "zai-fake",
       MINIMAX_API_KEY: "mm-fake",
       OPENROUTER_API_KEY: "or-fake",
-      TREVOR_FAKE_SECRET: "trevor-fake",
+      TREVOR_FAKE_SECRET: "belay-fake",
       SESSION_ID: "sess-fake",
     };
     const previous = new Map(Object.keys(planted).map((name) => [name, process.env[name]]));

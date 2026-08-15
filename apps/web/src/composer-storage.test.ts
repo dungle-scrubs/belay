@@ -85,8 +85,8 @@ test("history is capped to the newest HISTORY_CAP entries", () => {
 
 test("a version-skewed or malformed payload reads as empty (never throws)", () => {
   const s = createMemoryStorage();
-  s.setItem("trevor.draft.t.x", JSON.stringify({ v: 999, text: "stale" }));
-  s.setItem("trevor.history.t.x", "not json{");
+  s.setItem("belay.draft.t.x", JSON.stringify({ v: 999, text: "stale" }));
+  s.setItem("belay.history.t.x", "not json{");
   assert.equal(readDraft(s, "t", "x"), "");
   assert.deepEqual(readHistory(s, "t", "x"), []);
 });

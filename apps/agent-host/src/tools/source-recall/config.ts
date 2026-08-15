@@ -1,8 +1,8 @@
 /**
  * Responsible for: the normalized indexed source-recall provider config (plan 38 M8) - parsing,
  * validation issues, the redacted inspection projection, and loading `source-recall.json` from the
- * approved config root (`TREVOR_HOME`, D-081). Every backend - `source-recall` daemon, Aleutian Trace
- * - is an ordinary named entry in `<TREVOR_HOME>/source-recall.json`
+ * approved config root (`BELAY_HOME`, D-081). Every backend - `source-recall` daemon, Aleutian Trace
+ * - is an ordinary named entry in `<BELAY_HOME>/source-recall.json`
  * (`{ providers: { "<id>": { kind, endpoint, ... } } }`), following the host's optional-JSON-config
  * precedent (admission.json, mcp-servers.json). Normalization is a tolerant pure decoder: a malformed
  * entry is dropped with a STRUCTURED issue (never a crash, never a bare string), so one typo cannot
@@ -12,11 +12,12 @@
  *
  * Not for: adapter construction / selection (registry.ts) or the HTTP transport (http.ts).
  */
+
+import { SOURCE_RECALL_PROVIDER_KINDS, type SourceRecallProviderKind } from "@belay/session";
 import { asPositiveInt } from "@host/boot/coerce";
 import { loadJsonConfig } from "@host/boot/config";
 import { asNonEmptyString, asRecord, asStringArray } from "@host/boot/decode";
 import { USER_SOURCE_RECALL_JSON } from "@host/boot/paths";
-import { SOURCE_RECALL_PROVIDER_KINDS, type SourceRecallProviderKind } from "@trevor/session";
 
 /** One normalized source-recall provider entry, keyed by its config id. */
 export interface SourceRecallProviderConfig {
@@ -123,7 +124,7 @@ export function normalizeSourceRecallConfig(raw: unknown): SourceRecallConfig {
   return { providers, issues };
 }
 
-/** Loads + normalizes `<TREVOR_HOME>/source-recall.json`; absent or malformed means no providers. */
+/** Loads + normalizes `<BELAY_HOME>/source-recall.json`; absent or malformed means no providers. */
 export function loadSourceRecallConfig(read?: (path: string) => string): SourceRecallConfig {
   return loadJsonConfig(
     USER_SOURCE_RECALL_JSON,

@@ -1,4 +1,4 @@
-import type { GitStatus } from "@trevor/session";
+import type { GitStatus } from "@belay/session";
 import { type GitRunner, readGitStatus } from "./git-status";
 
 /**

@@ -3,12 +3,12 @@
  * Not for: the `process` tool wrapper (processes.ts) or pid liveness (process-liveness.ts).
  */
 import { type ChildProcess, spawn } from "node:child_process";
+import type { JobLifecycle, JobSource } from "@belay/session";
 import { classifyAlwaysPreventedBashCommand } from "@host/tools/bash-safety";
 import { ProcessError, ToolExecutionError, ToolInputError } from "@host/tools/errors";
 import { combineStreams } from "@host/tools/shared";
 import { invariant } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
-import type { JobLifecycle, JobSource } from "@trevor/session";
 import {
   type JobLedger,
   type ReconcileDeps,
@@ -22,9 +22,9 @@ const RING_LIMIT = 64 * 1024;
  *  often, so this is bounded well below the full ring). */
 const JOB_TAIL_LIMIT = 4 * 1024;
 
-// The lifecycle + source unions are the wire contract (@trevor/session), reused here so the host's
+// The lifecycle + source unions are the wire contract (@belay/session), reused here so the host's
 // snapshot can never drift from what it announces.
-export type { JobSource } from "@trevor/session";
+export type { JobSource } from "@belay/session";
 export type ProcessStatus = JobLifecycle;
 
 /** Where a job originated, so the support panel + detail can trace it back to its run/tool/request. */

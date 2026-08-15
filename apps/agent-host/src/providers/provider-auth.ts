@@ -5,8 +5,8 @@
  */
 import { readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
+import type { SourceSignInState } from "@belay/session";
 import { msg } from "@host/transport/messages";
-import type { SourceSignInState } from "@trevor/session";
 import { ProviderAuthError } from "./errors";
 
 export const AUTH_PATH = `${homedir()}/.pi/auth.json`;

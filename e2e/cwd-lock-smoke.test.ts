@@ -3,7 +3,7 @@ import { mkdirSync, readdirSync, readFileSync, realpathSync, rmSync } from "node
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempDir, waitFor } from "@trevor/test-kit";
+import { tempDir, waitFor } from "@belay/test-kit";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 
 /**
@@ -44,14 +44,14 @@ let repo: string;
 const live: ChildProcess[] = [];
 
 beforeAll(() => {
-  stateHome = tempDir("trevor-cwd-lock-state-");
-  repo = tempDir("trevor-cwd-lock-repo-");
+  stateHome = tempDir("belay-cwd-lock-state-");
+  repo = tempDir("belay-cwd-lock-repo-");
   // A real git repo with one commit, so `git worktree add` has a base to cut from.
   const git = (...args: string[]): void => {
     execFileSync("git", args, { cwd: repo, stdio: "ignore" });
   };
   git("init", "-q");
-  git("config", "user.email", "smoke@trevor.test");
+  git("config", "user.email", "smoke@belay.test");
   git("config", "user.name", "Smoke");
   git("commit", "--allow-empty", "-q", "-m", "base");
 });
@@ -94,7 +94,7 @@ function spawnActor(mode: string, cwd: string, sessionId: string, hostId: string
     // resolves through the host tsconfig, which tsx only finds via an explicit pointer here.
     env: {
       ...process.env,
-      TREVOR_STATE_HOME: stateHome,
+      BELAY_STATE_HOME: stateHome,
       TREVOR_DEBUG: "0",
       TSX_TSCONFIG_PATH: join(REPO_ROOT, "apps/agent-host/tsconfig.json"),
     },

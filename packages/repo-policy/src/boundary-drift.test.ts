@@ -61,7 +61,7 @@ test("blob URL and artifact policy stay in artifact runtime bindings", () => {
     "apps/agent-host/src/artifacts/runtime.ts",
     "apps/agent-host/src/agent/image-resolution.ts",
     "apps/agent-host/src/tools/video-inspect/tool.ts",
-    "apps/trevor-cli/src/main.ts",
+    "apps/belay-cli/src/main.ts",
     "apps/web/src/blob.ts",
     "packages/session/src/artifact-runtime.ts",
     "packages/session/src/blob.ts",
@@ -80,8 +80,8 @@ test("blob URL and artifact policy stay in artifact runtime bindings", () => {
 });
 
 test("CLI process entrypoint delegates command dispatch to the router", () => {
-  const main = read("apps/trevor-cli/src/main.ts");
-  const router = read("apps/trevor-cli/src/command-router.ts");
+  const main = read("apps/belay-cli/src/main.ts");
+  const router = read("apps/belay-cli/src/command-router.ts");
 
   assert.ok(router.includes("COMMAND_SPECS"), "command router owns command metadata");
   assert.equal(/if \(cmd ===/.test(main), false, "main.ts must not own command dispatch branches");

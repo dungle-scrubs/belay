@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { TaskSnapshot, TaskStatus } from "@belay/session";
 import { render, screen } from "@testing-library/react";
-import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { test } from "vitest";
 import { TasksPanel } from "@/tasks-panel";
 

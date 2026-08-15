@@ -1,4 +1,4 @@
-import { type ArtifactRef, type PastePayload, pasteLineCount } from "@trevor/session";
+import { type ArtifactRef, type PastePayload, pasteLineCount } from "@belay/session";
 import { useBoolean } from "ahooks";
 import { ChevronRight, Copy, Wrench } from "lucide-react";
 import type { ReactNode } from "react";

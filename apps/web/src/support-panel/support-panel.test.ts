@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
+import type { JobSnapshot, TaskSnapshot } from "@belay/session";
 import { test } from "vitest";
 import type { Message } from "@/transcript";
 import {

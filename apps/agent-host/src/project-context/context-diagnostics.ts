@@ -1,7 +1,7 @@
 /**
  * Responsible for: the redacted context-observability read model (D-012) - folding a rendered
  * ContextReport plus the CLAUDE.md migration inventory into counts the doctor / debug surface can show
- * WITHOUT dumping any instruction or rule body. It distinguishes AGENTS.md from `.trevor/rules`, counts
+ * WITHOUT dumping any instruction or rule body. It distinguishes AGENTS.md from `.belay/rules`, counts
  * rule inclusion reasons, and separates detected CLAUDE.md into pointers, still-to-migrate, and ignored,
  * surfacing bytes used/dropped and the required-response state.
  * Not for: reading the filesystem (callers pass the report + inventory) or the proposal flow itself.
@@ -30,7 +30,7 @@ export interface ContextDiagnostics {
 
 /**
  * Fold the rendered context report + migration inventory into count-only diagnostics. AGENTS.md files
- * are the ingested sources that are NOT `.trevor/rules` (the rule paths come from the report's separate
+ * are the ingested sources that are NOT `.belay/rules` (the rule paths come from the report's separate
  * rule accounting); CLAUDE.md files are split into pointers, ignored, and the remainder that still needs
  * a proposal.
  */

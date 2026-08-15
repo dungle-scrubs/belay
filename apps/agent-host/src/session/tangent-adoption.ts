@@ -1,12 +1,12 @@
+import { pendingFollowUps, type SessionTransport } from "@belay/session";
+import type { TelemetrySink } from "@belay/session/telemetry";
+import type { ProviderTraceWriter } from "@belay/session/telemetry-provider-trace";
 import type { InternetMonitor } from "@host/connectivity/probe";
 import type { ProviderRegistry } from "@host/providers/index";
 import type { HostResidency } from "@host/residency/host";
 import type { Lease } from "@host/session/lease";
 import { makeSessionWorker, type SessionWorker } from "@host/session/session-worker";
 import { log } from "@host/transport/log";
-import { pendingFollowUps, type SessionTransport } from "@trevor/session";
-import type { TelemetrySink } from "@trevor/session/telemetry";
-import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 
 /**
  * Responsible for: the parent host ADOPTING the tangent sessions branched off it (plan 37 takeover),

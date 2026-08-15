@@ -1,5 +1,5 @@
+import { sessionSummary } from "@belay/test-kit";
 import { act, renderHook } from "@testing-library/react";
-import { sessionSummary } from "@trevor/test-kit";
 import { describe, expect, test, vi } from "vitest";
 import type { ProjectSidebarRecord } from "./project-sidebar-model";
 import { type ProjectAction, useProjectSidebar } from "./use-project-sidebar";
@@ -68,83 +68,83 @@ function renderSidebar(
 describe("useProjectSidebar", () => {
   test("groups are built from sessions + projects", () => {
     const { result } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
-        sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" }),
-        sessionSummary({ sessionId: "s2", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" }),
+        sessionSummary({ sessionId: "s2", projectPath: "/dev/belay" }),
       ],
     );
     expect(result.current.groups).toHaveLength(1);
     const group = result.current.groups[0];
-    expect(group?.key).toBe("/dev/trevor");
+    expect(group?.key).toBe("/dev/belay");
     expect(group?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1", "s2"]);
   });
 
   test("toggling a project updates local collapsed state and dispatches a persist", () => {
     const { result, onProjectAction } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     // Starts expanded.
     expect(result.current.groups[0]?.collapsed).toBe(false);
 
-    act(() => result.current.onToggleProject("/dev/trevor"));
+    act(() => result.current.onToggleProject("/dev/belay"));
     expect(result.current.groups[0]?.collapsed).toBe(true);
     expect(onProjectAction).toHaveBeenCalledWith({
       type: "collapse",
-      path: "/dev/trevor",
+      path: "/dev/belay",
       collapsed: true,
     });
 
     // Toggle back.
-    act(() => result.current.onToggleProject("/dev/trevor"));
+    act(() => result.current.onToggleProject("/dev/belay"));
     expect(result.current.groups[0]?.collapsed).toBe(false);
     expect(onProjectAction).toHaveBeenLastCalledWith({
       type: "collapse",
-      path: "/dev/trevor",
+      path: "/dev/belay",
       collapsed: false,
     });
   });
 
   test("a project with collapsed: true in its registry record starts collapsed", () => {
     const { result } = renderSidebar(
-      [project({ path: "/dev/trevor", collapsed: true })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay", collapsed: true })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     expect(result.current.groups[0]?.collapsed).toBe(true);
   });
 
   test("search filters groups and auto-expands matched projects", () => {
     const { result } = renderSidebar(
-      [project({ path: "/dev/trevor", collapsed: true }), project({ path: "/dev/other" })],
+      [project({ path: "/dev/belay", collapsed: true }), project({ path: "/dev/other" })],
       [
-        sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", title: "fix bug" }),
+        sessionSummary({ sessionId: "s1", projectPath: "/dev/belay", title: "fix bug" }),
         sessionSummary({ sessionId: "s2", projectPath: "/dev/other", title: "unrelated" }),
       ],
     );
-    // Both projects present before search; trevor is collapsed.
+    // Both projects present before search; belay is collapsed.
     expect(result.current.groups.map((g) => g.key)).toEqual(
-      expect.arrayContaining(["/dev/trevor", "/dev/other"]),
+      expect.arrayContaining(["/dev/belay", "/dev/other"]),
     );
 
-    // Search for "bug" matches only the trevor session; the trevor group is auto-expanded.
+    // Search for "bug" matches only the belay session; the belay group is auto-expanded.
     act(() => result.current.onSearch("bug"));
     expect(result.current.groups).toHaveLength(1);
     const group = result.current.groups[0];
-    expect(group?.key).toBe("/dev/trevor");
+    expect(group?.key).toBe("/dev/belay");
     expect(group?.collapsed).toBe(false);
     expect(group?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1"]);
   });
 
   test("search matching a project name keeps all its sessions and forces expand", () => {
     const { result } = renderSidebar(
-      [project({ path: "/dev/trevor", collapsed: true, displayName: "Trevor" })],
+      [project({ path: "/dev/belay", collapsed: true, displayName: "Belay" })],
       [
-        sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", title: "alpha" }),
-        sessionSummary({ sessionId: "s2", projectPath: "/dev/trevor", title: "beta" }),
+        sessionSummary({ sessionId: "s1", projectPath: "/dev/belay", title: "alpha" }),
+        sessionSummary({ sessionId: "s2", projectPath: "/dev/belay", title: "beta" }),
       ],
     );
-    act(() => result.current.onSearch("trevor"));
+    act(() => result.current.onSearch("belay"));
     const group = result.current.groups[0];
     expect(group?.collapsed).toBe(false);
     // Project-name match keeps ALL sessions.
@@ -155,24 +155,24 @@ describe("useProjectSidebar", () => {
     const sessions = Array.from({ length: 8 }, (_, i) =>
       sessionSummary({
         sessionId: `s${i}`,
-        projectPath: "/dev/trevor",
+        projectPath: "/dev/belay",
         updatedAt: `2026-06-0${i + 1}T00:00:00.000Z`,
       }),
     );
-    const { result } = renderSidebar([project({ path: "/dev/trevor" })], sessions);
+    const { result } = renderSidebar([project({ path: "/dev/belay" })], sessions);
     // Before show-more, the group has all 8 sessions (the component caps the visible slice).
     expect(result.current.groups[0]?.sessions).toHaveLength(8);
 
     // Show more marks the project as expanded; the group is unchanged in shape (the component
     // reveals more), but the expanded set is updated. We verify by checking no throw + still 8.
-    act(() => result.current.onShowMore("/dev/trevor"));
+    act(() => result.current.onShowMore("/dev/belay"));
     expect(result.current.groups[0]?.sessions).toHaveLength(8);
   });
 
   test("archive session calls the archive callback", () => {
     const { result, onArchiveSession } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     act(() => result.current.onArchiveSession("s1"));
     expect(onArchiveSession).toHaveBeenCalledWith("s1");
@@ -180,10 +180,10 @@ describe("useProjectSidebar", () => {
 
   test("archiving removes the row immediately, before the inventory reflects it (optimistic)", () => {
     const { result } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
-        sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" }),
-        sessionSummary({ sessionId: "s2", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" }),
+        sessionSummary({ sessionId: "s2", projectPath: "/dev/belay" }),
       ],
     );
     act(() => result.current.onArchiveSession("s1"));
@@ -193,8 +193,8 @@ describe("useProjectSidebar", () => {
 
   test("a failed archive publish restores the row", async () => {
     const { result } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
       { onArchiveSession: () => Promise.reject(new Error("publish failed")) },
     );
     await act(async () => {
@@ -205,8 +205,8 @@ describe("useProjectSidebar", () => {
 
   test("rename applies the new title immediately and calls the rename callback", () => {
     const { result, onRenameSession } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", title: "old title" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay", title: "old title" })],
     );
     act(() => result.current.onRenameSession("s1", "new title"));
     expect(onRenameSession).toHaveBeenCalledWith("s1", "new title");
@@ -215,8 +215,8 @@ describe("useProjectSidebar", () => {
 
   test("a failed rename publish reverts the title", async () => {
     const { result } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", title: "old title" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay", title: "old title" })],
       { onRenameSession: () => Promise.reject(new Error("publish failed")) },
     );
     await act(async () => {
@@ -226,8 +226,8 @@ describe("useProjectSidebar", () => {
   });
 
   test("a confirmed field releases independently of a still-pending one", () => {
-    const s1 = sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", title: "old title" });
-    const { result, rerender } = renderSidebar([project({ path: "/dev/trevor" })], [s1]);
+    const s1 = sessionSummary({ sessionId: "s1", projectPath: "/dev/belay", title: "old title" });
+    const { result, rerender } = renderSidebar([project({ path: "/dev/belay" })], [s1]);
     // Rename and archive both pending.
     act(() => result.current.onRenameSession("s1", "new title"));
     act(() => result.current.onArchiveSession("s1"));
@@ -256,8 +256,8 @@ describe("useProjectSidebar", () => {
         .mockResolvedValue(undefined),
     };
     const { result } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", title: "old title" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay", title: "old title" })],
       publishes,
     );
     act(() => result.current.onRenameSession("s1", "first"));
@@ -271,8 +271,8 @@ describe("useProjectSidebar", () => {
   });
 
   test("a confirmed archive override drops, so a later unarchive is not masked", () => {
-    const s1 = sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" });
-    const { result, rerender } = renderSidebar([project({ path: "/dev/trevor" })], [s1]);
+    const s1 = sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" });
+    const { result, rerender } = renderSidebar([project({ path: "/dev/belay" })], [s1]);
     act(() => result.current.onArchiveSession("s1"));
     expect(result.current.groups[0]?.sessions).toHaveLength(0);
 
@@ -288,20 +288,20 @@ describe("useProjectSidebar", () => {
 
   test("remove project calls the remove action", () => {
     const { result, onProjectAction } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
-    act(() => result.current.onRemoveProject("/dev/trevor"));
+    act(() => result.current.onRemoveProject("/dev/belay"));
     expect(onProjectAction).toHaveBeenCalledWith({
       type: "remove",
-      path: "/dev/trevor",
+      path: "/dev/belay",
     });
   });
 
   test("add project calls the add action", () => {
     const { result, onProjectAction } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     act(() => result.current.onAddProject());
     expect(onProjectAction).toHaveBeenCalledWith({ type: "add" });
@@ -309,24 +309,24 @@ describe("useProjectSidebar", () => {
 
   test("rename project calls the rename action", () => {
     const { result, onProjectAction } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
-    act(() => result.current.onRenameProject("/dev/trevor", "My Trevor"));
+    act(() => result.current.onRenameProject("/dev/belay", "My Belay"));
     expect(onProjectAction).toHaveBeenCalledWith({
       type: "rename",
-      path: "/dev/trevor",
-      displayName: "My Trevor",
+      path: "/dev/belay",
+      displayName: "My Belay",
     });
   });
 
   test("new session calls the new-session callback with the project key", () => {
     const { result, onNewSession } = renderSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
-    act(() => result.current.onNewSession("/dev/trevor"));
-    expect(onNewSession).toHaveBeenCalledWith("/dev/trevor");
+    act(() => result.current.onNewSession("/dev/belay"));
+    expect(onNewSession).toHaveBeenCalledWith("/dev/belay");
   });
 
   test("transient projects (sessions with no registry record) appear as groups", () => {

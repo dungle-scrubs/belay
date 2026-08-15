@@ -1,5 +1,5 @@
+import type { LoopControl, LoopInventoryRow } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { LoopControl, LoopInventoryRow } from "@trevor/session";
 import { useState } from "react";
 import { LoopInventory } from "./loop-inventory";
 

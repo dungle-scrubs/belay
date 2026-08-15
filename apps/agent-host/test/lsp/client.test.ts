@@ -19,7 +19,7 @@ const WORKSPACE_ROOT = "/tmp/lsp-fixture-workspace";
 
 function clientOptions(overrides: Partial<LspClientOptions> = {}): LspClientOptions {
   return {
-    serverName: "trevor-lsp-fixture",
+    serverName: "belay-lsp-fixture",
     spawn: lspFixtureSpawnSpec(),
     workspaceRoot: WORKSPACE_ROOT,
     requestTimeoutMs: 5_000,
@@ -51,7 +51,7 @@ describe("lsp client - handshake", () => {
   it("initializes: captures server capabilities and reaches initialized", async () => {
     await withClient(clientOptions(), async (client) => {
       const init = await client.initialize();
-      expect(init.serverInfo).toMatchObject({ name: "trevor-lsp-fixture" });
+      expect(init.serverInfo).toMatchObject({ name: "belay-lsp-fixture" });
       expect(client.capabilities()).toMatchObject({ hoverProvider: true });
       expect(client.state()).toMatchObject({ alive: true, initialized: true });
     });
@@ -84,7 +84,7 @@ describe("lsp client - handshake", () => {
 
   it("classifies a command that cannot spawn as a server crash", async () => {
     await withClient(
-      clientOptions({ spawn: { command: "/nonexistent/trevor-lsp-binary", args: [] } }),
+      clientOptions({ spawn: { command: "/nonexistent/belay-lsp-binary", args: [] } }),
       async (client) => {
         await expect(client.initialize()).rejects.toMatchObject({ _tag: "LspServerCrashError" });
         expect(client.state().alive).toBe(false);

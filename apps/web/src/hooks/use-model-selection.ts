@@ -6,7 +6,7 @@ import {
   type ProviderModel,
   type SourceSummary,
   selectModel,
-} from "@trevor/session";
+} from "@belay/session";
 import { useLocalStorageState } from "ahooks";
 import { useCallback, useMemo } from "react";
 import type { ModelPrefsView } from "@/derive";
@@ -22,7 +22,7 @@ import {
  * model + FAVORITES (pinned) are host-owned (plan 51): they arrive on `host.online` (injected as
  * `hostModelPrefs`) and are mutated by the caller sending the host command directly - this hook does not
  * proxy those writes. The pure projection + selection transitions live in `@/model-selection` and
- * `@trevor/session`; this is the React glue.
+ * `@belay/session`; this is the React glue.
  *
  * The ACTIVE model is the persisted `active` ref, falling back to the legacy provider+reasoning
  * selection until the user makes an explicit pick - so the chooser is the source of truth once used,
@@ -30,13 +30,13 @@ import {
  */
 
 /** Per-SESSION model state: the active pick + per-model reasoning (so two open sessions don't fight). */
-const MODEL_PREFS_KEY = "trevor.modelPreferences";
+const MODEL_PREFS_KEY = "belay.modelPreferences";
 /** GLOBAL model library: RECENTS only. Recents are usage state (per browser), so they stay local; the
  *  DEFAULT + FAVORITES moved host-side in plan 51 (durable + shared across every session/browser talking
  *  to the host), so they are no longer written here. A pre-plan-51 blob may still carry stale
  *  pinned/default keys; they are NOT migrated - the host announcement is authoritative and overlays them,
  *  so a stale local value can never shadow the host's. */
-const GLOBAL_PREFS_KEY = "trevor.modelPreferences.global";
+const GLOBAL_PREFS_KEY = "belay.modelPreferences.global";
 
 type GlobalPrefs = Pick<ModelPreferences, "recent">;
 type SessionPrefs = Pick<ModelPreferences, "active" | "reasoningByModel">;

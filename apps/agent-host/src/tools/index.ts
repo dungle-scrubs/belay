@@ -5,12 +5,12 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { READ_ONLY_TOOL_NAMES } from "@belay/session";
 import { lspManager } from "@host/lsp/host-runtime";
 import { mcpRuntime } from "@host/mcp/host-runtime";
 import { supervisor } from "@host/processes/processes";
 import { buildSkillTool, discoverSkills } from "@host/skills/skills";
 import { buildTaskTools } from "@host/tools/tasks/tasks";
-import { READ_ONLY_TOOL_NAMES } from "@trevor/session";
 import { Effect } from "effect";
 import type { ToolDef } from "../providers";
 import { buildToolScriptTool } from "../tool-script/tool";
@@ -19,6 +19,7 @@ import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { astGrepPath } from "./ast-grep-bin";
 import { buildBashTool } from "./bash";
+import { belayExpertTool } from "./belay-expert";
 import { clipboardWriteTool } from "./clipboard";
 import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
@@ -43,7 +44,6 @@ import { skillsListTool } from "./skills-list";
 import { loadSourceRecallConfig } from "./source-recall/config";
 import { createSourceRecallRegistry } from "./source-recall/registry";
 import { buildSourceRecallTools } from "./source-recall/tools";
-import { trevorExpertTool } from "./trevor-expert";
 import type { Tool } from "./types";
 import { videoInspectTool } from "./video-inspect/tool";
 import { webFetchTool } from "./web-fetch/web-fetch";
@@ -78,13 +78,13 @@ const FILE_TOOLS: readonly Tool<any>[] = [
   sessionRecallTool,
   // source_recall / source_index_status / source_index_refresh (plan 38): indexed code search over a
   // prebuilt provider index (source-recall daemon first, Aleutian Trace second), selected from
-  // <TREVOR_HOME>/source-recall.json. The registry NEVER fails - a missing/unreachable backend yields
+  // <BELAY_HOME>/source-recall.json. The registry NEVER fails - a missing/unreachable backend yields
   // a structured "unavailable" result - so an unconfigured provider can't break an ordinary turn.
   ...buildSourceRecallTools(createSourceRecallRegistry(loadSourceRecallConfig())),
   skillsListTool,
   skillViewTool,
   doctorTool,
-  trevorExpertTool,
+  belayExpertTool,
   // migrate_claude_md (plan 26, D-005/D-010): detect legacy CLAUDE.md files and propose migrating each
   // to a sibling AGENTS.md; a required-response serial barrier that blocks the turn and then mutates.
   migrateClaudeTool,
@@ -107,7 +107,7 @@ const FILE_TOOLS: readonly Tool<any>[] = [
     execute: (tool, argsJson, runId, callId) =>
       Effect.runPromise(executeTool(tool, argsJson, runId, callId)),
     cwd: process.cwd(),
-    makeScratchDir: () => mkdtempSync(join(tmpdir(), "trevor-tool-script-")),
+    makeScratchDir: () => mkdtempSync(join(tmpdir(), "belay-tool-script-")),
     cleanupScratchDir: (dir) => {
       try {
         rmSync(dir, { recursive: true, force: true });
@@ -152,7 +152,7 @@ const TOOLS: readonly Tool<any>[] = discoveredSkills.length
 
 /**
  * Names of the tools the loop may run concurrently. The classification is owned by the
- * cross-surface vocabulary in `@trevor/session` (D-031) - the single source both the host
+ * cross-surface vocabulary in `@belay/session` (D-031) - the single source both the host
  * and the web consume - so it can never drift between the two surfaces. A parity test
  * (index.test.ts) cross-checks this shared table against the real `TOOLS` defs, so adding a
  * host tool or flipping its `readOnly` flag without updating the table fails the build. A

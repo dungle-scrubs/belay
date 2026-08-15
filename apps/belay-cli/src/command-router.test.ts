@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type { CatalogSnapshot, TrevorClient } from "@trevor/sdk";
-import type { ArtifactRef, SessionSummary } from "@trevor/session";
+import type { CatalogSnapshot, TrevorClient } from "@belay/sdk";
+import type { ArtifactRef, SessionSummary } from "@belay/session";
 import { test } from "vitest";
 import {
   COMMAND_SPECS,
@@ -79,7 +79,7 @@ function makeDeps(overrides: Partial<CommandRouterDeps> = {}): CommandRouterDeps
       signal: () => {},
       removeHost: () => {},
     },
-    projectName: () => "trevor",
+    projectName: () => "belay",
     ensureHostOnline: async () => ({ sessionId: "s1" }),
     readFile: () => new Uint8Array([1, 2, 3, 4]),
     writeFile: (path, bytes) => {
@@ -121,11 +121,11 @@ test("router returns null for no subcommand and usage for invalid command branch
   assert.equal(await router.runSubcommand(["not-real"]), null);
   assert.equal(
     await router.runSubcommand(["prompt", "s1"]),
-    "usage: trevor prompt <session> <text> [--model source/model] [--reasoning level] [--json] [--timeout ms]",
+    "usage: belay prompt <session> <text> [--model source/model] [--reasoning level] [--json] [--timeout ms]",
   );
   assert.equal(
     await router.runSubcommand(["artifact"]),
-    "usage: trevor artifact put <file> | trevor artifact get <hash> [outfile]",
+    "usage: belay artifact put <file> | belay artifact get <hash> [outfile]",
   );
 });
 
@@ -143,7 +143,7 @@ test("router dispatches lifecycle commands through injected lifecycle IO", async
     }),
   );
 
-  assert.equal(await router.runSubcommand(["list"]), "Sessions for trevor:\nNo sessions.");
+  assert.equal(await router.runSubcommand(["list"]), "Sessions for belay:\nNo sessions.");
   assert.ok((await router.runSubcommand(["archive", "s1"]))?.includes("Archived"));
   assert.deepEqual(archived, { sessionId: "s1", archived: true });
 });

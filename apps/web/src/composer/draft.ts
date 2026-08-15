@@ -1,4 +1,4 @@
-import type { ArtifactRef, PastePayload } from "@trevor/session";
+import type { ArtifactRef, PastePayload } from "@belay/session";
 import {
   type ImageDraft,
   insertImages as insertImageTokens,

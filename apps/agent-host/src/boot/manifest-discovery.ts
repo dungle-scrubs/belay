@@ -53,8 +53,8 @@ export function sortedVisibleEntries(dir: string): string[] {
 /**
  * Recursively collects `.md` files under `dir` (subdirectories included), sorted by path. FAIL-SOFT: a
  * missing, unreadable, or non-directory path (at any level) yields `[]` rather than throwing, so a bad
- * root can never crash a loader that runs at host boot. The shared walker for `.trevor/rules` and
- * `.trevor/commands`.
+ * root can never crash a loader that runs at host boot. The shared walker for `.belay/rules` and
+ * `.belay/commands`.
  */
 export function collectMarkdownFiles(dir: string): string[] {
   let entries: Dirent[];

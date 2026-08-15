@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { events, type SessionEvent, type SessionTransport } from "@belay/session";
+import { recordingTransport, storedEvent } from "@belay/test-kit";
 import type { AgentDefinition } from "@host/subagents/discovery";
-import { events, type SessionEvent, type SessionTransport } from "@trevor/session";
-import { recordingTransport, storedEvent } from "@trevor/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderEvent } from "../providers";
@@ -84,7 +84,7 @@ function context(transport: SessionTransport): DelegationContext {
   return {
     transport,
     parentSessionId: "parent-session",
-    producerId: "trevor-host",
+    producerId: "belay-host",
     mintChildSessionId: () => `child-${n++}`,
   };
 }

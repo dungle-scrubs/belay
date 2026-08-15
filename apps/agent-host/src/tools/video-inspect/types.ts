@@ -6,7 +6,7 @@
  * Not for: extraction (processor.ts), provider continuation (continuation.ts), or the tool
  * envelope (tool.ts).
  */
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 
 /** The single tool name, shared by the host loop, the descriptor table, and the web renderer. */
 export const VIDEO_INSPECT_TOOL_NAME = "video_inspect" as const;

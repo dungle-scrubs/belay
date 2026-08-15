@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { frames, type HostPresence, type StreamEnvelope } from "@trevor/session";
+import { frames, type HostPresence, type StreamEnvelope } from "@belay/session";
 import { test } from "vitest";
 import type { WebSocket } from "ws";
 import { SessionHub } from "./session-hub";

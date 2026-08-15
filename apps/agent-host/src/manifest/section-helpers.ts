@@ -1,4 +1,4 @@
-import type { ManifestItem, SectionBody, SectionProvenance } from "@trevor/session";
+import type { ManifestItem, SectionBody, SectionProvenance } from "@belay/session";
 
 /**
  * Shared section-body helpers (plan 14, M4 REFACTOR). Every section adapter - core (M3) and dynamic (M4) -

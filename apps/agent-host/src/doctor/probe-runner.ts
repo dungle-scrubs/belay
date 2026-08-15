@@ -1,4 +1,4 @@
-import type { DoctorFinding } from "@trevor/session";
+import type { DoctorFinding } from "@belay/session";
 
 /**
  * Bounded `/doctor` probe execution (D-073 M3).

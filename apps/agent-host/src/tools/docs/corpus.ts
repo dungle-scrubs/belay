@@ -11,7 +11,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { idSlug } from "@trevor/session";
+import { idSlug } from "@belay/session";
 
 /**
  * Schema/format version stamped on every persisted corpus and page. A future shape change bumps

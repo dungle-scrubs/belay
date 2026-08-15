@@ -1,4 +1,4 @@
-import type { TaskSnapshot, TaskStatus } from "@trevor/session";
+import type { TaskSnapshot, TaskStatus } from "@belay/session";
 
 /**
  * The compact task-panel display model (plan 09). Pure, React-free helpers that turn the full task

@@ -1,4 +1,4 @@
-import type { TurnStop } from "@trevor/session";
+import type { TurnStop } from "@belay/session";
 
 /**
  * The host-side session-lifecycle operations (D-094 M1/M5): the in-process distinction between

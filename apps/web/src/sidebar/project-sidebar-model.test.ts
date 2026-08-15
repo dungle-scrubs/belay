@@ -1,5 +1,5 @@
-import type { WorktreeSummary } from "@trevor/session";
-import { sessionSummary } from "@trevor/test-kit";
+import type { WorktreeSummary } from "@belay/session";
+import { sessionSummary } from "@belay/test-kit";
 import { describe, expect, test } from "vitest";
 import {
   buildProjectSidebar,
@@ -44,14 +44,14 @@ function sole<T>(groups: readonly T[]): T {
 describe("buildProjectSidebar", () => {
   test("groups sessions under their project by projectPath", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
-        sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" }),
-        sessionSummary({ sessionId: "s2", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" }),
+        sessionSummary({ sessionId: "s2", projectPath: "/dev/belay" }),
       ],
     );
     const group = sole(groups);
-    expect(group.key).toBe("/dev/trevor");
+    expect(group.key).toBe("/dev/belay");
     expect(group.sessions.map((s) => s.summary.sessionId)).toEqual(["s1", "s2"]);
     expect(group.isTransient).toBe(false);
     expect(group.activeCount).toBe(2);
@@ -94,11 +94,11 @@ describe("buildProjectSidebar", () => {
 
   test("archived and deleted sessions are excluded", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
-        sessionSummary({ sessionId: "live", projectPath: "/dev/trevor" }),
-        sessionSummary({ sessionId: "arch", projectPath: "/dev/trevor", archived: true }),
-        sessionSummary({ sessionId: "gone", projectPath: "/dev/trevor", deleted: true }),
+        sessionSummary({ sessionId: "live", projectPath: "/dev/belay" }),
+        sessionSummary({ sessionId: "arch", projectPath: "/dev/belay", archived: true }),
+        sessionSummary({ sessionId: "gone", projectPath: "/dev/belay", deleted: true }),
       ],
     );
     const group = sole(groups);
@@ -107,8 +107,8 @@ describe("buildProjectSidebar", () => {
 
   test("a project with only archived sessions shows as an empty project", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "arch", projectPath: "/dev/trevor", archived: true })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "arch", projectPath: "/dev/belay", archived: true })],
     );
     const group = sole(groups);
     expect(group.sessions).toEqual([]);
@@ -123,10 +123,10 @@ describe("buildProjectSidebar", () => {
       createdAt: "2026-06-01T00:00:00.000Z",
     } as const;
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
-        sessionSummary({ sessionId: "normal", projectPath: "/dev/trevor" }),
-        sessionSummary({ sessionId: "tan", projectPath: "/dev/trevor", tangentOf }),
+        sessionSummary({ sessionId: "normal", projectPath: "/dev/belay" }),
+        sessionSummary({ sessionId: "tan", projectPath: "/dev/belay", tangentOf }),
       ],
     );
     const group = sole(groups);
@@ -169,23 +169,23 @@ describe("buildProjectSidebar", () => {
 
   test("sessions within a project sorted by createdAt descending (newest first)", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "old",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
           createdAt: "2026-06-01T00:00:00.000Z",
           updatedAt: "2026-06-01T00:00:00.000Z",
         }),
         sessionSummary({
           sessionId: "new",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
           createdAt: "2026-06-09T00:00:00.000Z",
           updatedAt: "2026-06-09T00:00:00.000Z",
         }),
         sessionSummary({
           sessionId: "mid",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
           createdAt: "2026-06-05T00:00:00.000Z",
           updatedAt: "2026-06-05T00:00:00.000Z",
         }),
@@ -201,13 +201,13 @@ describe("buildProjectSidebar", () => {
     // `worktree` (newer creation) first regardless of activity churn.
     const base = {
       sessionId: "base",
-      projectPath: "/dev/trevor",
+      projectPath: "/dev/belay",
       createdAt: "2026-06-01T00:00:00.000Z",
       updatedAt: "2026-06-01T00:00:00.000Z",
     };
     const worktree = {
       sessionId: "wt",
-      projectPath: "/dev/trevor",
+      projectPath: "/dev/belay",
       createdAt: "2026-06-09T00:00:00.000Z",
       updatedAt: "2026-06-09T00:00:00.000Z",
     };
@@ -215,7 +215,7 @@ describe("buildProjectSidebar", () => {
     // Initial render.
     const g1 = sole(
       buildProjectSidebar(
-        [project({ path: "/dev/trevor" })],
+        [project({ path: "/dev/belay" })],
         [sessionSummary(base), sessionSummary(worktree)],
       ),
     );
@@ -224,7 +224,7 @@ describe("buildProjectSidebar", () => {
     // `base` now has newer activity than `wt` (e.g. its host re-announced). The order must NOT flip.
     const g2 = sole(
       buildProjectSidebar(
-        [project({ path: "/dev/trevor" })],
+        [project({ path: "/dev/belay" })],
         [
           sessionSummary({ ...base, updatedAt: "2026-07-01T00:00:00.000Z" }),
           sessionSummary(worktree),
@@ -236,11 +236,11 @@ describe("buildProjectSidebar", () => {
 
   test("updatedAt is the max of registry updatedAt and session updatedAt", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor", updatedAt: "2026-06-10T00:00:00.000Z" })],
+      [project({ path: "/dev/belay", updatedAt: "2026-06-10T00:00:00.000Z" })],
       [
         sessionSummary({
           sessionId: "s1",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
           updatedAt: "2026-06-05T00:00:00.000Z",
         }),
       ],
@@ -251,8 +251,8 @@ describe("buildProjectSidebar", () => {
 
   test("collapsed state comes from the registry record", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor", collapsed: true })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay", collapsed: true })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     const group = sole(groups);
     expect(group.collapsed).toBe(true);
@@ -261,25 +261,25 @@ describe("buildProjectSidebar", () => {
   test("duplicate basenames: both projects appear, each with its full displayPath", () => {
     const groups = buildProjectSidebar(
       [
-        project({ path: "/work/trevor", displayPath: "/work/trevor" }),
-        project({ path: "/home/trevor", displayPath: "/home/trevor" }),
+        project({ path: "/work/belay", displayPath: "/work/belay" }),
+        project({ path: "/home/belay", displayPath: "/home/belay" }),
       ],
       [
-        sessionSummary({ sessionId: "s1", projectPath: "/work/trevor" }),
-        sessionSummary({ sessionId: "s2", projectPath: "/home/trevor" }),
+        sessionSummary({ sessionId: "s1", projectPath: "/work/belay" }),
+        sessionSummary({ sessionId: "s2", projectPath: "/home/belay" }),
       ],
     );
     expect(groups).toHaveLength(2);
     const names = groups.map((g) => g.displayName);
-    expect(names).toEqual(["trevor", "trevor"]);
+    expect(names).toEqual(["belay", "belay"]);
     const paths = groups.map((g) => g.displayPath).sort();
-    expect(paths).toEqual(["/home/trevor", "/work/trevor"]);
+    expect(paths).toEqual(["/home/belay", "/work/belay"]);
   });
 
   test("displayName from a user-renamed registry record is preserved", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor", displayName: "My Project" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay", displayName: "My Project" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     const group = sole(groups);
     expect(group.displayName).toBe("My Project");
@@ -292,17 +292,17 @@ describe("buildProjectSidebar", () => {
 
 describe("filterProjectSidebar", () => {
   const baseGroups = buildProjectSidebar(
-    [project({ path: "/dev/trevor" }), project({ path: "/dev/other" })],
+    [project({ path: "/dev/belay" }), project({ path: "/dev/other" })],
     [
-      sessionSummary({ sessionId: "s1", title: "fix the lease", projectPath: "/dev/trevor" }),
-      sessionSummary({ sessionId: "s2", title: "unrelated work", projectPath: "/dev/trevor" }),
+      sessionSummary({ sessionId: "s1", title: "fix the lease", projectPath: "/dev/belay" }),
+      sessionSummary({ sessionId: "s2", title: "unrelated work", projectPath: "/dev/belay" }),
       sessionSummary({ sessionId: "s3", title: "build sidebar", projectPath: "/dev/other" }),
     ],
   );
 
   test("filters by project name (case-insensitive)", () => {
-    const filtered = filterProjectSidebar(baseGroups, "trevor");
-    expect(filtered.map((g) => g.key)).toEqual(["/dev/trevor"]);
+    const filtered = filterProjectSidebar(baseGroups, "belay");
+    expect(filtered.map((g) => g.key)).toEqual(["/dev/belay"]);
   });
 
   test("filters by project path", () => {
@@ -313,14 +313,14 @@ describe("filterProjectSidebar", () => {
   test("filters by session title", () => {
     const filtered = filterProjectSidebar(baseGroups, "lease");
     expect(filtered).toHaveLength(1);
-    expect(filtered[0]?.key).toBe("/dev/trevor");
+    expect(filtered[0]?.key).toBe("/dev/belay");
     expect(filtered[0]?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1"]);
   });
 
   test("auto-expands matching projects (sets collapsed false without mutating source)", () => {
     const collapsedGroups = buildProjectSidebar(
-      [project({ path: "/dev/trevor", collapsed: true })],
-      [sessionSummary({ sessionId: "s1", title: "sidebar work", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay", collapsed: true })],
+      [sessionSummary({ sessionId: "s1", title: "sidebar work", projectPath: "/dev/belay" })],
     );
     expect(collapsedGroups[0]?.collapsed).toBe(true);
     const filtered = filterProjectSidebar(collapsedGroups, "sidebar");
@@ -335,8 +335,8 @@ describe("filterProjectSidebar", () => {
   });
 
   test("returns only groups with a matching session OR a matching project name/path", () => {
-    const filtered = filterProjectSidebar(baseGroups, "trevor");
-    // /dev/trevor matches by name; its sessions are not filtered out because the project matched
+    const filtered = filterProjectSidebar(baseGroups, "belay");
+    // /dev/belay matches by name; its sessions are not filtered out because the project matched
     expect(filtered[0]?.sessions.map((s) => s.summary.sessionId)).toEqual(["s1", "s2"]);
   });
 
@@ -362,10 +362,10 @@ describe("filterProjectSidebar", () => {
 function wt(over: Partial<WorktreeSummary> & { sessionId: string }): WorktreeSummary {
   return {
     id: over.id ?? over.sessionId,
-    baseRepo: "/dev/trevor",
-    baseRepoName: "trevor",
+    baseRepo: "/dev/belay",
+    baseRepoName: "belay",
     branch: "feat/x",
-    path: "~/dev/.worktrees/trevor/feat-x",
+    path: "~/dev/.worktrees/belay/feat-x",
     dirty: false,
     ahead: 0,
     behind: 0,
@@ -382,25 +382,25 @@ describe("plan 58.2 worktree session join", () => {
   test("a worktree session with projectPath equal to the base repo groups under the base project offline", () => {
     // No host online = no worktrees snapshot. Grouping still uses the durable projectPath.
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "wt-s1",
-          projectPath: "/dev/trevor",
-          workspace: "/Users/kevin/dev/.worktrees/trevor/feat-x",
-          cwd: "/Users/kevin/dev/.worktrees/trevor/feat-x",
+          projectPath: "/dev/belay",
+          workspace: "/Users/kevin/dev/.worktrees/belay/feat-x",
+          cwd: "/Users/kevin/dev/.worktrees/belay/feat-x",
         }),
       ],
     );
     const group = sole(groups);
-    expect(group.key).toBe("/dev/trevor");
+    expect(group.key).toBe("/dev/belay");
     expect(group.sessions.map((s) => s.summary.sessionId)).toEqual(["wt-s1"]);
     expect(group.sessions[0]?.worktree).toBeNull();
   });
 
   test("buildWorktreeSessionMap keys on sessionId and excludes baseline === true", () => {
     const map = buildWorktreeSessionMap([
-      wt({ sessionId: "baseline", baseline: true, branch: "main", path: "/dev/trevor" }),
+      wt({ sessionId: "baseline", baseline: true, branch: "main", path: "/dev/belay" }),
       wt({ sessionId: "wt-s1", baseline: false }),
     ]);
     expect(map.has("baseline")).toBe(false);
@@ -410,15 +410,15 @@ describe("plan 58.2 worktree session join", () => {
 
   test("no path inference: worktree-looking paths get no badge when sessionId is absent from the snapshot", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "orphan-looking",
-          projectPath: "/dev/trevor",
-          workspace: "/Users/kevin/dev/.worktrees/trevor/orphan",
-          cwd: "/Users/kevin/dev/.worktrees/trevor/orphan",
+          projectPath: "/dev/belay",
+          workspace: "/Users/kevin/dev/.worktrees/belay/orphan",
+          cwd: "/Users/kevin/dev/.worktrees/belay/orphan",
         }),
-        sessionSummary({ sessionId: "wt-s1", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "wt-s1", projectPath: "/dev/belay" }),
       ],
       [
         // Snapshot only knows about wt-s1; orphan-looking is not in it.
@@ -435,17 +435,17 @@ describe("plan 58.2 worktree session join", () => {
 
   test("current-host-scoped snapshot badges only listed sessionIds, not an all-project index", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" }), project({ path: "/dev/other" })],
+      [project({ path: "/dev/belay" }), project({ path: "/dev/other" })],
       [
-        sessionSummary({ sessionId: "trevor-wt", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "belay-wt", projectPath: "/dev/belay" }),
         sessionSummary({ sessionId: "other-wt", projectPath: "/dev/other" }),
       ],
-      // Only the currently viewed host (trevor) announced a worktree.
-      [wt({ sessionId: "trevor-wt" })],
+      // Only the currently viewed host (belay) announced a worktree.
+      [wt({ sessionId: "belay-wt" })],
     );
-    const trevor = groups.find((g) => g.key === "/dev/trevor");
+    const belay = groups.find((g) => g.key === "/dev/belay");
     const other = groups.find((g) => g.key === "/dev/other");
-    expect(trevor?.sessions[0]?.worktree?.sessionId).toBe("trevor-wt");
+    expect(belay?.sessions[0]?.worktree?.sessionId).toBe("belay-wt");
     expect(other?.sessions[0]?.worktree).toBeNull();
   });
 });
@@ -455,14 +455,14 @@ describe("plan 58.7 durable worktree badge (survives a view switch)", () => {
     // No worktrees argument at all (e.g. a different session is viewed). The durable marker alone
     // drives the badge - this is the core fix for the vanishing-badge bug.
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "wt-s1",
-          projectPath: "/dev/trevor",
-          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+          projectPath: "/dev/belay",
+          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/belay/feat-x" },
         }),
-        sessionSummary({ sessionId: "plain", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "plain", projectPath: "/dev/belay" }),
       ],
     );
     const group = sole(groups);
@@ -480,12 +480,12 @@ describe("plan 58.7 durable worktree badge (survives a view switch)", () => {
       ahead: 3,
     });
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "wt-s1",
-          projectPath: "/dev/trevor",
-          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+          projectPath: "/dev/belay",
+          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/belay/feat-x" },
         }),
       ],
       [liveSnapshot],
@@ -500,12 +500,12 @@ describe("plan 58.7 durable worktree badge (survives a view switch)", () => {
     // The worktree's own host is NOT the viewed session, so no live snapshot enriches it. The
     // badge still renders (from the durable marker) with clean/zero defaults for git state.
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "wt-s1",
-          projectPath: "/dev/trevor",
-          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+          projectPath: "/dev/belay",
+          worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/belay/feat-x" },
         }),
       ],
       // A snapshot for a DIFFERENT session, not wt-s1.

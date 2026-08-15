@@ -1,4 +1,4 @@
-import type { ArtifactRef, LucidFeedbackBatch, LucidReviewState } from "@trevor/session";
+import type { ArtifactRef, LucidFeedbackBatch, LucidReviewState } from "@belay/session";
 import { useMemoizedFn } from "ahooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { artifactSrc } from "@/blob";

@@ -1,4 +1,4 @@
-import type { ConnectSessionOptions, SessionConnection } from "@trevor/session";
+import type { ConnectSessionOptions, SessionConnection } from "@belay/session";
 import type { TrevorClient } from "./client";
 
 /**

@@ -1,4 +1,4 @@
-import { errorMessage, type PermanentDeleteResult } from "@trevor/session";
+import { errorMessage, type PermanentDeleteResult } from "@belay/session";
 import { useCallback, useState } from "react";
 import type { RowActionState } from "./archive-browser";
 

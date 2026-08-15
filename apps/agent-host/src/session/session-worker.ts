@@ -1,3 +1,17 @@
+import {
+  type ConnectionStatus,
+  decodeTrevorEvent,
+  hostIdentity,
+  inputEstimateTokens,
+  isAnswerableProducer,
+  type SessionConnection,
+  type SessionEvent,
+  type SessionTransport,
+  type TrevorEventInput,
+  toPublishInput,
+} from "@belay/session";
+import type { TelemetrySink } from "@belay/session/telemetry";
+import type { ProviderTraceWriter } from "@belay/session/telemetry-provider-trace";
 import { ActiveRun } from "@host/agent/active-run";
 import { CompactionController } from "@host/agent/compaction-controller";
 import { ConversationLog } from "@host/agent/conversation-log";
@@ -13,20 +27,6 @@ import type { HostResidency } from "@host/residency/host";
 import type { Lease } from "@host/session/lease";
 import { log } from "@host/transport/log";
 import { emitLiveLayer } from "@host/transport/services";
-import {
-  type ConnectionStatus,
-  decodeTrevorEvent,
-  hostIdentity,
-  inputEstimateTokens,
-  isAnswerableProducer,
-  type SessionConnection,
-  type SessionEvent,
-  type SessionTransport,
-  type TrevorEventInput,
-  toPublishInput,
-} from "@trevor/session";
-import type { TelemetrySink } from "@trevor/session/telemetry";
-import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 
 /**
  * A per-session host worker owns one session's replay/live stream, prompt log, scheduler,

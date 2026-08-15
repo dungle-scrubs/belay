@@ -95,7 +95,7 @@ flowchart LR
 const THINKING = `The user wants a short sample plan. Keep it to a numbered list,
 show a fenced code block so markdown rendering is visible, and link out once.`;
 
-const DOCTOR = `workspace: ~/dev/trevor/apps/agent-host
+const DOCTOR = `workspace: ~/dev/belay/apps/agent-host
 host: 1d8e680d (leader)
 
 providers:

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import type { DoctorSnapshot } from "@belay/session";
+import { doctorArea, doctorSnapshot } from "@belay/test-kit";
 import { render } from "@testing-library/react";
-import type { DoctorSnapshot } from "@trevor/session";
-import { doctorArea, doctorSnapshot } from "@trevor/test-kit";
 import { test } from "vitest";
 import { DoctorResult } from "./doctor-result";
 
@@ -47,12 +47,12 @@ test("a legacy text dump falls back to the plain command-result row", () => {
   const { container } = render(
     <DoctorResult
       command="/doctor"
-      text={"workspace: ~/dev/trevor\nproviders:\n  qwen - warm"}
+      text={"workspace: ~/dev/belay\nproviders:\n  qwen - warm"}
       ok
     />,
   );
   assert.ok(
-    (container.textContent ?? "").includes("workspace: ~/dev/trevor"),
+    (container.textContent ?? "").includes("workspace: ~/dev/belay"),
     "the text dump shows verbatim",
   );
 });

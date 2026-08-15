@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { SUPERVISOR_SESSION_ID, events as sessionEvents } from "@belay/session";
+import { recordingTransport, storedEvent } from "@belay/test-kit";
 import { act, renderHook } from "@testing-library/react";
-import { SUPERVISOR_SESSION_ID, events as sessionEvents } from "@trevor/session";
-import { recordingTransport, storedEvent } from "@trevor/test-kit";
 import { afterEach, test, vi } from "vitest";
 import { TAIL_FLUSH_MS } from "@/session/use-session";
 import { useSidebarSupervisor } from "./use-sidebar-supervisor";

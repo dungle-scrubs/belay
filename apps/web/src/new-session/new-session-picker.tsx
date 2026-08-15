@@ -1,4 +1,4 @@
-import { relativeTime, type SupervisorProject } from "@trevor/session";
+import { relativeTime, type SupervisorProject } from "@belay/session";
 import { Folder, FolderSearch, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";

@@ -22,7 +22,7 @@ test("wraps markdown tables in a horizontal scroll container", () => {
     />,
   );
 
-  const tableScroll = container.querySelector(".trevor-md-table-scroll");
+  const tableScroll = container.querySelector(".belay-md-table-scroll");
   assert.ok(tableScroll);
   assert.ok(tableScroll.querySelector("table"));
   assert.equal(screen.getByText("Severity").tagName, "TH");
@@ -96,7 +96,7 @@ test("keeps GFM tables, links, and ordinary code rendering across Mermaid splits
     screen.getByRole("link", { name: "docs" }).getAttribute("href"),
     "https://example.com",
   );
-  assert.ok(container.querySelector(".trevor-md-table-scroll table"));
+  assert.ok(container.querySelector(".belay-md-table-scroll table"));
   const shCode = container.querySelector("pre code.language-sh");
   assert.ok(shCode);
   // The shell block is now syntax-highlighted, so its text is split across token spans; the block's

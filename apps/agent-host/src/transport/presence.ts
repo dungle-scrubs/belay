@@ -1,3 +1,4 @@
+import { events, type GitStatus, gitRefLabel } from "@belay/session";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import type { CommandRegistry } from "@host/commands/commands";
 import { debugCommandSpecs } from "@host/commands/debug-commands";
@@ -10,7 +11,6 @@ import { DEFAULT_PROVIDER, type ProviderRegistry } from "@host/providers/index";
 import { describeAgent, discoverAgents } from "@host/subagents/discovery";
 import { nodeGitRunner, readGitStatus } from "@host/worktrees/git-status";
 import type { WorktreeManager } from "@host/worktrees/manager";
-import { events, type GitStatus, gitRefLabel } from "@trevor/session";
 import type { EmitEvent } from "./services";
 
 /**
@@ -33,7 +33,7 @@ export interface PresenceDeps {
   readonly commands: Pick<CommandRegistry, "specs">;
   /** The runtime debug flag (main.ts's mutable `debugMode`): adds the debug command set. */
   debugMode(): boolean;
-  /** The Trevor-managed worktree manager (D-091): the base repo's switcher rows. */
+  /** The Belay-managed worktree manager (D-091): the base repo's switcher rows. */
   readonly worktrees: Pick<WorktreeManager, "summaries">;
   /** The internet monitor (D-060): the latest snapshot rides every announcement. */
   readonly internet: Pick<InternetMonitor, "current">;

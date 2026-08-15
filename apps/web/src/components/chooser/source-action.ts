@@ -1,4 +1,4 @@
-import type { SourceAction } from "@trevor/session";
+import type { SourceAction } from "@belay/session";
 
 /**
  * Maps a host-owned {@link SourceAction} to the ONE App-level effect it triggers (53 D-003). The

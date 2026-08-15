@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { PermanentDeleteResult } from "@belay/session";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type { PermanentDeleteResult } from "@trevor/session";
 import { test } from "vitest";
 import { useArchiveActions } from "./use-archive-actions";
 

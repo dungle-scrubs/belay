@@ -12,7 +12,7 @@ export function byRecency(a: SessionSummary, b: SessionSummary): number {
 /**
  * The non-archived sessions (D-094): the default view for the sidebar, resume chooser, and
  * current-project navigation. Archived sessions remain in the durable store but are filtered out
- * here unless a caller explicitly wants them (e.g. an archive browser or `trevor list --archived`).
+ * here unless a caller explicitly wants them (e.g. an archive browser or `belay list --archived`).
  * Tangents (plan 37) are also excluded: they are scoped side threads reached from their PARENT
  * session (see {@link tangentsOf}), never surfaced in ordinary top-level navigation.
  */
@@ -53,7 +53,7 @@ export function tangentsOf(
     .sort(byRecency);
 }
 
-/** The archived (not deleted) sessions only (for an explicit archive filter / `trevor list --archived`). */
+/** The archived (not deleted) sessions only (for an explicit archive filter / `belay list --archived`). */
 export function archivedSessions(summaries: readonly SessionSummary[]): SessionSummary[] {
   return summaries.filter((s) => s.archived && !s.deleted);
 }

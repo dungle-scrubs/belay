@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { resolveTrevorStateHome } from "@trevor/session/node-paths";
+import { resolveTrevorStateHome } from "@belay/session/node-paths";
 
 export const DEFAULT_VIRTUALIZATION_PERFORMANCE_ARTIFACT_ROOT = join(
   resolveTrevorStateHome(),

@@ -1,5 +1,5 @@
+import { isContextOverflowText } from "@belay/session";
 import { isContextOverflow as piAiIsContextOverflow } from "@earendil-works/pi-ai/compat";
-import { isContextOverflowText } from "@trevor/session";
 import type { ProviderFailureClass } from "./failure-taxonomy";
 
 /**
@@ -41,7 +41,7 @@ export function isContextOverflow(detail: string): boolean {
 }
 
 /**
- * Classes Trevor may auto-retry for the current step before any output has streamed. Every other
+ * Classes Belay may auto-retry for the current step before any output has streamed. Every other
  * class - auth, overflow, quota, model/runtime unavailable, request rejected, unknown - is terminal
  * for the outage-retry path and surfaces its own actionable failure instead.
  */

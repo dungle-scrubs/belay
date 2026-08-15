@@ -158,8 +158,8 @@ describe("tool_script bridge SYMLINK confinement (M4 hardening)", () => {
   let outside: string;
 
   beforeAll(() => {
-    workspace = mkdtempSync(join(tmpdir(), "trevor-ts-ws-"));
-    outside = mkdtempSync(join(tmpdir(), "trevor-ts-secret-"));
+    workspace = mkdtempSync(join(tmpdir(), "belay-ts-ws-"));
+    outside = mkdtempSync(join(tmpdir(), "belay-ts-secret-"));
     writeFileSync(join(outside, "id_rsa"), "TOP SECRET KEY");
     mkdirSync(join(workspace, "src"));
     writeFileSync(join(workspace, "src", "a.ts"), "export const a = 1;");

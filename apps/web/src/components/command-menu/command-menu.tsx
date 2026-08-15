@@ -1,4 +1,4 @@
-import { type CommandMenuPayload, type CommandMenuRow, isSubmenu } from "@trevor/session";
+import { type CommandMenuPayload, type CommandMenuRow, isSubmenu } from "@belay/session";
 import { ArrowLeft, Check, ChevronRight, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";

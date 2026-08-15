@@ -1,4 +1,4 @@
-import type { ManifestScope } from "@trevor/session";
+import type { ManifestScope } from "@belay/session";
 
 /**
  * Scope policy shared by every manifest section adapter (plan 14, M3). The manifest scope decides how

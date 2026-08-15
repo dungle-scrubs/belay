@@ -13,7 +13,7 @@ import { afterAll, test } from "vitest";
  * scripts/verify-tools.ts.
  */
 
-const ws = mkdtempSync(join(tmpdir(), "trevor-ws-"));
+const ws = mkdtempSync(join(tmpdir(), "belay-ws-"));
 const prevCwd = process.cwd();
 const prevWorkspace = process.env.TREVOR_WORKSPACE;
 process.env.TREVOR_WORKSPACE = ws;

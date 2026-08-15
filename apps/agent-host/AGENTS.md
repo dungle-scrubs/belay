@@ -92,7 +92,7 @@ hot-apply source edits. After changing host code (anything the host imports unde
 **restart the host** for the change to take effect. The durable event log survives a
 restart, so the session continues from where it was; only the code is reloaded. There is no
 in-app restart control - stop and relaunch the process yourself
-(`pnpm --filter @trevor/agent-host start:op`, or whatever dev runner you use). `tsx watch`
+(`pnpm --filter @belay/agent-host start:op`, or whatever dev runner you use). `tsx watch`
 restarts on a file change but not on a clean exit, so don't rely on a self-exit to relaunch.
 
 Run **exactly one** host against a session. Multiple host processes contend for the same

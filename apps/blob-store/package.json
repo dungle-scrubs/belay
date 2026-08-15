@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/blob-store",
+  "name": "@belay/blob-store",
   "private": true,
   "type": "module",
   "exports": {
@@ -11,11 +11,11 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/server-kit": "workspace:*",
-    "@trevor/session": "workspace:*"
+    "@belay/server-kit": "workspace:*",
+    "@belay/session": "workspace:*"
   },
   "devDependencies": {
-    "@trevor/test-kit": "workspace:*",
+    "@belay/test-kit": "workspace:*",
     "@types/node": "^26.0.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3"

@@ -1,5 +1,5 @@
+import type { TaskSnapshot, TaskStatus } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { TaskSnapshot, TaskStatus } from "@trevor/session";
 import { TasksPanel } from "./tasks-panel";
 
 /**

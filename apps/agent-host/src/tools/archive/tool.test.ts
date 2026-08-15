@@ -9,7 +9,7 @@ import { deflatedZip, storedZip, tinyPng } from "./test-zip";
 import { buildArchiveReadTool, runArchiveRead, runArchiveUnpack } from "./tool";
 
 test("archive_read inspects local zip paths without using fetch", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "trevor-archive-read-"));
+  const dir = await mkdtemp(join(tmpdir(), "belay-archive-read-"));
   try {
     const archivePath = join(dir, "evidence.zip");
     await writeFile(archivePath, storedZip([{ name: "logs/app.txt", content: "local hello" }]));
@@ -62,7 +62,7 @@ test("archive_read supports remote public URL reads and rejects private URL reso
 });
 
 test("archive_read returns deflated entries, image metadata, and preview-budget warnings", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "trevor-archive-processors-"));
+  const dir = await mkdtemp(join(tmpdir(), "belay-archive-processors-"));
   try {
     const archivePath = join(dir, "mixed.zip");
     await writeFile(
@@ -96,7 +96,7 @@ test("archive_read returns deflated entries, image metadata, and preview-budget 
 });
 
 test("archive_unpack extracts selected entries into an explicit destination and rejects unsafe entries", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "trevor-archive-unpack-"));
+  const dir = await mkdtemp(join(tmpdir(), "belay-archive-unpack-"));
   try {
     const archivePath = join(dir, "evidence.zip");
     const destination = join(dir, "out");
@@ -133,7 +133,7 @@ test("archive_unpack extracts selected entries into an explicit destination and 
 });
 
 test("archive_read summarizes a video entry as a manifest, leaving frame extraction to video_inspect (plan 39 M6)", async () => {
-  const dir = await mkdtemp(join(tmpdir(), "trevor-archive-video-"));
+  const dir = await mkdtemp(join(tmpdir(), "belay-archive-video-"));
   try {
     // A zip carrying a video entry: archive owns the safe manifest/validation, but it never shells
     // out to ffmpeg. The video is summarized (manifest), so direct video_inspect stays the sole

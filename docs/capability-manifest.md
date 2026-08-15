@@ -1,13 +1,13 @@
-# Capability Manifest, `trevor-export`, and `trevor-expert`
+# Capability Manifest, `belay-export`, and `belay-expert`
 
-Trevor generates a **capability manifest** - a structured, versioned answer to "what can this host do?" -
+Belay generates a **capability manifest** - a structured, versioned answer to "what can this host do?" -
 from its **live registries** (tools, commands, command families, output styles, skills, agents, MCP/LSP/
 hooks/docs runtimes, Doctor areas, the model provider/catalog, runtime, protocol, and workspace). It is
 **derived, never handwritten**: changing a registry changes the manifest. The manifest **describes**
 capabilities; it never **grants** them - it is not a permission system.
 
-- **`/trevor-export`** is the host-owned export command/API for humans, clients, and subagents.
-- **`trevor_expert`** is a built-in, read-only tool that answers questions about Trevor from the manifest.
+- **`/belay-export`** is the host-owned export command/API for humans, clients, and subagents.
+- **`belay_expert`** is a built-in, read-only tool that answers questions about Belay from the manifest.
 
 ## Scopes
 
@@ -20,14 +20,14 @@ same shape at different scopes, so the prompt view can never drift from the huma
 | `client` | a UI / API client | same as human |
 | `compact` | a token-budgeted prompt block | usable capabilities only, capped, with discovery pointers |
 | `subagent` | a spawned agent's context | scoped compact slice |
-| `expert` | the built-in `trevor_expert` | scoped slice loaded on demand |
+| `expert` | the built-in `belay_expert` | scoped slice loaded on demand |
 
 The full (`human`/`client`) manifest is **export-only** and is never injected into a turn.
 
-## `/trevor-export`
+## `/belay-export`
 
 ```
-/trevor-export [--json] [--compact | --expert] [--section <id>] [--scope <scope>]
+/belay-export [--json] [--compact | --expert] [--section <id>] [--scope <scope>]
 ```
 
 | Flag | Effect |
@@ -56,7 +56,7 @@ A subsystem with no live backend (MCP/LSP/hooks/docs until their runtimes land) 
   "scope": "human",
   "generatedAt": "2026-07-01T00:00:00.000Z",
   "host": { "version": "2.0.0" },
-  "workspace": { "root": "trevor" },      // collapsed label, never an absolute path
+  "workspace": { "root": "belay" },      // collapsed label, never an absolute path
   "truncated": false,
   "sections": [
     {
@@ -72,10 +72,10 @@ A subsystem with no live backend (MCP/LSP/hooks/docs until their runtimes land) 
 }
 ```
 
-Decode it defensively with `decodeCapabilityManifest` from `@trevor/session` - it drops unknown-id
+Decode it defensively with `decodeCapabilityManifest` from `@belay/session` - it drops unknown-id
 sections and scrubs items to descriptive-only (no field carries executable authority).
 
-## `trevor_expert`
+## `belay_expert`
 
 A built-in, **read-only** model-facing tool. Its tool definition is the discovery metadata (the model
 sees it exists and when to use it); the manifest is loaded **only when it is called**, never dumped into
@@ -87,7 +87,7 @@ tool/command authority.
 ## Interpolation boundary
 
 General `!command` interpolation inside skill/command files is a **separate feature, disabled by default**.
-It is enabled only by an explicit opt-in (`TREVOR_ENABLE_INTERPOLATION=1`); even then the only sanctioned
-interpolation target is the read-only `/trevor-export`, and interpolated output is allow-listed, capped,
-timed out, run at the workspace root, and redacted. The built-in `trevor_expert` reads the manifest through
+It is enabled only by an explicit opt-in (`BELAY_ENABLE_INTERPOLATION=1`); even then the only sanctioned
+interpolation target is the read-only `/belay-export`, and interpolated output is allow-listed, capped,
+timed out, run at the workspace root, and redacted. The built-in `belay_expert` reads the manifest through
 its own direct path and works **regardless** of this gate.

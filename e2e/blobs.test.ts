@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type BootedBlob, bootBlob } from "@trevor/test-kit/boot";
+import { type BootedBlob, bootBlob } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**

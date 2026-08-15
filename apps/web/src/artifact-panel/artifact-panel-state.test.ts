@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { test } from "vitest";
 import {
   ARTIFACT_PANEL_WIDTH,

@@ -1,7 +1,7 @@
-# @trevor/sdk - Agent Instructions
+# @belay/sdk - Agent Instructions
 
-`@trevor/sdk` is the ergonomic, browser-safe **headless workflow layer above `@trevor/session`** (plan
-28). It productizes non-web access to Trevor for automation, scripts, evals, and other TypeScript
+`@belay/sdk` is the ergonomic, browser-safe **headless workflow layer above `@belay/session`** (plan
+28). It productizes non-web access to Belay for automation, scripts, evals, and other TypeScript
 consumers: bind a client to a backend by URL, then read the inventory/transcript, prompt/stream/cancel a
 turn, switch the model mid-turn, upload/download artifacts, read capabilities/doctor, and run session
 lifecycle.
@@ -9,17 +9,17 @@ lifecycle.
 ## Boundaries (do not cross)
 
 - **The SDK does not run the CLI.** It talks to the session-store / Tether / blob-store through the
-  `@trevor/session` protocol only, never by shelling out (D-002). No import of `@trevor/cli`.
-- **The SDK is not a second protocol package.** It imports `@trevor/session` primitives
+  `@belay/session` protocol only, never by shelling out (D-002). No import of `@belay/cli`.
+- **The SDK is not a second protocol package.** It imports `@belay/session` primitives
   (`SessionTransport`, `events`, decoders, `streamTransport`, blob client) rather than re-deriving event
-  or session types (D-001). If you need a wire type, import it from `@trevor/session`.
+  or session types (D-001). If you need a wire type, import it from `@belay/session`.
 - **The SDK does not recreate the web UI.** It exposes data and operations (transcript projection,
   workflows), not visual surfaces like the artifact panel or model chooser (they stay web-owned).
 - **Backend selection is URL-based.** A local session-store and a Tether service speak the identical
   `/sessions` wire, so the choice is just the URL passed to `createTrevorClient`. There is no
-  `@trevor/tether` adapter package (D-004).
+  `@belay/tether` adapter package (D-004).
 - **Local process orchestration is NOT here.** Starting services, spawning/reusing hosts, opening the
-  browser, and OS signals (stop/kill) live in `apps/trevor-cli`, not in this browser-safe core (D-003).
+  browser, and OS signals (stop/kill) live in `apps/belay-cli`, not in this browser-safe core (D-003).
   The SDK owns protocol-safe operations only: `cancel` (a `user.cancel` control event) is here;
   `stop`/`kill` (process signals) are not.
 - **No hidden `ask()` shortcut.** Prompting is session-oriented: submit a prompt and stream the turn
@@ -49,9 +49,9 @@ consumers (automation, evals, the CLI, harnesses) and is covered by the package-
   (`DEFAULT_SDK_PRODUCER_ID`, `SDK_DISPLAY_NAME`, `sdkIdentity`).
 - **Internal (not exported from the barrel):** the per-workflow module internals that only the
   `TrevorClient` composes, and `errors.ts` helpers `withSdkError` / `urlClass` (used by the client and
-  workflows, not part of the consumer contract). Import wire types from `@trevor/session`, not from here.
+  workflows, not part of the consumer contract). Import wire types from `@belay/session`, not from here.
 
-Consumers that drive Trevor end-to-end (the eval/automation harness, the headless CLI) build ONLY on
+Consumers that drive Belay end-to-end (the eval/automation harness, the headless CLI) build ONLY on
 this barrel and the session protocol - one protocol, three consumers (SDK, CLI, test-kit/harness), all
 covered by e2e (`e2e/cli-headless.test.ts`, `e2e/eval-harness.test.ts`).
 
@@ -59,8 +59,8 @@ covered by e2e (`e2e/cli-headless.test.ts`, `e2e/eval-harness.test.ts`).
 
 Unit tests are co-located (`src/*.test.ts`) and drive an in-memory recording transport; integration
 tests (`test/*.test.ts`) boot a real session-store / blob-store on ephemeral ports via
-`@trevor/test-kit/boot`. See the repo-root `AGENTS.md` "Testing" section.
+`@belay/test-kit/boot`. See the repo-root `AGENTS.md` "Testing" section.
 
 The eval/automation harness (M10) lives in `apps/agent-host/test/support` (re-exported via
-`@trevor/agent-host/testing`), because attaching a fake-provider host needs the host's turn pipeline;
+`@belay/agent-host/testing`), because attaching a fake-provider host needs the host's turn pipeline;
 test-kit stays test-only and never depends on the host (`packages/test-kit/test/boundary.test.ts`).

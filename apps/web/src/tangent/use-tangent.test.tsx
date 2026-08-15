@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import type { PublishInput, TangentAnchorSeed } from "@belay/session";
+import { recordingTransport, sessionSummary } from "@belay/test-kit";
 import { act, renderHook, waitFor } from "@testing-library/react";
-import type { PublishInput, TangentAnchorSeed } from "@trevor/session";
-import { recordingTransport, sessionSummary } from "@trevor/test-kit";
 import { test, vi } from "vitest";
 import { createTangentSessionWith } from "@/session/use-session";
 import { useTangent } from "./use-tangent";
@@ -31,7 +31,7 @@ test("createTangentSessionWith ensures a fresh tangent and publishes marker befo
   const published = rec.publishedBy(tangentSessionId);
   assert.equal(published.length, 1, "exactly one tangent seed event - the marker, no parent copy");
   assert.equal(published[0]?.type, "session.tangentOf");
-  assert.equal(published[0]?.producerId, "trevor-web");
+  assert.equal(published[0]?.producerId, "belay-web");
   assert.deepEqual(published[0]?.payload, {
     parentSessionId: "parent",
     sourceMessageId: "parent-e2",

@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_SCRIPT_BUDGETS } from "@trevor/session";
+import { DEFAULT_TOOL_SCRIPT_BUDGETS } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import { type ManagedChild, manageToolScriptRun, type ToolScriptBridge } from "./host-manager";
 import type { HostToRunner, RunnerToHost } from "./protocol";

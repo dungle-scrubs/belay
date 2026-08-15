@@ -8,8 +8,8 @@ import { type EvictionDeps, LocalResidencyEviction } from "./eviction";
 import { LocalResidencyRegistry } from "./registry";
 
 /**
- * Reference-counted eviction (plan 11.1 M4): a Trevor-loaded model is unloaded (under the lifecycle
- * lease) ONLY when orphaned - no live claim and no active generation - and only if Trevor loaded it.
+ * Reference-counted eviction (plan 11.1 M4): a Belay-loaded model is unloaded (under the lifecycle
+ * lease) ONLY when orphaned - no live claim and no active generation - and only if Belay loaded it.
  */
 
 const EP = "http://localhost:1234/v1";
@@ -58,7 +58,7 @@ function startGeneration(caps: AdmissionCaps, o: AdmissionOwner, model = MODEL) 
   );
 }
 
-test("an orphaned Trevor-loaded model (no claim, no generation) is unloaded under the lifecycle lease", async () => {
+test("an orphaned Belay-loaded model (no claim, no generation) is unloaded under the lifecycle lease", async () => {
   const { h, registry, eviction, unloaded, leaseCalls } = setup();
   h.spawn(100);
   registry.recordLoad(PROVIDER, EP, MODEL, 65_536);
@@ -98,21 +98,21 @@ test("a model under an active generation is NOT unloaded (cross-instance: A gene
   assert.deepEqual(unloaded, [], "a model being generated on is never unloaded");
 });
 
-test("only Trevor-loaded models are candidates; an externally-loaded model is never touched (D-004)", async () => {
+test("only Belay-loaded models are candidates; an externally-loaded model is never touched (D-004)", async () => {
   const { h, registry, eviction, unloaded } = setup();
   h.spawn(100);
-  registry.recordLoad(PROVIDER, EP, "trevor-loaded-model", 65_536);
-  // "external-model" is NOT recorded (loaded outside Trevor) -> never a candidate.
+  registry.recordLoad(PROVIDER, EP, "belay-loaded-model", 65_536);
+  // "external-model" is NOT recorded (loaded outside Belay) -> never a candidate.
 
   const outcomes = await eviction.sweep(PROVIDER, EP);
   assert.deepEqual(
     outcomes.map((o) => o.model),
-    ["trevor-loaded-model"],
-    "only Trevor-loaded models are swept",
+    ["belay-loaded-model"],
+    "only Belay-loaded models are swept",
   );
   assert.deepEqual(
     unloaded,
-    ["trevor-loaded-model"],
+    ["belay-loaded-model"],
     "the external model is never in the unload set",
   );
 });

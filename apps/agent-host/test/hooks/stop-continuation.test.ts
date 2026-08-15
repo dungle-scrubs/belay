@@ -1,5 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { TrevorEventInput } from "@belay/session";
 import type { TurnHooks } from "@host/agent/loop";
 import type { StopOutcome } from "@host/hooks/runtime";
 import {
@@ -8,7 +9,6 @@ import {
   ProviderUnavailable,
   type ToolDef,
 } from "@host/providers";
-import type { TrevorEventInput } from "@trevor/session";
 import { Stream } from "effect";
 import { afterEach, describe, expect, test } from "vitest";
 import { fakeProvider, runTurn } from "../support/fake-provider";

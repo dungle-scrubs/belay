@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { act, renderHook } from "@testing-library/react";
 import type {
   ConnectSessionOptions,
   PublishInput,
   SessionEvent,
   SessionTransport,
-} from "@trevor/session";
-import { recordingTransport, storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { recordingTransport, storedEvent } from "@belay/test-kit";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, test, vi } from "vitest";
 import { createSessionActions, useSessionWithTransport } from "./use-session";
 
@@ -241,7 +241,7 @@ test("flushes a pending tail buffer when the connection closes", async () => {
   unmount();
 });
 
-test("createSessionActions maps user intents to Trevor events", async () => {
+test("createSessionActions maps user intents to Belay events", async () => {
   const built: PublishInput[] = [];
   const actions = createSessionActions(async (event) => {
     built.push({ producerId: "web", ...event });

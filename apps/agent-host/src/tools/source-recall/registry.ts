@@ -16,7 +16,7 @@ import type {
   SourceRecallIndexStatus,
   SourceRecallRefreshResult,
   SourceRecallResult,
-} from "@trevor/session";
+} from "@belay/session";
 import { Effect } from "effect";
 import { createAleutianAdapter } from "./aleutian-adapter";
 import {

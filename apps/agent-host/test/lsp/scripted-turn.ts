@@ -1,5 +1,5 @@
+import type { TrevorEventInput } from "@belay/session";
 import type { Provider } from "@host/providers";
-import type { TrevorEventInput } from "@trevor/session";
 import type { ScriptedCall } from "../support/fake-provider";
 
 /**

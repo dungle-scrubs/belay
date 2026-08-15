@@ -4,13 +4,13 @@ import type { SessionEvent } from "./event";
 import { MAX_FILE_INDEX } from "./file-mention";
 import * as sessionRoot from "./index";
 import {
-  decodeTrevorEvent,
+  type BelayEventInput,
+  decodeBelayEvent,
   events,
   isTerminalDelegationStatus,
   type KnownTurnStopCause,
   LEGACY_TASK_REVISION,
   LIFECYCLE_TYPES,
-  type TrevorEventInput,
   TURN_STOP_CAUSE_DESCRIPTIONS,
   taskSnapshotReplaces,
 } from "./protocol";
@@ -18,13 +18,13 @@ import type { ProviderQuestionAnswer, ProviderQuestionContract } from "./provide
 
 /**
  * The protocol is the single source of truth shared by host and web: `events.*` builds
- * the wire payload, `decodeTrevorEvent` reads it back permissively. These guard the two
+ * the wire payload, `decodeBelayEvent` reads it back permissively. These guard the two
  * properties the rest of the system leans on - the emit/consume sides stay in lockstep,
  * and decode never throws (unknown -> null, missing correlation id -> the event's own id).
  */
 
-/** Wrap an emit-side input into a full stored SessionEvent (what decodeTrevorEvent reads). */
-const stored = (input: TrevorEventInput, over: Partial<SessionEvent> = {}): SessionEvent => ({
+/** Wrap an emit-side input into a full stored SessionEvent (what decodeBelayEvent reads). */
+const stored = (input: BelayEventInput, over: Partial<SessionEvent> = {}): SessionEvent => ({
   sessionId: "s",
   seq: 1,
   eventId: "ev-1",
@@ -52,7 +52,7 @@ test("typed event constructors round-trip through the registry-backed decoder", 
     ],
   };
   const questionAnswer: ProviderQuestionAnswer = { action: "decline" };
-  const constructed: readonly TrevorEventInput[] = [
+  const constructed: readonly BelayEventInput[] = [
     events.userMessage({
       text: "hi",
       provider: "qwen",
@@ -131,7 +131,7 @@ test("typed event constructors round-trip through the registry-backed decoder", 
     events.sessionDeleted({ deleted: true }),
     events.sessionForkedFrom({ parentSessionId: "parent", forkSeq: 2 }),
     events.sessionTangentOf({ parentSessionId: "parent", sourceMessageId: "msg", quote: "quote" }),
-    events.sessionProject({ path: "/Users/kevin/dev/trevor" }),
+    events.sessionProject({ path: "/Users/kevin/dev/belay" }),
     events.tangentFoldedBack({
       tangentSessionId: "tangent",
       parentSessionId: "parent",
@@ -260,7 +260,7 @@ test("typed event constructors round-trip through the registry-backed decoder", 
   ];
 
   for (const input of constructed) {
-    const decoded = decodeTrevorEvent(stored(input));
+    const decoded = decodeBelayEvent(stored(input));
     assert.notEqual(decoded, null, input.type);
     assert.equal(decoded?.type, input.type);
   }
@@ -268,11 +268,11 @@ test("typed event constructors round-trip through the registry-backed decoder", 
 
 test("protocol registry internals are not exported from the package root", () => {
   assert.equal(Object.hasOwn(sessionRoot, "createProtocolRegistry"), false);
-  assert.equal(Object.hasOwn(sessionRoot, "trevorEventRegistry"), false);
+  assert.equal(Object.hasOwn(sessionRoot, "belayEventRegistry"), false);
 });
 
 test("events.admissionStatus round-trips queued + refused admission status (plan 11 M7)", () => {
-  const queued = decodeTrevorEvent(
+  const queued = decodeBelayEvent(
     stored(
       events.admissionStatus({
         runId: "run-1",
@@ -295,7 +295,7 @@ test("events.admissionStatus round-trips queued + refused admission status (plan
   });
 
   // Acquired/released omit the queue position; refused carries a refusal class.
-  const acquired = decodeTrevorEvent(
+  const acquired = decodeBelayEvent(
     stored(
       events.admissionStatus({
         runId: "run-1",
@@ -308,7 +308,7 @@ test("events.admissionStatus round-trips queued + refused admission status (plan
   );
   assert.equal(acquired?.type === "admission.status" && acquired.position, undefined);
 
-  const refused = decodeTrevorEvent(
+  const refused = decodeBelayEvent(
     stored(
       events.admissionStatus({
         runId: "run-1",
@@ -327,7 +327,7 @@ test("events.admissionStatus round-trips queued + refused admission status (plan
 
   // The terminal phases (released / cancelled) decode too, so the read model covers the full lifecycle.
   for (const phase of ["released", "cancelled"] as const) {
-    const decoded = decodeTrevorEvent(
+    const decoded = decodeBelayEvent(
       stored(
         events.admissionStatus({
           runId: "run-1",
@@ -342,7 +342,7 @@ test("events.admissionStatus round-trips queued + refused admission status (plan
   }
 });
 
-test("events.loopStatus round-trips through decodeTrevorEvent", () => {
+test("events.loopStatus round-trips through decodeBelayEvent", () => {
   const snapshot = {
     completed: 2,
     durability: "durable" as const,
@@ -354,16 +354,16 @@ test("events.loopStatus round-trips through decodeTrevorEvent", () => {
     summary: "run the suite",
   };
 
-  assert.deepEqual(decodeTrevorEvent(stored(events.loopStatus({ snapshot }))), {
+  assert.deepEqual(decodeBelayEvent(stored(events.loopStatus({ snapshot }))), {
     snapshot,
     type: "loop.status",
   });
 });
 
-test("events.assistantLimit round-trips a usage-limit signal through decodeTrevorEvent (44.4)", () => {
+test("events.assistantLimit round-trips a usage-limit signal through decodeBelayEvent (44.4)", () => {
   // approaching, with the constraining scope + a reset + utilization, all survive the round trip.
   assert.deepEqual(
-    decodeTrevorEvent(
+    decodeBelayEvent(
       stored(
         events.assistantLimit({
           provider: "anthropic",
@@ -387,7 +387,7 @@ test("events.assistantLimit round-trips a usage-limit signal through decodeTrevo
 
 test("events.assistantLimit omits absent optionals and tolerates a garbled status (44.4)", () => {
   // A detect-only `reached` with no reset/utilization keeps the payload minimal on the wire.
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(events.assistantLimit({ provider: "codex", status: "reached", scope: "unknown" })),
   );
   assert.deepEqual(decoded, {
@@ -398,7 +398,7 @@ test("events.assistantLimit omits absent optionals and tolerates a garbled statu
   });
 
   // An unknown status off the wire coerces to the safe "reached" default (never throws).
-  const garbled = decodeTrevorEvent(
+  const garbled = decodeBelayEvent(
     stored({
       type: "assistant.limit",
       payload: { provider: "codex", status: "melting", scope: "unknown" },
@@ -407,8 +407,8 @@ test("events.assistantLimit omits absent optionals and tolerates a garbled statu
   assert.equal(garbled?.type === "assistant.limit" && garbled.status, "reached");
 });
 
-test("events.userMessage round-trips through decodeTrevorEvent", () => {
-  const decoded = decodeTrevorEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
+test("events.userMessage round-trips through decodeBelayEvent", () => {
+  const decoded = decodeBelayEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
   assert.equal(decoded?.type, "user.message");
   assert.deepEqual(decoded, {
     type: "user.message",
@@ -437,7 +437,7 @@ test("user.message carries exact pasted payloads and round-trips them (10-large-
   const pastes = [{ text: "alpha\r\nbeta\n\ngamma 😀" }, { text: "x".repeat(2000) }];
   const msg = events.userMessage({ text: "[Pasted text #1 +3 lines]", provider: "qwen", pastes });
   assert.deepEqual(msg.payload.pastes, pastes, "the exact payloads ride the wire");
-  const decoded = decodeTrevorEvent(stored(msg));
+  const decoded = decodeBelayEvent(stored(msg));
   assert.equal(decoded?.type, "user.message");
   assert.deepEqual(
     decoded?.type === "user.message" ? decoded.pastes : null,
@@ -447,7 +447,7 @@ test("user.message carries exact pasted payloads and round-trips them (10-large-
 });
 
 test("a garbled pastes entry is dropped; a legacy message decodes to no pastes", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({
       type: "user.message",
       payload: { text: "hi", provider: "qwen", pastes: [{ text: "ok" }, { nope: 1 }, "junk"] },
@@ -459,7 +459,7 @@ test("a garbled pastes entry is dropped; a legacy message decodes to no pastes",
     "only the well-formed payload survives",
   );
 
-  const legacy = decodeTrevorEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
+  const legacy = decodeBelayEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
   assert.deepEqual(legacy?.type === "user.message" ? legacy.pastes : null, []);
 });
 
@@ -467,7 +467,7 @@ test("user.message carries a ModelRef alongside the legacy provider, and round-t
   const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
   const msg = events.userMessage({ text: "hi", provider: "deepseek", model });
   assert.deepEqual(msg.payload.model, model, "the ref rides the wire next to provider");
-  assert.deepEqual(decodeTrevorEvent(stored(msg)), {
+  assert.deepEqual(decodeBelayEvent(stored(msg)), {
     type: "user.message",
     text: "hi",
     provider: "deepseek",
@@ -479,13 +479,13 @@ test("user.message carries a ModelRef alongside the legacy provider, and round-t
 });
 
 test("a legacy user.message (no model) decodes with no model key", () => {
-  const decoded = decodeTrevorEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
+  const decoded = decodeBelayEvent(stored(events.userMessage({ text: "hi", provider: "qwen" })));
   assert.equal(decoded?.type === "user.message" && "model" in decoded, false);
 });
 
 test("events.modelSwitchRequested (the control event) round-trips with its target ModelRef (09.1)", () => {
   const model = { sourceId: "deepseek", modelId: "deepseek-v4", reasoning: "high" };
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(events.modelSwitchRequested({ runId: "r1", model, initiator: "manual" })),
   );
   assert.deepEqual(decoded, {
@@ -497,7 +497,7 @@ test("events.modelSwitchRequested (the control event) round-trips with its targe
 });
 
 test("a garbled modelSwitchRequested model is dropped (decode never throws) (09.1)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({
       type: "model.switch.requested",
       payload: { runId: "r1", model: { sourceId: 5 }, initiator: "manual" },
@@ -508,7 +508,7 @@ test("a garbled modelSwitchRequested model is dropped (decode never throws) (09.
 });
 
 test("events.modelSwitched records the from/to model+reasoning, initiator, and outcome (09.1)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.modelSwitched({
         runId: "r1",
@@ -531,7 +531,7 @@ test("events.modelSwitched records the from/to model+reasoning, initiator, and o
 });
 
 test("a reasoning-only modelSwitched keeps the model equal on both sides (09.1)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.modelSwitched({
         runId: "r1",
@@ -549,7 +549,7 @@ test("a reasoning-only modelSwitched keeps the model equal on both sides (09.1)"
 });
 
 test("a blocked modelSwitched carries the user-visible reason (09.1 guard)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.modelSwitched({
         runId: "r1",
@@ -569,7 +569,7 @@ test("a blocked modelSwitched carries the user-visible reason (09.1 guard)", () 
 });
 
 test("a garbled user.message model is dropped so the host falls back to provider (D-065)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({
       type: "user.message",
       payload: { text: "hi", provider: "qwen", model: { sourceId: 5 } },
@@ -584,11 +584,11 @@ test("a garbled user.message model is dropped so the host falls back to provider
 });
 
 test("an unknown event type decodes to null (forward-compatible)", () => {
-  assert.equal(decodeTrevorEvent(stored({ type: "future.thing", payload: {} })), null);
+  assert.equal(decodeBelayEvent(stored({ type: "future.thing", payload: {} })), null);
 });
 
-test("assistant.reconnecting round-trips through decodeTrevorEvent (D-079)", () => {
-  const decoded = decodeTrevorEvent(
+test("assistant.reconnecting round-trips through decodeBelayEvent (D-079)", () => {
+  const decoded = decodeBelayEvent(
     stored(events.assistantReconnecting({ runId: "r", attempt: 2, detail: "websocket closed" })),
   );
   // No maxAttempts passed (a pre-02.15-style event): it stays absent so old logs decode unchanged.
@@ -600,8 +600,8 @@ test("assistant.reconnecting round-trips through decodeTrevorEvent (D-079)", () 
   });
 });
 
-test("assistant.continued (step-budget checkpoint) round-trips through decodeTrevorEvent (02.17)", () => {
-  const decoded = decodeTrevorEvent(
+test("assistant.continued (step-budget checkpoint) round-trips through decodeBelayEvent (02.17)", () => {
+  const decoded = decodeBelayEvent(
     stored(
       events.assistantContinued({
         runId: "r",
@@ -623,7 +623,7 @@ test("assistant.continued (step-budget checkpoint) round-trips through decodeTre
 });
 
 test("assistant.reconnecting round-trips the threaded maxAttempts budget (02.15)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.assistantReconnecting({
         runId: "r",
@@ -657,7 +657,7 @@ test("assistant.reconnecting optionally carries a provider diagnostic", () => {
     code: "stream_error",
     requestId: "req_123",
   } as const;
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.assistantReconnecting({
         runId: "r",
@@ -684,7 +684,7 @@ test("assistant.completed optionally carries a provider diagnostic while preserv
     detail: "stream failed",
     partials: { textChars: 12, thinkingChars: 80, toolCalls: 0, toolResults: 0 },
   } as const;
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.assistantCompleted({
         runId: "r",
@@ -700,8 +700,8 @@ test("assistant.completed optionally carries a provider diagnostic while preserv
   assert.deepEqual(decoded.diagnostic, diagnostic);
 });
 
-test("assistant.completed stop metadata round-trips through decodeTrevorEvent", () => {
-  const decoded = decodeTrevorEvent(
+test("assistant.completed stop metadata round-trips through decodeBelayEvent", () => {
+  const decoded = decodeBelayEvent(
     stored(
       events.assistantCompleted({
         runId: "r",
@@ -735,7 +735,7 @@ test("hook_halt is a known turn-stop cause with a description (plan 25 simplify 
   const cause: KnownTurnStopCause = "hook_halt";
   assert.equal(typeof TURN_STOP_CAUSE_DESCRIPTIONS[cause], "string");
 
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.assistantCompleted({
         runId: "r",
@@ -750,7 +750,7 @@ test("hook_halt is a known turn-stop cause with a description (plan 25 simplify 
 });
 
 test("legacy assistant.completed events decode with no stop object", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(events.assistantCompleted({ runId: "r", text: "legacy", stepLimit: 32 })),
   );
   assert.equal(decoded?.type, "assistant.completed");
@@ -771,7 +771,7 @@ test("tool.guardrail round-trips the redacted decision (plan 07, D-005)", () => 
     argsFingerprint: "0a1b2c3d4e5f",
     resultFingerprint: "deadbeef0011",
   });
-  const decoded = decodeTrevorEvent(stored(built));
+  const decoded = decodeBelayEvent(stored(built));
   assert.deepEqual(decoded, {
     type: "tool.guardrail",
     runId: "r-1",
@@ -784,7 +784,7 @@ test("tool.guardrail round-trips the redacted decision (plan 07, D-005)", () => 
     resultFingerprint: "deadbeef0011",
   });
   // A failure marker round-trips its failure fingerprint and omits the result one.
-  const failure = decodeTrevorEvent(
+  const failure = decodeBelayEvent(
     stored(
       events.toolGuardrail({
         runId: "r-1",
@@ -836,7 +836,7 @@ test("tool.guardrail carries no raw arguments or raw output (redacted surface, D
 });
 
 test("tool.guardrail decodes a sparse/forward-compat payload with safe defaults", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({ type: "tool.guardrail", payload: { name: "glob" } }, { eventId: "ev-g" }),
   );
   assert.equal(decoded?.type, "tool.guardrail");
@@ -849,7 +849,7 @@ test("tool.guardrail decodes a sparse/forward-compat payload with safe defaults"
 });
 
 test("host.online round-trips the announced subagents (D-045)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.hostOnline({
         branch: "main",
@@ -873,7 +873,7 @@ test("host.online round-trips the announced subagents (D-045)", () => {
 });
 
 test("host.online round-trips a custom command's argument-hint + body on its spec (44.5 M5)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.hostOnline({
         branch: "main",
@@ -942,7 +942,7 @@ test("host.online round-trips the model sources + catalog, defaulting to empty w
     commands: [],
     agents: [],
   };
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(events.hostOnline({ ...base, sources: [source], catalog: { zai: [entry] } })),
   );
   assert.equal(decoded?.type, "host.online");
@@ -951,7 +951,7 @@ test("host.online round-trips the model sources + catalog, defaulting to empty w
   assert.deepEqual(decoded.catalog.zai, [entry]);
 
   // A host that announces neither decodes to empty (not undefined), so consumers never branch on it.
-  const bare = decodeTrevorEvent(stored(events.hostOnline(base)));
+  const bare = decodeBelayEvent(stored(events.hostOnline(base)));
   assert.equal(
     bare?.type === "host.online" && Array.isArray(bare.sources) && bare.sources.length,
     0,
@@ -961,7 +961,7 @@ test("host.online round-trips the model sources + catalog, defaulting to empty w
 
 test("host.sourceAuth round-trips a source sign-in flow (D-065 M5)", () => {
   // Device-code phase: the verification URL + short user code (no API key) survive the round trip.
-  const dc = decodeTrevorEvent(
+  const dc = decodeBelayEvent(
     stored(
       events.hostSourceAuth({
         state: {
@@ -983,11 +983,11 @@ test("host.sourceAuth round-trips a source sign-in flow (D-065 M5)", () => {
   });
 
   // Completion + error phases decode their phase (and a sanitized detail for error).
-  const done = decodeTrevorEvent(
+  const done = decodeBelayEvent(
     stored(events.hostSourceAuth({ state: { sourceId: "openai", phase: "complete" } })),
   );
   assert.equal(done?.type === "host.sourceAuth" && done.auth.phase, "complete");
-  const err = decodeTrevorEvent(
+  const err = decodeBelayEvent(
     stored(
       events.hostSourceAuth({ state: { sourceId: "openai", phase: "error", detail: "timed out" } }),
     ),
@@ -995,22 +995,22 @@ test("host.sourceAuth round-trips a source sign-in flow (D-065 M5)", () => {
   assert.equal(err?.type === "host.sourceAuth" && err.auth.detail, "timed out");
 
   // A garbled phase decodes to a cancelled flow (never throws).
-  const bad = decodeTrevorEvent(
+  const bad = decodeBelayEvent(
     stored({ type: "host.sourceAuth", payload: { sourceId: "x", phase: "?" } }),
   );
   assert.equal(bad?.type === "host.sourceAuth" && bad.auth.phase, "cancelled");
 });
 
 test("session.title round-trips a durable rename (editable session titles)", () => {
-  const decoded = decodeTrevorEvent(stored(events.sessionTitle({ title: "Auth refactor" })));
+  const decoded = decodeBelayEvent(stored(events.sessionTitle({ title: "Auth refactor" })));
   assert.deepEqual(decoded, { type: "session.title", title: "Auth refactor" });
   // A garbled/missing title coerces to an empty string (the inventory then falls back to the derived title).
-  const bad = decodeTrevorEvent(stored({ type: "session.title", payload: { title: 42 } }));
+  const bad = decodeBelayEvent(stored({ type: "session.title", payload: { title: 42 } }));
   assert.equal(bad?.type === "session.title" && bad.title, "");
 });
 
 test("host.online round-trips the structured git status (D-088)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.hostOnline({
         branch: "feat/x",
@@ -1050,10 +1050,10 @@ test("host.online round-trips the structured git status (D-088)", () => {
 test("host.online round-trips managed worktrees and defaults to [] when absent (D-091)", () => {
   const worktree = {
     id: "wt1",
-    baseRepo: "/dev/trevor",
-    baseRepoName: "trevor",
+    baseRepo: "/dev/belay",
+    baseRepoName: "belay",
     branch: "feat/x",
-    path: "~/.trevor/.worktrees/h/feat-x-wt1",
+    path: "~/.belay/.worktrees/h/feat-x-wt1",
     sessionId: "s-wt1",
     dirty: true,
     ahead: 2,
@@ -1064,7 +1064,7 @@ test("host.online round-trips managed worktrees and defaults to [] when absent (
     baseline: false,
     missing: false,
   };
-  const withWt = decodeTrevorEvent(
+  const withWt = decodeBelayEvent(
     stored(
       events.hostOnline({
         providers: ["qwen"],
@@ -1084,7 +1084,7 @@ test("host.online round-trips managed worktrees and defaults to [] when absent (
   assert.deepEqual(withWt.worktrees, [worktree]);
 
   // An older host that omits worktrees decodes to an empty list, never undefined.
-  const without = decodeTrevorEvent(
+  const without = decodeBelayEvent(
     stored(
       events.hostOnline({
         providers: ["qwen"],
@@ -1102,7 +1102,7 @@ test("host.online round-trips managed worktrees and defaults to [] when absent (
 });
 
 test("host.online without a git field stays decode-tolerant (older host)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.hostOnline({
         branch: "main",
@@ -1138,7 +1138,7 @@ test("host.online carries modelPrefs when provided and omits the key when absent
   } as const;
 
   // Provided: the default + favorites round-trip through decode.
-  const withPrefs = decodeTrevorEvent(
+  const withPrefs = decodeBelayEvent(
     stored(events.hostOnline({ ...base, modelPrefs: { default: def, pinned: [pin] } })),
   );
   assert.equal(withPrefs?.type, "host.online");
@@ -1149,7 +1149,7 @@ test("host.online carries modelPrefs when provided and omits the key when absent
   // still yields the empty preference rather than a crash.
   const omitted = events.hostOnline(base);
   assert.equal("modelPrefs" in (omitted.payload as Record<string, unknown>), false);
-  const decodedOmitted = decodeTrevorEvent(stored(omitted));
+  const decodedOmitted = decodeBelayEvent(stored(omitted));
   assert.equal(decodedOmitted?.type === "host.online" && decodedOmitted.modelPrefs.default, null);
   assert.equal(
     decodedOmitted?.type === "host.online" && decodedOmitted.modelPrefs.pinned.length,
@@ -1158,7 +1158,7 @@ test("host.online carries modelPrefs when provided and omits the key when absent
 });
 
 test("host.online git coerces a partial/malformed payload to safe defaults", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({
       type: "host.online",
       payload: { git: { branch: "wip", dirty: "yes", ahead: "x" } },
@@ -1178,7 +1178,7 @@ test("host.online git coerces a partial/malformed payload to safe defaults", () 
 });
 
 test("a missing runId falls back to the event's own id, never collapsing turns", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({ type: "assistant.delta", payload: { text: "hi" } }, { eventId: "ev-9" }),
   );
   assert.equal(decoded?.type, "assistant.delta");
@@ -1186,7 +1186,7 @@ test("a missing runId falls back to the event's own id, never collapsing turns",
 });
 
 test("assistant.completed coerces cancelled/noReply/stepLimit to safe defaults", () => {
-  const decoded = decodeTrevorEvent(stored(events.assistantCompleted({ runId: "r", text: "ok" })));
+  const decoded = decodeBelayEvent(stored(events.assistantCompleted({ runId: "r", text: "ok" })));
   assert.equal(decoded?.type, "assistant.completed");
   if (decoded?.type !== "assistant.completed") return;
   assert.equal(decoded.cancelled, false);
@@ -1196,7 +1196,7 @@ test("assistant.completed coerces cancelled/noReply/stepLimit to safe defaults",
 });
 
 test("context.compacted round-trips, including the per-fold delta manifest", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.contextCompacted({
         foldId: "f1",
@@ -1254,12 +1254,12 @@ test("a superseding fold chains off the prior foldId; supersedes is omitted when
     tokensAfter: 19_000,
     model: "qwen",
   });
-  const decoded = decodeTrevorEvent(stored(second));
+  const decoded = decodeBelayEvent(stored(second));
   assert.equal(decoded?.type === "context.compacted" && decoded.supersedes, "f1");
 });
 
 test("context.compacting round-trips the live fold-progress tick", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(events.contextCompacting({ foldId: "f1", tokens: 240, budget: 1_000 })),
   );
   assert.deepEqual(decoded, {
@@ -1271,38 +1271,36 @@ test("context.compacting round-trips the live fold-progress tick", () => {
 });
 
 test("session.switch round-trips the host-authored handoff target", () => {
-  const decoded = decodeTrevorEvent(
-    stored(
-      events.sessionSwitch({ sessionId: "trevor-20260626-123456z-abcdef12", reason: "clear" }),
-    ),
+  const decoded = decodeBelayEvent(
+    stored(events.sessionSwitch({ sessionId: "belay-20260626-123456z-abcdef12", reason: "clear" })),
   );
   assert.deepEqual(decoded, {
     type: "session.switch",
-    sessionId: "trevor-20260626-123456z-abcdef12",
+    sessionId: "belay-20260626-123456z-abcdef12",
     reason: "clear",
   });
 });
 
 test("session.switch carries the continuation-handoff reason (02, M2)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
-      events.sessionSwitch({ sessionId: "trevor-20260626-123456z-abcdef12", reason: "handoff" }),
+      events.sessionSwitch({ sessionId: "belay-20260626-123456z-abcdef12", reason: "handoff" }),
     ),
   );
   assert.deepEqual(decoded, {
     type: "session.switch",
-    sessionId: "trevor-20260626-123456z-abcdef12",
+    sessionId: "belay-20260626-123456z-abcdef12",
     reason: "handoff",
   });
 });
 
-test("user.shell + shell.result round-trip through decodeTrevorEvent (D-082)", () => {
-  const shell = decodeTrevorEvent(
+test("user.shell + shell.result round-trip through decodeBelayEvent (D-082)", () => {
+  const shell = decodeBelayEvent(
     stored(events.userShell({ requestId: "req-1", command: "printf hello" })),
   );
   assert.deepEqual(shell, { type: "user.shell", requestId: "req-1", command: "printf hello" });
 
-  const result = decodeTrevorEvent(
+  const result = decodeBelayEvent(
     stored(
       events.shellResult({
         requestId: "req-1",
@@ -1322,7 +1320,7 @@ test("user.shell + shell.result round-trip through decodeTrevorEvent (D-082)", (
 });
 
 test("shell.result coerces a missing ok to false and a missing requestId to the event id", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({ type: "shell.result", payload: { command: "x" } }, { eventId: "ev-shell" }),
   );
   assert.equal(decoded?.type, "shell.result");
@@ -1332,7 +1330,7 @@ test("shell.result coerces a missing ok to false and a missing requestId to the 
   assert.equal(decoded.output, "");
 });
 
-test("events.raw stamps the same TrevorEventInput envelope as the typed builders (D-025)", () => {
+test("events.raw stamps the same BelayEventInput envelope as the typed builders (D-025)", () => {
   // A forward-compat / arbitrary event built by hand vs. through events.raw: the builder
   // must produce the identical `{ type, payload }` shape the typed constructors yield, so the
   // test path shares the production envelope pipeline rather than re-spelling the input shape.
@@ -1349,12 +1347,12 @@ test("events.raw stamps the same TrevorEventInput envelope as the typed builders
 
   // And it still rides the real consume side: a raw arbitrary type decodes to null (forward-compat),
   // while a raw payload for a known type decodes exactly as the typed builder would.
-  assert.equal(decodeTrevorEvent(stored(built)), null);
-  assert.deepEqual(decodeTrevorEvent(stored(viaRaw)), decodeTrevorEvent(stored(typed)));
+  assert.equal(decodeBelayEvent(stored(built)), null);
+  assert.deepEqual(decodeBelayEvent(stored(viaRaw)), decodeBelayEvent(stored(typed)));
 });
 
 test("a malformed context.compacted manifest coerces to empty arrays, never throws", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({ type: "context.compacted", payload: { summary: "s", manifest: "nope" } }),
   );
   assert.equal(decoded?.type, "context.compacted");
@@ -1388,7 +1386,7 @@ const QUESTION_CONTRACT: ProviderQuestionContract = {
 };
 
 test("provider.question.requested round-trips the contract + correlation ids", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.providerQuestionRequested({
         questionId: "q-1",
@@ -1415,7 +1413,7 @@ test("provider.question.answer round-trips an accept (with per-question entries)
     answer: "Postgres",
     questions: [{ id: "db", answer: "Postgres", selected: [{ id: "pg", label: "Postgres" }] }],
   };
-  const acc = decodeTrevorEvent(
+  const acc = decodeBelayEvent(
     stored(events.providerQuestionAnswer({ questionId: "q-1", answer: accept })),
   );
   assert.equal(acc?.type, "provider.question.answer");
@@ -1423,7 +1421,7 @@ test("provider.question.answer round-trips an accept (with per-question entries)
   assert.equal(acc.questionId, "q-1");
   assert.deepEqual(acc.answer, accept);
 
-  const dec = decodeTrevorEvent(
+  const dec = decodeBelayEvent(
     stored(events.providerQuestionAnswer({ questionId: "q-1", answer: { action: "decline" } })),
   );
   assert.deepEqual(dec?.type === "provider.question.answer" ? dec.answer : null, {
@@ -1432,7 +1430,7 @@ test("provider.question.answer round-trips an accept (with per-question entries)
 });
 
 test("provider.question.resolved round-trips the outcome + sanitized summary", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.providerQuestionResolved({
         questionId: "q-1",
@@ -1455,7 +1453,7 @@ test("provider.question.resolved round-trips the outcome + sanitized summary", (
 
 test("provider.question.requested decodes a sparse/forward-compat payload with safe defaults", () => {
   // No questionId/toolName/adapter; a choice with unknown extra metadata; a string preview; no flags.
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       {
         type: "provider.question.requested",
@@ -1486,7 +1484,7 @@ test("provider.question.requested decodes a sparse/forward-compat payload with s
 });
 
 test("provider.question.answer decodes a garbled/missing action as an accept (forward-compatible)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({
       type: "provider.question.answer",
       payload: { questionId: "q", answer: { questions: [] } },
@@ -1498,7 +1496,7 @@ test("provider.question.answer decodes a garbled/missing action as an accept (fo
 // --- plan 25 M9: visible hook decision events ---
 
 test("hook.decision round-trips a PreToolUse deny with tool + reason (plan 25 M9)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.hookDecision({
         runId: "r-1",
@@ -1531,7 +1529,7 @@ test("hook.decision omits absent optionals on the wire and round-trips a Stop ha
   assert.equal("toolName" in built.payload, false);
   assert.equal("reason" in built.payload, false);
 
-  const decoded = decodeTrevorEvent(stored(built));
+  const decoded = decodeBelayEvent(stored(built));
   assert.equal(decoded?.type, "hook.decision");
   if (decoded?.type !== "hook.decision") return;
   assert.equal(decoded.event, "Stop");
@@ -1541,7 +1539,7 @@ test("hook.decision omits absent optionals on the wire and round-trips a Stop ha
 });
 
 test("hook.decision decodes a sparse/forward-compat payload with safe defaults", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({ type: "hook.decision", payload: {} }, { eventId: "ev-hd" }),
   );
   assert.equal(decoded?.type, "hook.decision");
@@ -1570,7 +1568,7 @@ test("LIFECYCLE_TYPES names exactly the lifecycle events, drawn from their const
 // --- continuation handoff events (02, M1) ---
 
 test("handoff.requested round-trips mode/source/prompt, defaulting proposed to false", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.handoffRequested({
         handoffId: "h1",
@@ -1598,14 +1596,14 @@ test("a model-proposed generate handoff carries proposed:true and omits prompt",
     proposed: true,
   });
   assert.equal("prompt" in built.payload, false);
-  const decoded = decodeTrevorEvent(stored(built));
+  const decoded = decodeBelayEvent(stored(built));
   assert.equal(decoded?.type === "handoff.requested" && decoded.proposed, true);
   assert.equal(decoded?.type === "handoff.requested" && decoded.mode, "generate");
 });
 
-test("the handoff lifecycle events round-trip through decodeTrevorEvent", () => {
+test("the handoff lifecycle events round-trip through decodeBelayEvent", () => {
   assert.deepEqual(
-    decodeTrevorEvent(stored(events.handoffGenerating({ handoffId: "h1", detail: "summarizing" }))),
+    decodeBelayEvent(stored(events.handoffGenerating({ handoffId: "h1", detail: "summarizing" }))),
     {
       type: "handoff.generating",
       handoffId: "h1",
@@ -1613,13 +1611,13 @@ test("the handoff lifecycle events round-trip through decodeTrevorEvent", () => 
     },
   );
   assert.deepEqual(
-    decodeTrevorEvent(
+    decodeBelayEvent(
       stored(events.handoffGenerated({ handoffId: "h1", prompt: "the target prompt" })),
     ),
     { type: "handoff.generated", handoffId: "h1", prompt: "the target prompt" },
   );
   assert.deepEqual(
-    decodeTrevorEvent(stored(events.handoffApproved({ handoffId: "h1", prompt: "edited" }))),
+    decodeBelayEvent(stored(events.handoffApproved({ handoffId: "h1", prompt: "edited" }))),
     {
       type: "handoff.approved",
       handoffId: "h1",
@@ -1627,7 +1625,7 @@ test("the handoff lifecycle events round-trip through decodeTrevorEvent", () => 
     },
   );
   assert.deepEqual(
-    decodeTrevorEvent(stored(events.handoffRejected({ handoffId: "h1", reason: "not now" }))),
+    decodeBelayEvent(stored(events.handoffRejected({ handoffId: "h1", reason: "not now" }))),
     {
       type: "handoff.rejected",
       handoffId: "h1",
@@ -1635,7 +1633,7 @@ test("the handoff lifecycle events round-trip through decodeTrevorEvent", () => 
     },
   );
   assert.deepEqual(
-    decodeTrevorEvent(
+    decodeBelayEvent(
       stored(events.handoffFailed({ handoffId: "h1", code: "HO001", detail: "empty" })),
     ),
     {
@@ -1646,7 +1644,7 @@ test("the handoff lifecycle events round-trip through decodeTrevorEvent", () => 
     },
   );
   assert.deepEqual(
-    decodeTrevorEvent(
+    decodeBelayEvent(
       stored(events.handoffAccepted({ handoffId: "h1", targetSessionId: "s-tgt", prompt: "go" })),
     ),
     { type: "handoff.accepted", handoffId: "h1", targetSessionId: "s-tgt", prompt: "go" },
@@ -1654,7 +1652,7 @@ test("the handoff lifecycle events round-trip through decodeTrevorEvent", () => 
 });
 
 test("handoff.requested decodes a sparse/forward-compat payload with safe defaults", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       { type: "handoff.requested", payload: { mode: "???" } },
       { eventId: "ev-h", sessionId: "s-fallback" },
@@ -1683,7 +1681,7 @@ const oneTask = [
 ];
 
 test("tasks.current carries a monotonic revision and round-trips it", () => {
-  const decoded = decodeTrevorEvent(stored(events.tasksCurrent({ tasks: oneTask, rev: 7 })));
+  const decoded = decodeBelayEvent(stored(events.tasksCurrent({ tasks: oneTask, rev: 7 })));
   assert.equal(decoded?.type, "tasks.current");
   if (decoded?.type !== "tasks.current") return;
   assert.equal(decoded.rev, 7);
@@ -1695,7 +1693,7 @@ test("a legacy tasks.current without a revision decodes to LEGACY_TASK_REVISION"
   const legacy = events.tasksCurrent({ tasks: oneTask });
   assert.equal("rev" in legacy.payload, false);
 
-  const decoded = decodeTrevorEvent(stored(legacy));
+  const decoded = decodeBelayEvent(stored(legacy));
   assert.equal(decoded?.type, "tasks.current");
   if (decoded?.type !== "tasks.current") return;
   assert.equal(decoded.rev, LEGACY_TASK_REVISION);
@@ -1711,19 +1709,19 @@ test("taskSnapshotReplaces: higher revision wins, equal replaces (latest), lower
 });
 
 test("events.fileIndexRequested round-trips with its correlation id (plan 30)", () => {
-  const decoded = decodeTrevorEvent(stored(events.fileIndexRequested({ requestId: "req-7" })));
+  const decoded = decodeBelayEvent(stored(events.fileIndexRequested({ requestId: "req-7" })));
   assert.deepEqual(decoded, { type: "file.index.requested", requestId: "req-7" });
 });
 
 test("a fileIndexRequested missing its requestId falls back to the event id", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({ type: "file.index.requested", payload: {} }, { eventId: "ev-9" }),
   );
   assert.deepEqual(decoded, { type: "file.index.requested", requestId: "ev-9" });
 });
 
 test("events.fileIndexResult round-trips the paths + truncation, paired by requestId", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.fileIndexResult({
         requestId: "req-7",
@@ -1741,10 +1739,10 @@ test("events.fileIndexResult round-trips the paths + truncation, paired by reque
 });
 
 test("a stale/newer fileIndexResult keeps its requestId so the browser can supersede by id", () => {
-  const older = decodeTrevorEvent(
+  const older = decodeBelayEvent(
     stored(events.fileIndexResult({ requestId: "req-1", files: [], truncated: false })),
   );
-  const newer = decodeTrevorEvent(
+  const newer = decodeBelayEvent(
     stored(events.fileIndexResult({ requestId: "req-2", files: [], truncated: false })),
   );
   assert.equal(older?.type === "file.index.result" ? older.requestId : null, "req-1");
@@ -1752,7 +1750,7 @@ test("a stale/newer fileIndexResult keeps its requestId so the browser can super
 });
 
 test("fileIndexResult decode drops absolute / escaping paths (confinement never leaks)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({
       type: "file.index.result",
       payload: {
@@ -1772,7 +1770,7 @@ test("fileIndexResult decode drops absolute / escaping paths (confinement never 
 
 test("fileIndexResult decode re-caps at MAX_FILE_INDEX regardless of the wire's truncated flag", () => {
   const oversized = Array.from({ length: MAX_FILE_INDEX + 10 }, (_, i) => `file-${i}.ts`);
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({
       type: "file.index.result",
       // The wire claims truncated: false (a malformed/lying host) - decode must not trust it once the
@@ -1787,7 +1785,7 @@ test("fileIndexResult decode re-caps at MAX_FILE_INDEX regardless of the wire's 
 });
 
 test("events.delegatedTo round-trips a status:interrupted link (plan 52 / D-002)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.delegatedTo({
         runId: "r1",
@@ -1810,7 +1808,7 @@ test("events.delegatedTo round-trips a status:interrupted link (plan 52 / D-002)
 });
 
 test("events.delegatedTo round-trips optional inline metadata while old links omit it", () => {
-  const withMetadata = decodeTrevorEvent(
+  const withMetadata = decodeBelayEvent(
     stored(
       events.delegatedTo({
         runId: "r1",
@@ -1833,7 +1831,7 @@ test("events.delegatedTo round-trips optional inline metadata while old links om
   assert.equal(withMetadata?.type === "delegated.to" ? withMetadata.reasoningLevel : null, "high");
   assert.equal(withMetadata?.type === "delegated.to" ? withMetadata.tokens : null, 123);
 
-  const withoutMetadata = decodeTrevorEvent(
+  const withoutMetadata = decodeBelayEvent(
     stored(
       events.delegatedTo({
         runId: "r2",
@@ -1869,7 +1867,7 @@ test("userSupersede round-trips the retracted ids + reason (the first event-to-e
     type: "user.supersede",
     payload: { supersedes: ["ev-2", "ev-3"], reason: "fold" },
   });
-  assert.deepEqual(decodeTrevorEvent(stored(built)), {
+  assert.deepEqual(decodeBelayEvent(stored(built)), {
     type: "user.supersede",
     supersedes: ["ev-2", "ev-3"],
     reason: "fold",
@@ -1877,7 +1875,7 @@ test("userSupersede round-trips the retracted ids + reason (the first event-to-e
 });
 
 test("userSupersede decode drops junk ids and defaults a missing reason to unqueue", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({ type: "user.supersede", payload: { supersedes: ["ev-9", 7, null, "ev-10"] } }),
   );
   assert.deepEqual(decoded, {

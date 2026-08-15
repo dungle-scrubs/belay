@@ -1,4 +1,4 @@
-import { type RecallResult, relativeTime } from "@trevor/session";
+import { type RecallResult, relativeTime } from "@belay/session";
 import { toolActionLabelForTarget } from "@/action-label";
 import { cn } from "@/lib/utils";
 import { StatusAwareToolRenderer } from "./status-aware-tool-renderer";

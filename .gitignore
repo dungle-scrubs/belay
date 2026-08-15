@@ -1,3 +1,6 @@
+.env
+.env.*
+!.env.example
 node_modules/
 dist/
 storybook-static/
@@ -15,3 +18,8 @@ blob-report/
 *.db-wal
 # agent-host local scratch workspace
 apps/agent-host/tmp/
+# Local agent instruction overrides (private)
+AGENTS.local.md
+CLAUDE.local.md
+**/AGENTS.local.md
+**/CLAUDE.local.md

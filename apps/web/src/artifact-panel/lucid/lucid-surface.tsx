@@ -1,4 +1,4 @@
-import type { LucidAnchor } from "@trevor/session";
+import type { LucidAnchor } from "@belay/session";
 import { useEffect, useRef } from "react";
 import {
   buildLucidSrcdoc,
@@ -12,7 +12,7 @@ import {
 /**
  * The Lucid SURFACE (plan 27, M3): the artifact rendered in a strictly-isolated sandboxed iframe with
  * the addressability overlay injected over it. The iframe is `sandbox="allow-scripts"` with NO
- * `allow-same-origin`, so it runs on an OPAQUE origin: artifact CSS/JS can never touch Trevor's app
+ * `allow-same-origin`, so it runs on an OPAQUE origin: artifact CSS/JS can never touch Belay's app
  * chrome, cookies, or storage, and the overlay reaches the parent only through `postMessage`. The
  * parent trusts an inbound message ONLY when it comes from THIS frame's window (identity, since the
  * opaque origin is "null") and parses as a well-formed overlay message; everything else is ignored.

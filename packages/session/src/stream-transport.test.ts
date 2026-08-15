@@ -12,10 +12,10 @@ import type { SessionIdentity } from "./transport";
  */
 
 const identity: SessionIdentity = {
-  displayName: "Trevor Host",
-  runtimeKind: "trevor",
+  displayName: "Belay Host",
+  runtimeKind: "belay",
   instanceId: "instance-7",
-  participantId: "trevor-host",
+  participantId: "belay-host",
   capabilities: { web_search: true, depth: 3 },
 };
 

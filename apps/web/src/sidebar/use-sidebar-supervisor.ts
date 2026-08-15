@@ -6,7 +6,7 @@ import {
   type SupervisorProject,
   events as sessionEvents,
   type TrevorEventInput,
-} from "@trevor/session";
+} from "@belay/session";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { publishWebEvent, sessionTransport, useSessionWithTransport } from "@/session/use-session";
 import type { ProjectSidebarRecord } from "@/sidebar/project-sidebar-model";

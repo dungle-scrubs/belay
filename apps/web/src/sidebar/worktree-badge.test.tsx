@@ -1,6 +1,6 @@
+import type { WorktreeSummary } from "@belay/session";
+import { sessionSummary } from "@belay/test-kit";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { WorktreeSummary } from "@trevor/session";
-import { sessionSummary } from "@trevor/test-kit";
 import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -27,10 +27,10 @@ function project(over: Partial<ProjectSidebarRecord> & { path: string }): Projec
 function wt(over: Partial<WorktreeSummary> & { sessionId: string }): WorktreeSummary {
   return {
     id: over.id ?? over.sessionId,
-    baseRepo: "/dev/trevor",
-    baseRepoName: "trevor",
+    baseRepo: "/dev/belay",
+    baseRepoName: "belay",
     branch: "feat/x",
-    path: "~/.worktrees/trevor/feat-x",
+    path: "~/.worktrees/belay/feat-x",
     dirty: false,
     ahead: 0,
     behind: 0,
@@ -66,7 +66,7 @@ describe("WorktreeBadge", () => {
         worktree={wt({
           sessionId: "wt-s1",
           branch: "feat/badge",
-          path: "~/.worktrees/trevor/feat-badge",
+          path: "~/.worktrees/belay/feat-badge",
           dirty: true,
           ahead: 2,
         })}
@@ -79,14 +79,14 @@ describe("WorktreeBadge", () => {
       // Radix leaves a visually-hidden a11y copy of the content, so more than one of each label can
       // appear in the DOM once the tooltip is open.
       expect(screen.getAllByText("feat/badge").length).toBeGreaterThan(0);
-      expect(screen.getAllByText("~/.worktrees/trevor/feat-badge").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("~/.worktrees/belay/feat-badge").length).toBeGreaterThan(0);
       expect(screen.getAllByText("dirty, 2 ahead").length).toBeGreaterThan(0);
     });
   });
 
   test("tooltip shows the full path (wraps, never truncates) and a copy button", async () => {
     const longPath =
-      "~/.worktrees/trevor/feat-an-extremely-long-branch-name-that-keeps-going-and-going-and-going";
+      "~/.worktrees/belay/feat-an-extremely-long-branch-name-that-keeps-going-and-going-and-going";
     renderWithTooltip(
       <WorktreeBadge worktree={wt({ sessionId: "wt-s1", branch: "feat/badge", path: longPath })} />,
     );
@@ -112,7 +112,7 @@ describe("WorktreeBadge", () => {
       <WorktreeBadge
         worktree={wt({
           sessionId: "wt-s1",
-          path: "~/.worktrees/trevor/feat-copy-me",
+          path: "~/.worktrees/belay/feat-copy-me",
         })}
       />,
     );
@@ -128,7 +128,7 @@ describe("WorktreeBadge", () => {
     if (!button) throw new Error("copy button not rendered");
     fireEvent.click(button);
     await waitFor(() => {
-      expect(writeText.mock.calls[0]?.[0]).toBe("~/.worktrees/trevor/feat-copy-me");
+      expect(writeText.mock.calls[0]?.[0]).toBe("~/.worktrees/belay/feat-copy-me");
     });
     vi.unstubAllGlobals();
   });
@@ -143,14 +143,14 @@ describe("WorktreeBadge", () => {
 describe("ProjectSidebar SessionRow worktree badge", () => {
   test("a session row with row.worktree renders the worktree badge; without it does not", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "wt-s1",
           title: "worktree session",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
         }),
-        sessionSummary({ sessionId: "plain", title: "plain session", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "plain", title: "plain session", projectPath: "/dev/belay" }),
       ],
       [wt({ sessionId: "wt-s1" })],
     );
@@ -173,15 +173,15 @@ describe("ProjectSidebar SessionRow worktree badge", () => {
 
   test("baseline checkout is never badged even when present in the snapshot", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "main-checkout",
           title: "main checkout",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
         }),
       ],
-      [wt({ sessionId: "main-checkout", baseline: true, branch: "main", path: "/dev/trevor" })],
+      [wt({ sessionId: "main-checkout", baseline: true, branch: "main", path: "/dev/belay" })],
     );
     renderWithTooltip(
       <ProjectSidebar
@@ -199,8 +199,8 @@ describe("ProjectSidebar SessionRow worktree badge", () => {
     const long =
       "an extremely long session title that should truncate before the right action slot and after the badge icon without overlapping either";
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "wt-s1", title: long, projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "wt-s1", title: long, projectPath: "/dev/belay" })],
       [wt({ sessionId: "wt-s1" })],
     );
     const { container } = renderWithTooltip(

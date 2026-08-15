@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { tempDir, waitFor } from "@trevor/test-kit";
+import { tempDir, waitFor } from "@belay/test-kit";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 
 /**
@@ -33,7 +33,7 @@ const live: ChildProcess[] = [];
 let keySeq = 0;
 
 beforeAll(() => {
-  stateHome = tempDir("trevor-admission-state-");
+  stateHome = tempDir("belay-admission-state-");
 });
 
 afterEach(() => {
@@ -59,7 +59,7 @@ function spawnActor(mode: string, key: string, ownerId: string, hostId: string):
     // resolves through the host tsconfig, which tsx only finds via an explicit pointer here.
     env: {
       ...process.env,
-      TREVOR_STATE_HOME: stateHome,
+      BELAY_STATE_HOME: stateHome,
       TREVOR_DEBUG: "0",
       TSX_TSCONFIG_PATH: join(REPO_ROOT, "apps/agent-host/tsconfig.json"),
     },

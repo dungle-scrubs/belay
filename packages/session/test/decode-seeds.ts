@@ -476,8 +476,8 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
   {
     type: "editor.open",
     variants: [
-      { path: "/Users/kevin/dev/trevor/src/index.ts", line: 42, column: 8 },
-      { path: "/Users/kevin/dev/trevor/README.md" },
+      { path: "/Users/kevin/dev/belay/src/index.ts", line: 42, column: 8 },
+      { path: "/Users/kevin/dev/belay/README.md" },
     ],
   },
 
@@ -523,7 +523,7 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
   },
   {
     type: "session.project",
-    variants: [{ path: "/Users/kevin/dev/trevor" }, { path: "" }],
+    variants: [{ path: "/Users/kevin/dev/belay" }, { path: "" }],
   },
   {
     type: "session.worktree",
@@ -531,7 +531,7 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
       {
         id: "wt_1",
         branch: "feature/auth-refactor",
-        path: "/Users/kevin/dev/trevor/.worktrees/feature-auth-refactor",
+        path: "/Users/kevin/dev/belay/.worktrees/feature-auth-refactor",
       },
       { id: "", branch: "", path: "" },
     ],
@@ -586,11 +586,11 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
     variants: [
       {
         requestId: "req_launch_1",
-        root: "/Users/kevin/dev/trevor",
+        root: "/Users/kevin/dev/belay",
         sessionId: "sess_fresh_1",
-        projectPath: "/Users/kevin/dev/trevor",
+        projectPath: "/Users/kevin/dev/belay",
       },
-      { requestId: "req_launch_1", root: "/Users/kevin/dev/trevor" },
+      { requestId: "req_launch_1", root: "/Users/kevin/dev/belay" },
     ],
   },
   {
@@ -628,12 +628,12 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
         requestId: "req_projects_1",
         projects: [
           {
-            root: "/Users/kevin/dev/trevor",
-            sessionId: "sess_trevor_1",
+            root: "/Users/kevin/dev/belay",
+            sessionId: "sess_belay_1",
             updatedAt: "2026-07-09T10:00:00.000Z",
             missing: false,
-            displayPath: "~/dev/trevor",
-            displayName: "Trevor",
+            displayPath: "~/dev/belay",
+            displayName: "Belay",
             collapsed: true,
             createdAt: "2026-07-01T09:00:00.000Z",
           },
@@ -673,35 +673,35 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
   {
     type: "project.rename.requested",
     variants: [
-      { requestId: "req_rename_1", path: "/Users/kevin/dev/trevor", displayName: "Trevor" },
-      { requestId: "req_rename_1", path: "/Users/kevin/dev/trevor", displayName: "" },
+      { requestId: "req_rename_1", path: "/Users/kevin/dev/belay", displayName: "Belay" },
+      { requestId: "req_rename_1", path: "/Users/kevin/dev/belay", displayName: "" },
     ],
   },
   {
     type: "project.rename.result",
     variants: [
-      { requestId: "req_rename_1", path: "/Users/kevin/dev/trevor", displayName: "Trevor" },
+      { requestId: "req_rename_1", path: "/Users/kevin/dev/belay", displayName: "Belay" },
       { requestId: "req_rename_1", error: "project not found" },
     ],
   },
   {
     type: "project.collapse.requested",
     variants: [
-      { requestId: "req_collapse_1", path: "/Users/kevin/dev/trevor", collapsed: true },
-      { requestId: "req_collapse_1", path: "/Users/kevin/dev/trevor", collapsed: false },
+      { requestId: "req_collapse_1", path: "/Users/kevin/dev/belay", collapsed: true },
+      { requestId: "req_collapse_1", path: "/Users/kevin/dev/belay", collapsed: false },
     ],
   },
   {
     type: "project.collapse.result",
     variants: [
-      { requestId: "req_collapse_1", path: "/Users/kevin/dev/trevor", collapsed: true },
+      { requestId: "req_collapse_1", path: "/Users/kevin/dev/belay", collapsed: true },
       { requestId: "req_collapse_1", collapsed: false, error: "project not found" },
     ],
   },
   {
     type: "project.remove.requested",
     variants: [
-      { requestId: "req_remove_1", path: "/Users/kevin/dev/trevor" },
+      { requestId: "req_remove_1", path: "/Users/kevin/dev/belay" },
       { requestId: "req_remove_1", path: "" },
     ],
   },
@@ -710,11 +710,11 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
     variants: [
       {
         requestId: "req_remove_1",
-        path: "/Users/kevin/dev/trevor",
+        path: "/Users/kevin/dev/belay",
         removed: false,
-        blockedBy: ["sess_trevor_1", "sess_trevor_2"],
+        blockedBy: ["sess_belay_1", "sess_belay_2"],
       },
-      { requestId: "req_remove_1", path: "/Users/kevin/dev/trevor", removed: true },
+      { requestId: "req_remove_1", path: "/Users/kevin/dev/belay", removed: true },
       { requestId: "req_remove_1", removed: false, error: "path not registered" },
     ],
   },
@@ -818,7 +818,7 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
         runId: "run_1",
         callId: "call_1",
         name: "Read",
-        arguments: '{"file_path":"/Users/kevin/dev/trevor/README.md"}',
+        arguments: '{"file_path":"/Users/kevin/dev/belay/README.md"}',
       },
       { runId: "run_1", callId: "call_1", name: "Bash", arguments: "" },
     ],
@@ -896,8 +896,8 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
           },
         },
         instanceId: "inst_1",
-        cwd: "/Users/kevin/dev/trevor",
-        workspace: "/Users/kevin/dev/trevor",
+        cwd: "/Users/kevin/dev/belay",
+        workspace: "/Users/kevin/dev/belay",
         commands: [
           { name: "shell", summary: "Run a shell command", usage: "/shell <command>" },
           {
@@ -918,10 +918,10 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
         worktrees: [
           {
             id: "wt_1",
-            baseRepo: "trevor",
-            baseRepoName: "trevor",
+            baseRepo: "belay",
+            baseRepoName: "belay",
             branch: "feature/auth",
-            path: "/Users/kevin/dev/trevor/.worktrees/feature-auth",
+            path: "/Users/kevin/dev/belay/.worktrees/feature-auth",
             sessionId: "sess_wt_1",
             dirty: true,
             ahead: 1,
@@ -978,7 +978,7 @@ export const DECODE_SEEDS: readonly DecodeSeed[] = [
             runId: "run_9",
             callId: "call_9",
             requestId: "req_9",
-            cwd: "/Users/kevin/dev/trevor",
+            cwd: "/Users/kevin/dev/belay",
             startedAt: 1750000000000,
             promotedAt: 1750000005000,
             status: "running",

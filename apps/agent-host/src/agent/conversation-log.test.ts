@@ -1,11 +1,11 @@
-import { events, type SessionEvent, type TrevorEventInput } from "@trevor/session";
+import { events, type SessionEvent, type TrevorEventInput } from "@belay/session";
 import { describe, expect, test } from "vitest";
 import { ConversationLog } from "./conversation-log";
 import { buildHistory } from "./history-projection";
 
-const SELF = "trevor-host";
+const SELF = "belay-host";
 
-function ev(event: TrevorEventInput, seq: number, producerId = "trevor-web") {
+function ev(event: TrevorEventInput, seq: number, producerId = "belay-web") {
   return {
     ...event,
     createdAt: `t${seq}`,

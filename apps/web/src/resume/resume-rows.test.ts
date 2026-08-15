@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary } from "@belay/session";
 import { test } from "vitest";
 import { buildResumeRows, type ResumeContext } from "./resume-rows";
 
@@ -8,10 +8,10 @@ const NOW = Date.parse("2026-06-26T12:00:00.000Z");
 const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   sessionId: "s",
   title: "a session",
-  cwd: "~/dev/trevor",
-  workspace: "~/dev/trevor",
-  project: "trevor",
-  projectPath: "~/dev/trevor",
+  cwd: "~/dev/belay",
+  workspace: "~/dev/belay",
+  project: "belay",
+  projectPath: "~/dev/belay",
   branch: "main",
   git: null,
   createdAt: "2026-06-25T12:00:00.000Z",
@@ -29,7 +29,7 @@ const summary = (over: Partial<SessionSummary>): SessionSummary => ({
 
 const ctx = (over: Partial<ResumeContext> = {}): ResumeContext => ({
   currentSessionId: "cur",
-  currentProject: "trevor",
+  currentProject: "belay",
   busy: false,
   nowMs: NOW,
   ...over,
@@ -80,7 +80,7 @@ test("metadata carries location, branch, event count, and a relative time", () =
     ctx({ currentSessionId: "none" }),
   );
   const meta = rows[0]?.metadata ?? "";
-  assert.ok(meta.includes("~/dev/trevor"), meta);
+  assert.ok(meta.includes("~/dev/belay"), meta);
   assert.ok(meta.includes("main"), meta);
   assert.ok(meta.includes("42 events"), meta);
   assert.ok(meta.includes("3h ago"), meta);

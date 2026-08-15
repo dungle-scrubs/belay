@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { HOST_ROLE, type SessionEvent } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+import { HOST_ROLE, type SessionEvent } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import {
   catalogFrom,
@@ -154,7 +154,7 @@ test("selectors derive host, title, session name, and turn status from the read 
 
   assert.deepEqual(host, hostStatus(events, null, Date.parse("2026-01-01T00:00:10.000Z")));
   assert.equal(selectSessionName(model, "fallback"), "Build the projection");
-  assert.equal(selectTabTitle(host, "trevor-local", "trevor-local"), "repo · Trevor");
+  assert.equal(selectTabTitle(host, "belay-local", "belay-local"), "repo · Belay");
   // A plain awaiting-gap turn (no task, no delegation) is not pinned - it shows the inline working row.
   assert.equal(selectTurnStatusHeader(model, { hostlessPending: false }), undefined);
   assert.ok(selectActiveWorkingRow(model, { hostlessPending: false }));

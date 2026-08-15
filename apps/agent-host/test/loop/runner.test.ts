@@ -1,4 +1,4 @@
-import type { LoopSpec } from "@trevor/session";
+import type { LoopSpec } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import {
   createLoopIterationRunner,

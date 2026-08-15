@@ -12,11 +12,11 @@ import type { ArtifactRef } from "./protocol";
  * (`{ kind, mimeType, size, hash }`); the bytes live in the store, fetched on demand.
  *
  * The wire contract (HEX64, the result type, the `/blobs` routes) lives in the zero-dep
- * `./blob-contract` leaf, imported by BOTH this client and the standalone `@trevor/blob-store`
- * server (via the `@trevor/session/blob-contract` subpath) so the two can't drift.
+ * `./blob-contract` leaf, imported by BOTH this client and the standalone `@belay/blob-store`
+ * server (via the `@belay/session/blob-contract` subpath) so the two can't drift.
  */
 
-// Re-exported so existing `@trevor/session` consumers of HEX64 / PutBlobResult keep their import.
+// Re-exported so existing `@belay/session` consumers of HEX64 / PutBlobResult keep their import.
 export { HEX64, type PutBlobResult } from "./blob-contract";
 
 const trimSlash = (base: string): string => base.replace(/\/$/, "");

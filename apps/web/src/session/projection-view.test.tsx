@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { HOST_ROLE, type SessionEvent } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { render, screen } from "@testing-library/react";
-import { HOST_ROLE, type SessionEvent } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
 import { describe, it } from "vitest";
 import { createSessionReadModel, type SessionReadModel } from "./projection";
 import { selectHostStatus, selectSessionName } from "./selectors";

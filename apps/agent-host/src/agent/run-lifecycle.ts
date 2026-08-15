@@ -1,6 +1,6 @@
+import type { SessionEvent } from "@belay/session";
 import { log } from "@host/transport/log";
 import type { EmitEvent } from "@host/transport/services";
-import type { SessionEvent } from "@trevor/session";
 import { interruptFiber } from "../effect/fiber-exit";
 import type { CompactionCommandsApi } from "./compaction-commands";
 import { orphanedSubagentReaps } from "./delegate";

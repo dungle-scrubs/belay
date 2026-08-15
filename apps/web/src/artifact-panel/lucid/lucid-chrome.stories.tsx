@@ -1,5 +1,5 @@
+import type { LucidAnchor } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { LucidAnchor } from "@trevor/session";
 import { LucidChrome } from "./lucid-chrome";
 import {
   commitLucidDraft,

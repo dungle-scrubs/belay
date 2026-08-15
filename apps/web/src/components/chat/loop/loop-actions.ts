@@ -1,4 +1,4 @@
-import type { LoopControl } from "@trevor/session";
+import type { LoopControl } from "@belay/session";
 
 /**
  * Live protocol wiring for the loop inventory (plan 17, M7). An inventory control does NOT mutate loop

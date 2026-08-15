@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { CommandSpec } from "@belay/session";
 import { act, renderHook } from "@testing-library/react";
-import type { CommandSpec } from "@trevor/session";
 import { type KeyboardEvent as ReactKeyboardEvent, useRef, useState } from "react";
 import { test } from "vitest";
 import { useSlashMenu } from "./use-slash-menu";

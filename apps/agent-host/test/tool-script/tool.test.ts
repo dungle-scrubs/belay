@@ -16,7 +16,7 @@ function toolWith(execute: ToolScriptToolDeps["execute"]) {
   return buildToolScriptTool({
     execute,
     cwd: process.cwd(),
-    makeScratchDir: () => mkdtempSync(join(tmpdir(), "trevor-ts-it-")),
+    makeScratchDir: () => mkdtempSync(join(tmpdir(), "belay-ts-it-")),
     cleanupScratchDir: (dir) => rmSync(dir, { recursive: true, force: true }),
     // This integration path legitimately exercises the reduced-isolation child-process fallback (the OS
     // sandbox cannot boot Node on many hosts), so it opts in rather than failing closed.

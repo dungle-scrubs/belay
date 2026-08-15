@@ -1,4 +1,4 @@
-import type { ProviderDiagnostic } from "@trevor/session";
+import type { ProviderDiagnostic } from "@belay/session";
 import { Data } from "effect";
 import type { ProviderFailureClass, ProviderUserAction } from "./failure-taxonomy";
 

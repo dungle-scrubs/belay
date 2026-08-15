@@ -1,4 +1,4 @@
-import type { SessionActivity, WorktreeSummary } from "@trevor/session";
+import type { SessionActivity, WorktreeSummary } from "@belay/session";
 import { useLocalStorageState } from "ahooks";
 import { useMemo, useRef, useState } from "react";
 import type { HostStatus } from "../derive";
@@ -32,16 +32,16 @@ export function useModalState(opts: {
   // The left-side project sidebar (plan 58) is toggleable; defaults open and persists. Keyed v2
   // to drop the retired session-sidebar's stored `false`, so the new default takes effect on
   // first load rather than being suppressed by a stale preference.
-  const [sidebarOpen, setSidebarOpen] = useLocalStorageState<boolean>("trevor.sidebar.v2", {
+  const [sidebarOpen, setSidebarOpen] = useLocalStorageState<boolean>("belay.sidebar.v2", {
     defaultValue: true,
   });
   // The sidebar width is draggable (plan 58 polish): persisted across reloads, clamped to a
   // usable range so it can't collapse to nothing or eat the whole viewport.
-  const [sidebarWidth, setSidebarWidth] = useLocalStorageState<number>("trevor.sidebar.width", {
+  const [sidebarWidth, setSidebarWidth] = useLocalStorageState<number>("belay.sidebar.width", {
     defaultValue: DEFAULT_SIDEBAR_WIDTH,
   });
   // The right-side panel is toggleable; remember the choice across reloads.
-  const [panelOpen, setPanelOpen] = useLocalStorageState<boolean>("trevor.panel", {
+  const [panelOpen, setPanelOpen] = useLocalStorageState<boolean>("belay.panel", {
     defaultValue: true,
   });
 

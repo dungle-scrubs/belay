@@ -1,6 +1,6 @@
+import { constrainReasoning } from "@belay/session";
 import type { Api, Model, ThinkingLevel } from "@earendil-works/pi-ai/compat";
 import { msg } from "@host/transport/messages";
-import { constrainReasoning } from "@trevor/session";
 import { Effect, Stream } from "effect";
 import { ProviderAuthError } from "./errors";
 import { resolveContextWindow, resolveReasoningLevels } from "./model-metadata-overrides";

@@ -1,8 +1,8 @@
-import type { ToolScriptFailureClass } from "@trevor/session";
+import type { ToolScriptFailureClass } from "@belay/session";
 
 // The failure classes are inlined (not imported as a value) + `satisfies`-checked against the session
 // contract, so this module - and the child runner that imports it - has ZERO runtime dependency on
-// @trevor/session. That is load-bearing: the child runs in an OS sandbox with a foreign cwd where the
+// @belay/session. That is load-bearing: the child runs in an OS sandbox with a foreign cwd where the
 // monorepo's workspace packages do not resolve. The `satisfies` catches any drift (a new class) at compile.
 const TOOL_SCRIPT_FAILURE_CLASSES = [
   "timeout",
@@ -34,7 +34,7 @@ const oneOf = <T extends string>(opts: readonly T[], v: unknown, fallback: T): T
  *
  * This module is DELIBERATELY isolated (M3 REFACTOR): the child runner entry point imports ONLY this
  * protocol (plus the session contract) - never the agent-host tool registry - so user script code runs in a
- * process with no ambient Trevor authority. The codec is permissive (malformed lines decode to null, not a
+ * process with no ambient Belay authority. The codec is permissive (malformed lines decode to null, not a
  * throw) and the line reader caps buffered bytes, so a crashing or spam-happy child is contained.
  *
  * Responsible for: the host<->runner NDJSON message types, the permissive line codecs, and the

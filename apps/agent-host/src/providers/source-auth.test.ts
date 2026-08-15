@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SourceSignInState } from "@trevor/session";
+import type { SourceSignInState } from "@belay/session";
 import { afterEach, beforeEach, test } from "vitest";
 import {
   type OAuthLogin,
@@ -22,7 +22,7 @@ let dir: string;
 let authPath: string;
 
 beforeEach(async () => {
-  dir = await mkdtemp(join(tmpdir(), "trevor-source-auth-"));
+  dir = await mkdtemp(join(tmpdir(), "belay-source-auth-"));
   authPath = join(dir, "auth.json");
 });
 afterEach(async () => {
@@ -58,7 +58,7 @@ test("the Claude subscription browser+paste sign-in emits the URL with acceptsCo
   // resolves the OAuth credential. This drives runSourceSignIn's generic browser+paste path for the
   // real Claude source, so a busy localhost callback port still completes via paste (53.1 R-2).
   const fakeAnthropicLogin: OAuthLogin = async ({ onAuthUrl, requestCode }) => {
-    onAuthUrl({ url: "https://claude.ai/oauth/authorize?client_id=trevor&x=1" });
+    onAuthUrl({ url: "https://claude.ai/oauth/authorize?client_id=belay&x=1" });
     const code = await requestCode();
     return { access: "anthropic-oauth-token", refresh: "r", expires: 1, via: code };
   };
@@ -75,7 +75,7 @@ test("the Claude subscription browser+paste sign-in emits the URL with acceptsCo
     {
       sourceId: "anthropic",
       phase: "device-code",
-      verificationUri: "https://claude.ai/oauth/authorize?client_id=trevor&x=1",
+      verificationUri: "https://claude.ai/oauth/authorize?client_id=belay&x=1",
       acceptsCode: true,
     },
     { sourceId: "anthropic", phase: "complete" },

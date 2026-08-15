@@ -1,4 +1,4 @@
-import type { DoctorFinding, DoctorNextAction } from "@trevor/session";
+import type { DoctorFinding, DoctorNextAction } from "@belay/session";
 import { ArrowUpRight, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";

@@ -1,3 +1,4 @@
+import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@belay/session";
 import type { McpCapabilityRecord } from "@host/mcp/capabilities";
 import {
   DEFAULT_MCP_SEARCH_LIMIT,
@@ -6,7 +7,6 @@ import {
 } from "@host/mcp/capability-cache";
 import type { McpRuntime, McpServerStatusEntry } from "@host/mcp/runtime";
 import { ToolInputError } from "@host/tools/errors";
-import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { Effect } from "effect";
 import { describe, expect, test } from "vitest";
 import { buildMcpTool, type McpArgs } from "./mcp";

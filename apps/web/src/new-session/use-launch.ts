@@ -5,7 +5,7 @@ import {
   SUPERVISOR_SESSION_ID,
   events as sessionEvents,
   viewerIdentity,
-} from "@trevor/session";
+} from "@belay/session";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { publishWebEvent, sessionTransport } from "@/session/use-session";
 
@@ -107,7 +107,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
   // A stable viewer identity for the host.online watch (the same shape the launcher uses).
   const watchIdentity = useMemo(() => {
     const id = `web-supervisor-${crypto.randomUUID()}`;
-    return viewerIdentity({ displayName: "trevor-web", instanceId: id, participantId: id });
+    return viewerIdentity({ displayName: "belay-web", instanceId: id, participantId: id });
   }, []);
 
   // Disarms the pending result-wait deadline (any consumed result, a superseding publish, reset).

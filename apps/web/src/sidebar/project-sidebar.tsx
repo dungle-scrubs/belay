@@ -4,7 +4,7 @@ import {
   type SessionActivity,
   type SessionSummary,
   type WorktreeSummary,
-} from "@trevor/session";
+} from "@belay/session";
 import {
   Archive,
   Folder,

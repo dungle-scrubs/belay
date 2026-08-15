@@ -1,14 +1,14 @@
-import { errorMessage } from "@trevor/session";
+import { errorMessage } from "@belay/session";
 
 /**
- * The structured error every `@trevor/sdk` workflow throws when a backend operation fails. It carries
+ * The structured error every `@belay/sdk` workflow throws when a backend operation fails. It carries
  * enough context for a CLI, eval harness, or automation script to map a failure to a concise message
  * and a nonzero exit without re-deriving what went wrong: which `operation` failed, which `backend`
  * class it was (the session log vs. the blob store), the `sessionId` in play, the redacted backend URL
  * class (scheme + host + port only - never a path, query, or credentials), and a redacted `detail`.
  *
  * It is deliberately a plain thrown error, not an Effect failure: the SDK is the browser-safe ergonomic
- * layer above `@trevor/session`, consumed by plain-TypeScript callers (CLI, evals, scripts), so it does
+ * layer above `@belay/session`, consumed by plain-TypeScript callers (CLI, evals, scripts), so it does
  * not impose Effect on its consumers. The host keeps its Effect-typed errors internally.
  */
 

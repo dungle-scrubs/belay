@@ -8,7 +8,7 @@ import { type HooksRuntimeHarness, hooksRuntimeHarness } from "./runtime-fixture
 
 /**
  * Plan 25 M10: legacy V1 `HOOK.md` migration diagnostics. V1 kept hooks as
- * `.trevor/hooks/<id>/HOOK.md` files (project) and `~/.trevor/hooks/<id>/HOOK.md` (user), with
+ * `.belay/hooks/<id>/HOOK.md` files (project) and `~/.belay/hooks/<id>/HOOK.md` (user), with
  * an optional `command:` in frontmatter marking an EXECUTABLE handler. V2 REPORTS them - the
  * scan never parses one into a definition and the runtime never executes one - and the report
  * feeds the discovery diagnostics + the /doctor hooks.legacy migration finding.
@@ -38,7 +38,7 @@ let scratch: string | undefined;
 let harness: HooksRuntimeHarness | undefined;
 
 function tempRoot(): string {
-  scratch = mkdtempSync(join(tmpdir(), "trevor-legacy-hooks-"));
+  scratch = mkdtempSync(join(tmpdir(), "belay-legacy-hooks-"));
   return scratch;
 }
 
@@ -60,10 +60,10 @@ function writeHookMd(dir: string, id: string, content: string): string {
 }
 
 describe("discoverLegacyHookFiles - the bounded V1 scan", () => {
-  test("finds project HOOK.md files under .trevor/hooks and flags executable frontmatter", () => {
+  test("finds project HOOK.md files under .belay/hooks and flags executable frontmatter", () => {
     const root = tempRoot();
     const workspaceRoot = join(root, "workspace");
-    const hooksDir = join(workspaceRoot, ".trevor", "hooks");
+    const hooksDir = join(workspaceRoot, ".belay", "hooks");
     const executable = writeHookMd(hooksDir, "fmt", EXECUTABLE_HOOK_MD);
     const promptOnly = writeHookMd(hooksDir, "note", PROMPT_ONLY_HOOK_MD);
 
@@ -102,7 +102,7 @@ describe("discoverLegacyHookFiles - the bounded V1 scan", () => {
   test("ignores entries without a HOOK.md and files at the top level", () => {
     const root = tempRoot();
     const workspaceRoot = join(root, "workspace");
-    const hooksDir = join(workspaceRoot, ".trevor", "hooks");
+    const hooksDir = join(workspaceRoot, ".belay", "hooks");
     mkdirSync(join(hooksDir, "empty-dir"), { recursive: true });
     writeFileSync(join(hooksDir, "stray.md"), "not a hook");
 
@@ -118,7 +118,7 @@ describe("discoverLegacyHookFiles - the bounded V1 scan", () => {
 describe("legacy HOOK.md files are reported through the runtime, never executed", () => {
   test("statusSnapshot carries the scan; discovery yields NO definition for a HOOK.md", () => {
     harness = hooksRuntimeHarness([]);
-    const hooksDir = join(harness.workspaceRoot, ".trevor", "hooks");
+    const hooksDir = join(harness.workspaceRoot, ".belay", "hooks");
     const path = writeHookMd(hooksDir, "fmt", EXECUTABLE_HOOK_MD);
 
     const snapshot = harness.runtime.statusSnapshot();
@@ -130,7 +130,7 @@ describe("legacy HOOK.md files are reported through the runtime, never executed"
 
   test("the doctor fold surfaces the migration finding from the snapshot", () => {
     harness = hooksRuntimeHarness([]);
-    writeHookMd(join(harness.workspaceRoot, ".trevor", "hooks"), "fmt", EXECUTABLE_HOOK_MD);
+    writeHookMd(join(harness.workspaceRoot, ".belay", "hooks"), "fmt", EXECUTABLE_HOOK_MD);
 
     const findings = hooksAreaFindings(harness.runtime.statusSnapshot(), []);
     expect(findings.map((finding) => finding.id)).toEqual(["hooks.legacy"]);

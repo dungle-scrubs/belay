@@ -4,8 +4,8 @@ import {
   type SessionEvent,
   type SessionSummary,
   type TrevorEventInput,
-} from "@trevor/session";
-import { type RecordingTransport, recordingTransport, storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { type RecordingTransport, recordingTransport, storedEvent } from "@belay/test-kit";
 import { beforeEach, test } from "vitest";
 import { createSiblingReader, type SiblingReaderOptions } from "./reader";
 
@@ -18,10 +18,10 @@ import { createSiblingReader, type SiblingReaderOptions } from "./reader";
 function summary(over: Partial<SessionSummary> & { sessionId: string }): SessionSummary {
   return {
     title: `session ${over.sessionId}`,
-    cwd: "~/dev/trevor",
-    workspace: "~/dev/trevor",
-    project: "trevor",
-    projectPath: "~/dev/trevor",
+    cwd: "~/dev/belay",
+    workspace: "~/dev/belay",
+    project: "belay",
+    projectPath: "~/dev/belay",
     branch: null,
     git: null,
     createdAt: "2026-06-20T00:00:00.000Z",
@@ -43,7 +43,7 @@ const ev = (input: TrevorEventInput, sessionId: string, seq: number): SessionEve
     sessionId,
     seq,
     eventId: `${sessionId}-${seq}`,
-    producerId: "trevor-web",
+    producerId: "belay-web",
     createdAt: "2026-06-20T00:00:00.000Z",
   });
 
@@ -55,14 +55,14 @@ function baseOptions(over: Partial<SiblingReaderOptions> = {}): SiblingReaderOpt
   return {
     transport: rt.transport,
     identity: {
-      displayName: "trevor-recall",
+      displayName: "belay-recall",
       runtimeKind: "web",
       instanceId: "i1",
-      participantId: "trevor-host:recall",
+      participantId: "belay-host:recall",
     },
     currentSessionId: "cur",
-    currentWorkspace: "~/dev/trevor",
-    currentProject: "trevor",
+    currentWorkspace: "~/dev/belay",
+    currentProject: "belay",
     ...over,
   };
 }
@@ -74,7 +74,7 @@ beforeEach(() => {
 test("reads same-project siblings and excludes other projects + the current session", async () => {
   rt.setInventory([
     summary({ sessionId: "cur" }), // the current session - excluded
-    summary({ sessionId: "sib", workspace: "~/dev/trevor", project: "trevor" }),
+    summary({ sessionId: "sib", workspace: "~/dev/belay", project: "belay" }),
     summary({ sessionId: "other", workspace: "~/dev/otherRepo", project: "otherRepo" }),
   ]);
   rt.seed("sib", [ev(events.userMessage({ text: "sibling memory", provider: "qwen" }), "sib", 0)]);

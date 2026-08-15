@@ -105,7 +105,7 @@ test("M1: fade overlays use the surrounding transcript background token", () => 
   const fades = container.querySelectorAll('[data-slot="reasoning-fade"]');
   assert.equal(fades.length, 2, "streaming preview has top and bottom fade overlays");
   for (const fade of fades) {
-    assert.match(fade.className, /--trevor-reasoning-fade-bg/);
+    assert.match(fade.className, /--belay-reasoning-fade-bg/);
   }
 });
 

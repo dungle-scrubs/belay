@@ -1,4 +1,4 @@
-import type { ModelRef, QuickPickerGroup, UsageBreakdown } from "@trevor/session";
+import type { ModelRef, QuickPickerGroup, UsageBreakdown } from "@belay/session";
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { SplitModelControl } from "@/components/chooser/split-model-control";

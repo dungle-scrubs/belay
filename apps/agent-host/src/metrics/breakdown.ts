@@ -1,14 +1,14 @@
-import { log } from "@host/transport/log";
 import {
   BREAKDOWN_CATEGORIES,
   type BreakdownPool,
   CHARS_PER_TOKEN,
   estimateTokens,
   type UsageBreakdown,
-} from "@trevor/session";
+} from "@belay/session";
+import { log } from "@host/transport/log";
 import type { ChatMessage, Usage } from "../providers";
 
-// Re-exported from the canonical owner in @trevor/session so host modules keep importing the
+// Re-exported from the canonical owner in @belay/session so host modules keep importing the
 // heuristic from here (their existing import path) while the definition lives beside the schema.
 export { CHARS_PER_TOKEN, estimateTokens };
 
@@ -30,12 +30,12 @@ export { CHARS_PER_TOKEN, estimateTokens };
  * the text shares would badly distort them.
  *
  * The category set itself (keys, pools, overhead grouping) is the shared
- * `BREAKDOWN_CATEGORIES` descriptor in @trevor/session; the wire `UsageBreakdown`,
+ * `BREAKDOWN_CATEGORIES` descriptor in @belay/session; the wire `UsageBreakdown`,
  * this accumulator's totals/session-roll-up, and the web treemap all derive from it,
  * so adding a category is one edit and the surfaces cannot drift.
  *
  * Responsible for: the per-turn usage-breakdown accumulator and its logged session roll-up.
- * Not for: the token-estimate heuristic - @trevor/session owns it (re-exported here).
+ * Not for: the token-estimate heuristic - @belay/session owns it (re-exported here).
  */
 
 const pct = (part: number, whole: number): number =>

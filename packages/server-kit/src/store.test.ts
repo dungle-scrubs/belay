@@ -34,14 +34,14 @@ test("startStore reads the env port/host convention and prints the standard bann
       envPrefix: "TEST_STORE",
       reservedPort: 65535,
       dataLabel: "root",
-      dataPath: "/tmp/trevor-test-store",
+      dataPath: "/tmp/belay-test-store",
       build: () => createServer((_req, res) => json(res, 200, { ok: true })),
     });
     try {
       assert.ok(running.port > 0);
       assert.equal(running.url, `http://127.0.0.1:${running.port}`);
       assert.match(lines.at(-1) ?? "", /\[test-store\] listening on http:\/\/127\.0\.0\.1:/);
-      assert.match(lines.at(-1) ?? "", /\(root: \/tmp\/trevor-test-store\)/);
+      assert.match(lines.at(-1) ?? "", /\(root: \/tmp\/belay-test-store\)/);
     } finally {
       await running.close();
     }

@@ -1,5 +1,5 @@
+import { sessionSummary } from "@belay/test-kit";
 import { fireEvent, render } from "@testing-library/react";
-import { sessionSummary } from "@trevor/test-kit";
 import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -37,7 +37,7 @@ function openMenu(container: HTMLElement) {
 
 describe("ProjectSidebar archive access (M7)", () => {
   test("an empty project renders a 'New session' button that fires onNewSession with the path", () => {
-    const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], []);
+    const groups = buildProjectSidebar([project({ path: "/dev/belay" })], []);
     const onNewSession = vi.fn<(projectKey: string) => void>();
     const { getByText } = renderWithTooltip(
       <ProjectSidebar
@@ -51,11 +51,11 @@ describe("ProjectSidebar archive access (M7)", () => {
     );
     const link = getByText("New session");
     fireEvent.click(link);
-    expect(onNewSession).toHaveBeenCalledWith("/dev/trevor");
+    expect(onNewSession).toHaveBeenCalledWith("/dev/belay");
   });
 
   test("without onNewSession, the empty state shows 'No active sessions' and is not a link", () => {
-    const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], []);
+    const groups = buildProjectSidebar([project({ path: "/dev/belay" })], []);
     const { getByText, queryByText } = renderWithTooltip(
       <ProjectSidebar
         groups={groups}
@@ -70,7 +70,7 @@ describe("ProjectSidebar archive access (M7)", () => {
   });
 
   test("'View archive' is available from the project context menu and fires onViewArchive", () => {
-    const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], []);
+    const groups = buildProjectSidebar([project({ path: "/dev/belay" })], []);
     const onViewArchive = vi.fn<(projectKey: string) => void>();
     const { getByText, container } = renderWithTooltip(
       <ProjectSidebar
@@ -87,13 +87,13 @@ describe("ProjectSidebar archive access (M7)", () => {
     openMenu(container);
     const link = getByText("View archive");
     fireEvent.click(link);
-    expect(onViewArchive).toHaveBeenCalledWith("/dev/trevor");
+    expect(onViewArchive).toHaveBeenCalledWith("/dev/belay");
   });
 
   test("the global archived sessions entry is pinned at the bottom of the sidebar", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     const onViewArchived = vi.fn<() => void>();
     const { getByRole } = renderWithTooltip(
@@ -113,8 +113,8 @@ describe("ProjectSidebar archive access (M7)", () => {
 
   test("the normal sidebar renders NO Delete button on session rows (Delete is archive-only)", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     const { queryByLabelText, queryByText } = renderWithTooltip(
       <ProjectSidebar
@@ -133,8 +133,8 @@ describe("ProjectSidebar archive access (M7)", () => {
 
   test("the shared project label renders the project name in the row", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor", displayName: "My Trevor" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay", displayName: "My Belay" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     const { getByText } = renderWithTooltip(
       <ProjectSidebar
@@ -145,6 +145,6 @@ describe("ProjectSidebar archive access (M7)", () => {
         searchQuery=""
       />,
     );
-    expect(getByText("My Trevor")).toBeTruthy();
+    expect(getByText("My Belay")).toBeTruthy();
   });
 });

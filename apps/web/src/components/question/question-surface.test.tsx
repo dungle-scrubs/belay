@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { fireEvent, render, screen } from "@testing-library/react";
 import type {
   ProviderQuestionAccept,
   ProviderQuestionAnswer,
   ProviderQuestionContract,
-} from "@trevor/session";
+} from "@belay/session";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { test, vi } from "vitest";
 import * as fx from "./fixtures";
 import { QuestionSurface } from "./question-surface";
@@ -191,10 +191,10 @@ test("custom answer: typing your own completes a single-choice question", () => 
 test("free text: the answer is the typed text", () => {
   const { onAnswer } = renderSurface(fx.freeText);
   const box = screen.getByLabelText("What should we name the new package?");
-  fireEvent.change(box, { target: { value: "trevor-kit" } });
+  fireEvent.change(box, { target: { value: "belay-kit" } });
   fireEvent.click(screen.getByRole("button", { name: /submit answer/i }));
 
-  assert.equal(lastAccept(onAnswer).questions[0]?.text, "trevor-kit");
+  assert.equal(lastAccept(onAnswer).questions[0]?.text, "belay-kit");
 });
 
 test("required reason: submit stays disabled until a reason is entered", () => {
@@ -249,7 +249,7 @@ test("decline emits a decline answer without building a payload", () => {
 
 test("Cmd/Ctrl+Enter submits when the draft is ready", () => {
   const { onAnswer } = renderSurface(fx.singleChoice); // recommended pre-selected → ready
-  fireEvent.keyDown(screen.getByRole("region", { name: /question from trevor/i }), {
+  fireEvent.keyDown(screen.getByRole("region", { name: /question from belay/i }), {
     key: "Enter",
     metaKey: true,
   });
@@ -369,7 +369,7 @@ test("grouped: Next is gated on the current tab; Submit appears only on the fina
 test("grouped: a multi-question ask advances through the tabs and submits ONE batched answer (M5/M6)", () => {
   const { onAnswer } = renderSurface(fx.grouped);
   // Tab 0 (scope) pre-selected: advance with Enter (confirm-and-advance, not submit).
-  fireEvent.keyDown(screen.getByRole("region", { name: /question from trevor/i }), {
+  fireEvent.keyDown(screen.getByRole("region", { name: /question from belay/i }), {
     key: "Enter",
   });
   assert.equal(onAnswer.mock.calls.length, 0, "Enter mid-flow advances, it does not submit");
@@ -392,7 +392,7 @@ test("grouped: a multi-question ask advances through the tabs and submits ONE ba
 test("grouped: on the final tab with an earlier tab incomplete, Submit is disabled + a jump appears (M5/D-011)", () => {
   renderSurface(fx.grouped);
   // Jump straight to the final tab via Right/Right (leaving checks unanswered).
-  const region = screen.getByRole("region", { name: /question from trevor/i });
+  const region = screen.getByRole("region", { name: /question from belay/i });
   fireEvent.keyDown(region, { key: "ArrowRight" });
   fireEvent.keyDown(region, { key: "ArrowRight" });
   assert.ok(screen.getByText("Question 3 of 3"));
@@ -409,7 +409,7 @@ test("grouped: on the final tab with an earlier tab incomplete, Submit is disabl
 
 test("grouped: Left/Right move between tabs; Up/Down still move the choice within a tab (M7/D-013)", () => {
   renderSurface(fx.grouped);
-  const region = screen.getByRole("region", { name: /question from trevor/i });
+  const region = screen.getByRole("region", { name: /question from belay/i });
   // Right advances the tab; Left goes back.
   fireEvent.keyDown(region, { key: "ArrowRight" });
   assert.ok(screen.getByText("Question 2 of 3"));
@@ -426,7 +426,7 @@ test("grouped: Left/Right move between tabs; Up/Down still move the choice withi
 
 test("grouped: Left/Right inside a text field move the caret, not the tab (M7/D-009)", () => {
   renderSurface(fx.grouped);
-  const region = screen.getByRole("region", { name: /question from trevor/i });
+  const region = screen.getByRole("region", { name: /question from belay/i });
   // Go to the free-text tab and focus the textarea.
   fireEvent.keyDown(region, { key: "ArrowRight" });
   fireEvent.keyDown(region, { key: "ArrowRight" });
@@ -438,7 +438,7 @@ test("grouped: Left/Right inside a text field move the caret, not the tab (M7/D-
 
 test("grouped: going back to an answered tab shows the already-chosen answer (M7)", () => {
   renderSurface(fx.grouped);
-  const region = screen.getByRole("region", { name: /question from trevor/i });
+  const region = screen.getByRole("region", { name: /question from belay/i });
   fireEvent.keyDown(region, { key: "ArrowRight" }); // to checks
   fireEvent.click(screen.getByRole("checkbox", { name: /Unit tests/ }));
   fireEvent.keyDown(region, { key: "ArrowLeft" }); // back to scope
@@ -452,7 +452,7 @@ test("grouped: going back to an answered tab shows the already-chosen answer (M7
 
 test("grouped: focus follows the active tab onto its first choice (M8)", () => {
   renderSurface(fx.grouped);
-  fireEvent.keyDown(screen.getByRole("region", { name: /question from trevor/i }), {
+  fireEvent.keyDown(screen.getByRole("region", { name: /question from belay/i }), {
     key: "ArrowRight",
   });
   // Tab 1 (checks) is active: focus landed on a choice row in the new panel, not <body>.
@@ -466,7 +466,7 @@ test("grouped: focus follows the active tab onto its first choice (M8)", () => {
 
 test("grouped: Decline works from any tab and emits a single decline (M5)", () => {
   const { onAnswer } = renderSurface(fx.grouped);
-  fireEvent.keyDown(screen.getByRole("region", { name: /question from trevor/i }), {
+  fireEvent.keyDown(screen.getByRole("region", { name: /question from belay/i }), {
     key: "ArrowRight",
   });
   fireEvent.click(screen.getByRole("button", { name: /decline/i }));

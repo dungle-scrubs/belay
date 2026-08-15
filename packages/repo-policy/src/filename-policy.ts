@@ -6,10 +6,14 @@ const CONVENTIONAL_DOCUMENT_NAMES = new Set([
   "ARCHITECTURE.md",
   "CHANGELOG.md",
   "CLAUDE.md",
+  "CONTRIBUTING.md",
   "CONTEXT.md",
   "FEATURES.md",
   "HOTKEYS.md",
+  "LICENSE",
+  "PULL_REQUEST_TEMPLATE.md",
   "README.md",
+  "SECURITY.md",
   "SECURITY_RISKS.md",
 ]);
 
@@ -21,7 +25,14 @@ const GENERATED_FILE_PATTERNS: readonly RegExp[] = [
 
 const SKILL_FILE_PATTERNS: readonly RegExp[] = [
   /^\.claude\/skills\/[^/]+\/SKILL\.md$/,
-  /^\.trevor\/skills\/[^/]+\/SKILL\.md$/,
+  /^\.belay\/skills\/[^/]+\/SKILL\.md$/,
+];
+
+const GITHUB_TEMPLATE_PATTERNS: readonly RegExp[] = [
+  /^\.github\/ISSUE_TEMPLATE\/.+\.yml$/,
+  /^\.github\/PULL_REQUEST_TEMPLATE\.md$/,
+  /^\.github\/workflows\/.+\.yml$/,
+  /^\.github\/dependabot\.yml$/,
 ];
 
 export interface FilenameViolation {
@@ -33,7 +44,8 @@ export const isConventionalDocument = (path: string): boolean => {
   const filename = basename(path);
   return (
     CONVENTIONAL_DOCUMENT_NAMES.has(filename) ||
-    SKILL_FILE_PATTERNS.some((pattern) => pattern.test(path))
+    SKILL_FILE_PATTERNS.some((pattern) => pattern.test(path)) ||
+    GITHUB_TEMPLATE_PATTERNS.some((pattern) => pattern.test(path))
   );
 };
 

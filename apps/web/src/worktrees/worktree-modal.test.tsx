@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
+import type { WorktreeSummary } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { WorktreeSummary } from "@trevor/session";
 import { test, vi } from "vitest";
 import { RowChooserModal } from "@/components/command-modal";
 import { WORKTREE_CHOOSER, type WorktreeRowsContext } from "./worktree-rows";
 
 const wt = (over: Partial<WorktreeSummary>): WorktreeSummary => ({
   id: "wt",
-  baseRepo: "/dev/trevor",
-  baseRepoName: "trevor",
+  baseRepo: "/dev/belay",
+  baseRepoName: "belay",
   branch: "feat/x",
   path: "~/.worktrees/h/feat-x-wt",
   sessionId: "s-wt",
@@ -59,7 +59,7 @@ test("renders the baseline + worktree branches grouped by base repo", () => {
   renderModal();
   assert.ok(screen.getByText("main (baseline)"));
   assert.ok(screen.getByText("feat/sidebar"));
-  assert.ok(screen.getByText("trevor")); // base-repo group heading
+  assert.ok(screen.getByText("belay")); // base-repo group heading
 });
 
 test("switching to a worktree fires onSwitch with its id and closes", () => {

@@ -1,7 +1,7 @@
 /**
  * `/doctor` health-snapshot read model and aggregation helpers - the FROZEN contract (plan 41 M2).
  *
- * The single source of the shape Trevor web renders for `doctor.current`: the
+ * The single source of the shape Belay web renders for `doctor.current`: the
  * overall snapshot, its fourteen diagnostic areas, the findings inside each area,
  * and the pure helpers that roll finding/area severity up into the summary
  * strip. Nothing here renders or probes - the host (`apps/agent-host/src/doctor`)
@@ -226,7 +226,7 @@ export function formatDoctorReport(snapshot: DoctorSnapshot): string {
   const status = overallStatus(snapshot);
   const summary = summarizeSnapshot(snapshot);
   const lines: string[] = [];
-  lines.push(`Trevor /doctor - ${DOCTOR_STATUS_HEADLINE[status]}`);
+  lines.push(`Belay /doctor - ${DOCTOR_STATUS_HEADLINE[status]}`);
   const freshness = snapshot.checkedAt ? `${snapshot.checkedAt} · ` : "";
   lines.push(
     `${freshness}${summary.total} areas · ${summary.error} error, ${summary.warn} warning, ${summary.ok} ok, ${summary.notChecked} not checked`,

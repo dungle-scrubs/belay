@@ -4,7 +4,7 @@ import type {
   DoctorFinding,
   DoctorNextAction,
   DoctorStatus,
-} from "@trevor/session";
+} from "@belay/session";
 import { area } from "./area";
 import type { DoctorProbeInput, DoctorWebDocs, PeripheralState } from "./probe-input";
 

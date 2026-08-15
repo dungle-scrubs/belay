@@ -5,13 +5,13 @@
  * symbol + context engine, so discovery decides what it advertises - it is NOT pretended to be only
  * chunk search), initializes a project graph (`/init`, cached per project root), and maps a
  * conceptual query onto `/context` + `/symbol/:id` so Aleutian results normalize into the same cited
- * source-recall result items. It does NOT route Trevor's model turn through Aleutian's
+ * source-recall result items. It does NOT route Belay's model turn through Aleutian's
  * OpenAI-compatible proxy - Aleutian is used purely as a retrieval provider (M6 REFACTOR / Gate 3->4).
  *
  * Not for: the pure mapping (aleutian-mapping.ts), the transport (http.ts), or config (config.ts).
  */
 
-import type { SourceRecallFreshness } from "@trevor/session";
+import type { SourceRecallFreshness } from "@belay/session";
 import { Effect } from "effect";
 import {
   type AlContextBody,

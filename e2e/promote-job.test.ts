@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { ProcessRegistry, runPromotable } from "@trevor/agent-host/testing";
+import { ProcessRegistry, runPromotable } from "@belay/agent-host/testing";
 import { afterEach, beforeEach, test } from "vitest";
 
 /**

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { PRODUCER_IDS, type SessionEvent, type SupersedeReason } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { act, renderHook } from "@testing-library/react";
-import { PRODUCER_IDS, type SessionEvent, type SupersedeReason } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
 import { test } from "vitest";
 import type { UserTurnInput } from "@/send-queue";
 import { useSendQueue } from "./use-send-queue";

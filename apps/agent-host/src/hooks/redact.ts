@@ -1,4 +1,4 @@
-import { REDACTED, redactSecrets } from "@trevor/session/telemetry";
+import { REDACTED, redactSecrets } from "@belay/session/telemetry";
 
 /**
  * Hook output redaction (plan 25 M3, D-009). Hook stdout/stderr is arbitrary command output

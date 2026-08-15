@@ -1,6 +1,6 @@
+import type { DoctorFinding, InternetSnapshot, StoreDiagPayload } from "@belay/session";
+import type { RootCategoryId } from "@belay/session/node-paths";
 import type { CwdLockDoctorFact } from "@host/session/cwd-lock";
-import type { DoctorFinding, InternetSnapshot, StoreDiagPayload } from "@trevor/session";
-import type { RootCategoryId } from "@trevor/session/node-paths";
 import type { AdmissionDoctorSummary } from "../admission/doctor";
 import type { ProviderIncidentCategory } from "../providers/provider-incidents";
 import type { ResidencyDoctorSummary } from "../residency/doctor";
@@ -45,15 +45,15 @@ export interface TelemetryDoctorSummary {
 export interface DoctorRootProbe {
   readonly id: RootCategoryId;
   readonly label: string;
-  readonly ownership: "trevor" | "external";
+  readonly ownership: "belay" | "external";
   readonly path: string | null; // already sanitized (home-abbreviated); null for browser
   readonly exists: boolean;
   readonly writable: boolean | null; // null when not applicable/not probed (external, legacy, browser)
   readonly overridden: boolean;
-  readonly migrationAvailable: boolean; // legacy only: importable ~/.trevor data present
+  readonly migrationAvailable: boolean; // legacy only: importable ~/.belay data present
 }
 
-/** The store's `/diag` probe outcome: the decoded SHARED wire payload (@trevor/session's
+/** The store's `/diag` probe outcome: the decoded SHARED wire payload (@belay/session's
  *  session-routes owns the shape) plus the host-side sha, or a bounded `unknown` with its reason. */
 export type StoreDiagProbe =
   | {
@@ -93,7 +93,7 @@ export interface DoctorProbeInput {
   /** Local-model admission state (plan 11): active owners, queue depth, oldest wait; absent when not
    *  probed (e.g. no local provider in use). */
   readonly admission?: AdmissionDoctorSummary;
-  /** Local-model residency state (plan 11.1): Trevor-loaded models, their context caps + live claim
+  /** Local-model residency state (plan 11.1): Belay-loaded models, their context caps + live claim
    *  counts, and the last eviction; folded into the Local-admission area. Absent when not probed. */
   readonly residency?: ResidencyDoctorSummary;
   /** Telemetry mode + exporter health (plan 13 M7): exporter, remote/Sentry/provider-trace on-off, drop

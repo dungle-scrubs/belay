@@ -4,8 +4,8 @@ import {
   type SessionEvent,
   type TrevorEventInput,
   type UsageBreakdown,
-} from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import {
   formatLimitScope,
@@ -38,11 +38,11 @@ const breakdown: UsageBreakdown = {
 };
 
 const ev = (seq: number, input: TrevorEventInput): SessionEvent =>
-  storedEvent(input, { seq, producerId: "trevor-host", createdAt: "2026-06-24T00:00:00.000Z" });
+  storedEvent(input, { seq, producerId: "belay-host", createdAt: "2026-06-24T00:00:00.000Z" });
 
 // A stored event with an explicit createdAt, for the elapsed-clock timestamp source (M2).
 const evAt = (seq: number, createdAt: string, input: TrevorEventInput): SessionEvent =>
-  storedEvent(input, { seq, producerId: "trevor-host", createdAt });
+  storedEvent(input, { seq, producerId: "belay-host", createdAt });
 
 test("58.6.1 M2: a tool.started row carries startedAt = Date.parse(event.createdAt) for the elapsed clock", () => {
   // The running-tool elapsed clock ticks from the tool's own start, sourced from the existing event
@@ -1393,7 +1393,7 @@ test("/clear renders nothing - neither the command echo nor its 'cleared' result
       4,
       events.commandResult({
         command: "/clear",
-        text: "✓ started fresh session trevor-20260626-123456z-abcdef12",
+        text: "✓ started fresh session belay-20260626-123456z-abcdef12",
         ok: true,
       }),
     ),
@@ -2007,10 +2007,10 @@ test("plan 27: two distinct lucid artifacts render as two cards", () => {
 const webUser = (seq: number, eventId: string, text: string): SessionEvent =>
   storedEvent(
     { type: "user.message", payload: { text, provider: "qwen" } },
-    { seq, eventId, producerId: "trevor-web", createdAt: "2026-06-24T00:00:00.000Z" },
+    { seq, eventId, producerId: "belay-web", createdAt: "2026-06-24T00:00:00.000Z" },
   );
 
-const HOST_SELF = { selfProducerId: "trevor-host" };
+const HOST_SELF = { selfProducerId: "belay-host" };
 const userTexts = (list: readonly Message[]): string[] =>
   list.filter((m) => m.kind === "user").map((m) => (m.kind === "user" ? m.text : ""));
 

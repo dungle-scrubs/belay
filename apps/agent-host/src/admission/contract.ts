@@ -1,10 +1,10 @@
-import { shortHash } from "@trevor/session";
+import { shortHash } from "@belay/session";
 
 /**
  * Local admission control - the machine-level vocabulary (plan 11).
  *
  * Admission protects a local model runtime (LM Studio first) from accidental overload, model
- * reload races, and hidden cross-project contention when multiple Trevor projects, sessions, or
+ * reload races, and hidden cross-project contention when multiple Belay projects, sessions, or
  * subagents try to stream through the same local endpoint at once. V1 proved the in-process shape
  * (key by concrete provider/baseUrl/model, reserve before dispatch, queue when full, refuse the
  * impossible, release after); V2 keeps those lessons but moves coordination from a process-local

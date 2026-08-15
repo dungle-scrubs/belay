@@ -24,7 +24,7 @@ import {
   timeUntil,
   type Usage,
   type UsageBreakdown,
-} from "@trevor/session";
+} from "@belay/session";
 import { type QuestionOutcome, summarizeProviderQuestion } from "./derive";
 import { type QueuedPrompt, queuedPromptsFrom } from "./send-queue";
 
@@ -218,7 +218,7 @@ export type ShellMessage = {
   output?: string;
   ok?: boolean;
 };
-// A resolved `ask_user` interaction (D-001): the slim transcript record of what Trevor asked and how
+// A resolved `ask_user` interaction (D-001): the slim transcript record of what Belay asked and how
 // the user answered, folded from `provider.question.requested` + `.answer` + `.resolved` (paired by
 // questionId). The raw `ask_user` tool row stays hidden; this is a purpose-built message, created on
 // the resolved event and updated in place if a duplicate/late resolved arrives. `items` carries one

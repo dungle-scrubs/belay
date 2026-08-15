@@ -3,7 +3,7 @@ import type { CapabilityManifest, ManifestScope, ManifestSection } from "./capab
 
 /**
  * The COMPACT manifest projection (plan 14, M5): turns a structured {@link CapabilityManifest} into the
- * terse, token-budgeted text a subagent or the built-in `trevor-expert` gets in its context. The prompt
+ * terse, token-budgeted text a subagent or the built-in `belay-expert` gets in its context. The prompt
  * text is GENERATED from the manifest object, never hand-written prose (M5 REFACTOR) - so it can never
  * drift from the real capability surface.
  *
@@ -75,7 +75,7 @@ export function renderCompactManifest(
     );
   }
   const maxTokens = options.maxTokens ?? DEFAULT_MAX_TOKENS;
-  const header = "Trevor capabilities (compact - use trevor-export for detail):";
+  const header = "Belay capabilities (compact - use belay-export for detail):";
   const lines: string[] = [header];
   let omitted = 0;
   for (const section of manifest.sections) {
@@ -89,7 +89,7 @@ export function renderCompactManifest(
     lines.push(line);
   }
   if (omitted > 0) {
-    lines.push(`… ${omitted} more section(s) omitted for space - use trevor-export.`);
+    lines.push(`… ${omitted} more section(s) omitted for space - use belay-export.`);
   }
   return lines.join("\n");
 }

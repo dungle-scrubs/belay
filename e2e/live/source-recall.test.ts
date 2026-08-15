@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { decodeSourceRecallIndexStatus } from "@belay/session";
 import type { Tool } from "@host/tools";
 import {
   loadSourceRecallConfig,
@@ -6,7 +7,6 @@ import {
 } from "@host/tools/source-recall/config";
 import { createSourceRecallRegistry } from "@host/tools/source-recall/registry";
 import { buildSourceRecallTools } from "@host/tools/source-recall/tools";
-import { decodeSourceRecallIndexStatus } from "@trevor/session";
 import { Effect } from "effect";
 import { test } from "vitest";
 

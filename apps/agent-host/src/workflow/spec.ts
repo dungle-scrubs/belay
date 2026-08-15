@@ -14,7 +14,7 @@ import { WorkflowSpecInvalid } from "./errors";
 
 /**
  * A stable model reference: source + model id + selected reasoning. Structurally mirrors
- * `@trevor/session` `model-source` `ModelRef`, so `opts.model` resolves through
+ * `@belay/session` `model-source` `ModelRef`, so `opts.model` resolves through
  * `providerForSource`/`buildSourceProvider` when the leaf runs (M2, 21/D-014).
  */
 export const ModelRef = Schema.Struct({

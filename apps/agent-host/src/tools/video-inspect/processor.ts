@@ -8,14 +8,14 @@
  * per-frame extraction/write failure degrades to a warning; only cancellation propagates.
  *
  * Not for: the tool envelope (tool.ts), provider continuation (continuation.ts), or blob transport
- * (@trevor/session/blob). Binary paths are configurable via TREVOR_FFPROBE_PATH / TREVOR_FFMPEG_PATH.
+ * (@belay/session/blob). Binary paths are configurable via TREVOR_FFPROBE_PATH / TREVOR_FFMPEG_PATH.
  */
 import { execFile as execFileCallback } from "node:child_process";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { VideoCancelledError, VideoDegradedError, videoDegraded } from "./errors";
 import {
   DEFAULT_MAX_FRAMES,
@@ -105,7 +105,7 @@ export async function inspectVideoFile(
   const frameCount = Math.min(maxFrames, idealFrameCount);
 
   const frames: VideoFrame[] = [];
-  const transcodeDir = await mkdtemp(join(tmpdir(), "trevor-video-"));
+  const transcodeDir = await mkdtemp(join(tmpdir(), "belay-video-"));
   try {
     for (let index = 0; index < frameCount; index += 1) {
       throwIfAborted(options.signal);

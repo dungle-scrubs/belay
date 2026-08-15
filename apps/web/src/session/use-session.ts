@@ -21,7 +21,7 @@ import {
   type TrevorEventInput,
   toPublishInput,
   viewerIdentity,
-} from "@trevor/session";
+} from "@belay/session";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { UserTurnInput } from "@/send-queue";
 
@@ -34,7 +34,7 @@ export type { ConnectionStatus, HostPresence };
  *   - `useSessionActions` publishes user intents - prompt / cancel / command / editor-open (write side).
  * Backend selection is a single `streamTransport(url)` call - Tether speaks the same `/sessions`
  * REST + WS contract as the local store, so it is just that URL, not a separate adapter. The stream
- * URL, decode loop, and REST calls live in `@trevor/session`, so host and browser can never drift on
+ * URL, decode loop, and REST calls live in `@belay/session`, so host and browser can never drift on
  * the protocol.
  */
 
@@ -62,7 +62,7 @@ export const TAIL_FLUSH_MS = 16;
 // registering a new participant on every load. sessionStorage (not localStorage) scopes it to this
 // tab, keeping distinct tabs and devices as distinct presences - a session moves between machines by
 // URL (?session=), never by identity. Storage can throw (private mode); fall back to an ephemeral id.
-const IDENTITY_KEY = "trevor-web-identity";
+const IDENTITY_KEY = "belay-web-identity";
 
 function webIdentity(): SessionIdentity {
   try {
@@ -75,7 +75,7 @@ function webIdentity(): SessionIdentity {
   }
 
   const identity = viewerIdentity({
-    displayName: "trevor-web",
+    displayName: "belay-web",
     instanceId: crypto.randomUUID(),
     participantId: `web-${crypto.randomUUID()}`,
   });
@@ -132,7 +132,7 @@ function publishEvent(
 
 /**
  * Publishes a BROWSER event: stamps the shared web producer id (`PRODUCER_IDS.web`, owned in
- * `@trevor/session`) onto the envelope and publishes it. The one owner of "web events are producer
+ * `@belay/session`) onto the envelope and publishes it. The one owner of "web events are producer
  * `web`", so no browser publish path - the session free functions here, `publishVia`, or the
  * new-session hooks - re-spreads the stamp or can forget it.
  */
@@ -594,7 +594,7 @@ export function useSessionActionsWithTransport(
   sessionId: string | null,
 ): SessionActions {
   // Every browser-published event is stamped with the shared web producer id (PRODUCER_IDS.web, owned
-  // in @trevor/session) and gated on a live session, so that guard lives here once and the public
+  // in @belay/session) and gated on a live session, so that guard lives here once and the public
   // methods below are one-line delegations to the matching event builder.
   const publishVia = useCallback(
     async (built: TrevorEventInput) => {

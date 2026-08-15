@@ -10,7 +10,7 @@ import type { PermanentDeleteResult } from "./session-delete";
  * of where the durable log lives. The local session-store and a Tether service are
  * both reached through the one `streamTransport` implementation of this interface
  * (they speak the identical wire); selecting one is just the URL a deployment points
- * it at. The event shape (./event) and the trevor protocol (./protocol) are shared by
+ * it at. The event shape (./event) and the belay protocol (./protocol) are shared by
  * every transport.
  */
 

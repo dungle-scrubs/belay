@@ -1,3 +1,13 @@
+import {
+  decodeTrevorEvent,
+  isAnswerableProducer,
+  isClipProducer,
+  type ModelRef,
+  type SessionEvent,
+  type SessionTransport,
+} from "@belay/session";
+import type { TelemetrySink } from "@belay/session/telemetry";
+import type { ProviderTraceWriter } from "@belay/session/telemetry-provider-trace";
 import type { InternetMonitor } from "@host/connectivity/probe";
 import { hooksRuntime } from "@host/hooks/host-runtime";
 import { type ChatMessage, DEFAULT_PROVIDER, type ProviderRegistry } from "@host/providers/index";
@@ -11,16 +21,6 @@ import { discoverAgents } from "@host/subagents/discovery";
 import { CLIPBOARD_TOOL_NAMES } from "@host/tools/clip";
 import { log, warn } from "@host/transport/log";
 import type { Emit } from "@host/transport/services";
-import {
-  decodeTrevorEvent,
-  isAnswerableProducer,
-  isClipProducer,
-  type ModelRef,
-  type SessionEvent,
-  type SessionTransport,
-} from "@trevor/session";
-import type { TelemetrySink } from "@trevor/session/telemetry";
-import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Effect, type Layer } from "effect";
 import { interpretFiberExit, interruptFiber } from "../effect/fiber-exit";
 import type { ActiveRun } from "./active-run";

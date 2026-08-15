@@ -1,10 +1,10 @@
 /**
- * `@trevor/sdk` - the ergonomic, browser-safe headless workflow layer above `@trevor/session` (plan 28).
+ * `@belay/sdk` - the ergonomic, browser-safe headless workflow layer above `@belay/session` (plan 28).
  *
  * Build a client with {@link createTrevorClient}, bound to a session backend (and optionally a blob
  * store) by URL, then use the workflows: read the inventory/transcript, prompt/stream/cancel a turn,
  * switch the model mid-turn, upload/download artifacts, read capabilities/doctor, and run session
- * lifecycle. It speaks the `@trevor/session` protocol only - it never runs the CLI and never recreates
+ * lifecycle. It speaks the `@belay/session` protocol only - it never runs the CLI and never recreates
  * the web UI. Local process orchestration (services, host spawn, browser, OS signals) stays in the CLI.
  */
 

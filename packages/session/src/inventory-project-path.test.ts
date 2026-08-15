@@ -59,8 +59,8 @@ function row(over: Partial<InventoryRow> = {}): InventoryRow {
 }
 
 test("sessionProjectPath returns the marker path when present, ignoring workspace/cwd", () => {
-  const marker = stored(events.sessionProject({ path: "/Users/kevin/dev/trevor" }));
-  assert.equal(sessionProjectPath(marker, "/tmp/other", "/tmp/cwd"), "/Users/kevin/dev/trevor");
+  const marker = stored(events.sessionProject({ path: "/Users/kevin/dev/belay" }));
+  assert.equal(sessionProjectPath(marker, "/tmp/other", "/tmp/cwd"), "/Users/kevin/dev/belay");
 });
 
 test("sessionProjectPath falls back to workspace when no marker", () => {
@@ -76,14 +76,14 @@ test("sessionProjectPath returns null when none available", () => {
 });
 
 test("summarizeSession includes projectPath from the marker when present", () => {
-  const marker = stored(events.sessionProject({ path: "/Users/kevin/dev/trevor" }));
+  const marker = stored(events.sessionProject({ path: "/Users/kevin/dev/belay" }));
   const summary = summarizeSession(
     row({
       projectMarker: marker,
       hostOnline: HOST_ONLINE({ cwd: "/tmp/other", workspace: "/tmp/other" }),
     }),
   );
-  assert.equal(summary.projectPath, "/Users/kevin/dev/trevor");
+  assert.equal(summary.projectPath, "/Users/kevin/dev/belay");
   // The legacy basename field still derives from workspace/cwd, not the marker.
   assert.equal(summary.project, "other");
 });
@@ -105,13 +105,13 @@ test("a legacy session (no marker, old host.online workspace) groups via project
 
 test("summarizeSession projects a worktree identity from the session.worktree marker", () => {
   const marker = stored(
-    events.sessionWorktree({ id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" }),
+    events.sessionWorktree({ id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/belay/feat-x" }),
   );
   const summary = summarizeSession(row({ worktreeMarker: marker }));
   assert.deepEqual(summary.worktree, {
     id: "wt-1",
     branch: "feat/x",
-    path: "/dev/.worktrees/trevor/feat-x",
+    path: "/dev/.worktrees/belay/feat-x",
   });
 });
 

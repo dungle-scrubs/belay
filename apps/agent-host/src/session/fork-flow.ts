@@ -4,7 +4,7 @@ import {
   type PublishInput,
   planFork,
   type SessionEvent,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * The host FORK operation (plan 15, M2), kept PURE over injected effects so the append sequence is

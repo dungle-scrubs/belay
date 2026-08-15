@@ -3,9 +3,9 @@ import {
   classifyArtifactKind,
   createArtifactRuntime,
   errorMessage,
-} from "@trevor/session";
-import { serviceUrl } from "@trevor/session/ports";
-import { SPAN_NAMES, type TelemetrySink, withSpan } from "@trevor/session/telemetry";
+} from "@belay/session";
+import { serviceUrl } from "@belay/session/ports";
+import { SPAN_NAMES, type TelemetrySink, withSpan } from "@belay/session/telemetry";
 import { telemetrySink } from "./telemetry";
 
 /**
@@ -18,7 +18,7 @@ const BLOB_STORE_URL = import.meta.env.VITE_BLOB_STORE_URL ?? serviceUrl("blob")
 const artifactRuntime = createArtifactRuntime({ blobStoreUrl: BLOB_STORE_URL });
 
 /** Uploads a picked File to the blob store, returning its ArtifactRef for a user.message. The upload is a
- *  `trevor.blob.io` span carrying the artifact KIND + byte size only - never the file name or bytes. */
+ *  `belay.blob.io` span carrying the artifact KIND + byte size only - never the file name or bytes. */
 export async function uploadArtifact(
   file: File,
   sink: TelemetrySink = telemetrySink(),

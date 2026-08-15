@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
+import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@belay/session";
 import { MAX_LSP_WORKSPACE_SYMBOLS } from "@host/lsp/caps";
 import type { LspClient } from "@host/lsp/client";
 import { degraded, type LspOutcome, type LspServerStatus, ok } from "@host/lsp/contract";
 import type { LspManager } from "@host/lsp/manager";
 import { ToolInputError } from "@host/tools/errors";
-import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { Effect } from "effect";
 import { test } from "vitest";
 import {

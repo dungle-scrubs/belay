@@ -1,4 +1,4 @@
-import type { DoctorArea, DoctorFact, DoctorFinding, DoctorNextAction } from "@trevor/session";
+import type { DoctorArea, DoctorFact, DoctorFinding, DoctorNextAction } from "@belay/session";
 import type { ProviderIncidentCategory } from "../providers/provider-incidents";
 import { area } from "./area";
 import type { DoctorCatalogSource, DoctorProbeInput } from "./probe-input";
@@ -63,7 +63,7 @@ export function providersArea(input: DoctorProbeInput): DoctorArea {
       : {}),
   }));
   // Recent terminal provider-failure outcomes (D-076 M6) as two SEPARATE findings: retry exhaustion
-  // (a transient outage Trevor auto-retried and still couldn't recover) is distinct from a
+  // (a transient outage Belay auto-retried and still couldn't recover) is distinct from a
   // non-retryable terminal failure (auth/quota/rejected - never eligible for retry). Each is shown
   // only when it has happened, so a clean session adds neither.
   const pf = input.providerFailures;

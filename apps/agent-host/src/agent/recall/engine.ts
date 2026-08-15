@@ -1,5 +1,5 @@
+import type { SessionEvent } from "@belay/session";
 import { warn } from "@host/transport/log";
-import type { SessionEvent } from "@trevor/session";
 import { Effect } from "effect";
 import type { Provider } from "../../providers";
 import { assembleCorpus, type SessionInput } from "./corpus";

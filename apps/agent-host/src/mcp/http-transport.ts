@@ -74,7 +74,7 @@ export function createHttpTransport(
   server: McpHttpServerConfig,
   options: HttpTransportOptions = {},
 ): McpTransport {
-  const clientInfo = options.clientInfo ?? { name: "trevor", version: "dev" };
+  const clientInfo = options.clientInfo ?? { name: "belay", version: "dev" };
   const redacted = redactMcpEndpoint(server.endpoint);
   const maxResponseBytes = options.maxResponseBytes ?? MAX_FRAME_BODY_BYTES;
 

@@ -32,7 +32,7 @@ import { READ_ONLY_TOOLS, TOOL_DEFS } from "@host/tools/index";
 
 /** Configurable agents root; one agent per `<dir>/<id>/AGENT.md`. */
 export const AGENTS_DIR = resolve(
-  process.env.TREVOR_AGENTS_DIR ?? join(homedir(), ".trevor", "agents"),
+  process.env.TREVOR_AGENTS_DIR ?? join(homedir(), ".belay", "agents"),
 );
 
 /** A delegated subagent's contract. */

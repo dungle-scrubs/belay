@@ -14,8 +14,8 @@ import type {
   ProviderQuestionChoice,
   ProviderQuestionContract,
   ProviderQuestionItem,
-} from "@trevor/session";
-import { MAX_QUESTIONS } from "@trevor/session";
+} from "@belay/session";
+import { MAX_QUESTIONS } from "@belay/session";
 import type { ClaudeMigrationItem } from "./claude-migration";
 
 /** The explicit per-file actions a user may pick for a detected CLAUDE.md (D-010). */

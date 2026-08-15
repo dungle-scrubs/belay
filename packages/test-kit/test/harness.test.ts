@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import type { RunningServer } from "@trevor/server-kit";
-import { events, streamTransport } from "@trevor/session";
+import type { RunningServer } from "@belay/server-kit";
+import { events, streamTransport } from "@belay/session";
 import {
   createWorkflowDriver,
   joinSession,
   liveHost,
   recordingTransport,
   storedEvent,
-} from "@trevor/test-kit";
-import { type BootedBlob, bootBlob, bootStore, bootWorkflowStack } from "@trevor/test-kit/boot";
+} from "@belay/test-kit";
+import { type BootedBlob, bootBlob, bootStore, bootWorkflowStack } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 let store: RunningServer;

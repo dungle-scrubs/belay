@@ -12,7 +12,7 @@ import {
 /**
  * 02.16 D-003: correctable per-model context-window metadata. The catalog reads each model's window from
  * pi-ai's bundled registry, which can be stale; a confirmed override WINS over it. Corrections are
- * user-owned in `~/.trevor/models.json`; the built-in map is the empty baseline the file layers over.
+ * user-owned in `~/.belay/models.json`; the built-in map is the empty baseline the file layers over.
  * These pin the resolution rule (override > learned > bundled > null) with injected maps + a fake file
  * read, so the resolution is exercised without touching real config or disk.
  */
@@ -37,7 +37,7 @@ test("the window is null when neither an override nor a bundled value is known",
 });
 
 /**
- * Corrections are user-owned: parsed from `~/.trevor/models.json` (parseModelOverrides) and read by
+ * Corrections are user-owned: parsed from `~/.belay/models.json` (parseModelOverrides) and read by
  * loadModelOverridesFile. The motivating case - MiniMax-M3 - is corrected to the model card's 1M in
  * that file, not in code, so the built-in map stays empty.
  */

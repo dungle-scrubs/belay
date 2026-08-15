@@ -2,13 +2,8 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { decodeTrevorEvent, events, type SessionEvent, searchWorkspaceFiles } from "@belay/session";
 import { buildFileIndex } from "@host/file-mention/file-index";
-import {
-  decodeTrevorEvent,
-  events,
-  type SessionEvent,
-  searchWorkspaceFiles,
-} from "@trevor/session";
 import { test } from "vitest";
 
 /**

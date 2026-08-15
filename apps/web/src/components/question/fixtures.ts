@@ -5,7 +5,7 @@ import type {
   ProviderQuestionItem,
   QuestionItemAnswer,
   RawAskUserInput,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * Shared fixtures for the ask_user question surface, imported by BOTH the view-model tests and the

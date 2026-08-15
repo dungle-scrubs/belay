@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import {
   isErrorResult,
   shellMessageStatus,

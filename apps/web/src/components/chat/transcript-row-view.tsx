@@ -1,4 +1,4 @@
-import { type ArtifactRef, estimateTokens, isContextOverflowText } from "@trevor/session";
+import { type ArtifactRef, estimateTokens, isContextOverflowText } from "@belay/session";
 import { CircleX, PanelRight, RotateCw, TriangleAlert } from "lucide-react";
 import { memo, type ReactNode } from "react";
 import { RECOVERY_ACTION_LABEL, reconnectActionLabel } from "@/action-label";

@@ -1,15 +1,15 @@
+import { events, type SessionTransport, type TrevorEventInput } from "@belay/session";
 import { publishTurn } from "@host/agent/turn";
 import type { ChatMessage, Provider, ProviderError, ProviderEvent, ToolDef } from "@host/providers";
 import { Emit } from "@host/transport/services";
-import { events, type SessionTransport, type TrevorEventInput } from "@trevor/session";
 import { Effect, Layer, Stream } from "effect";
 
 /**
  * The deterministic fake provider: it stands in for a real model so a turn test never
  * depends on a model choosing to call a tool, and never reaches LM Studio or the cloud.
  * This is the host's test seam named in apps/agent-host/AGENTS.md; it lives with the host
- * (not @trevor/test-kit) because it is typed by the host's Provider contract. The e2e
- * workspace reaches it through the `@trevor/agent-host/testing` export.
+ * (not @belay/test-kit) because it is typed by the host's Provider contract. The e2e
+ * workspace reaches it through the `@belay/agent-host/testing` export.
  */
 
 const usage = { input: 10, output: 5, contextWindow: 1000, genMs: 1 };

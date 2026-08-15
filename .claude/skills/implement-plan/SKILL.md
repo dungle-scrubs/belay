@@ -3,10 +3,10 @@ name: implement-plan
 as_slash_command: true
 argument-hint: "[<NN-name>... | next | all]"
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write, Skill, Task
-description: "Use when the owner asks to implement, build, finish, run, or do one or more existing numbered Trevor plans under `.plans/`, or to work the backlog - the execution counterpart to authoring a plan (plan-next-feature), so prefer this when the plan already exists and the ask is to build it. Triggers: implement the plan, implement plans, do these plans, do plans NN-MM, build the plan, run the plan, finish the plan, implement-plan, work the backlog."
+description: "Use when the owner asks to implement, build, finish, run, or do one or more existing numbered Belay plans under `.plans/`, or to work the backlog - the execution counterpart to authoring a plan (plan-next-feature), so prefer this when the plan already exists and the ask is to build it. Triggers: implement the plan, implement plans, do these plans, do plans NN-MM, build the plan, run the plan, finish the plan, implement-plan, work the backlog."
 ---
 
-# Implement Trevor Plan(s)
+# Implement Belay Plan(s)
 
 End-to-end execution of numbered plans: worktree -> implement -> full test (incl. e2e) -> simplify ->
 delete plan dir -> ff-merge to `main` -> prune. This is the IMPLEMENT counterpart to
@@ -33,12 +33,12 @@ a remote branch, or change repository visibility - those remain separately gated
 
 ## Paths
 
-- **Repo root (primary worktree, on `main`)**: `/Users/kevin/dev/trevor`
-- **Plans**: `/Users/kevin/dev/trevor/.plans/<NN[.n]>-<name>/` - each a self-contained plan-db
+- **Repo root (primary worktree, on `main`)**: `/Users/kevin/dev/belay`
+- **Plans**: `/Users/kevin/dev/belay/.plans/<NN[.n]>-<name>/` - each a self-contained plan-db
   (`implementation.md`, `progress-report.md`, `plan.db`, `artifacts/`). A directory with **no
   `plan.db`** is a stub - skip it and report.
-- **Per-plan worktree**: `/Users/kevin/dev/.trevor-wt/<NN[.n]>-<name>` (matches the existing
-  convention, e.g. `/Users/kevin/dev/.trevor-wt/01-managed-worktree-hardening`).
+- **Per-plan worktree**: `/Users/kevin/dev/.belay-wt/<NN[.n]>-<name>` (matches the existing
+  convention, e.g. `/Users/kevin/dev/.belay-wt/01-managed-worktree-hardening`).
 - **Per-plan branch**: `feat/<NN[.n]>-<name>`.
 - **Planner**: `~/.agents/skills/planner` - the implementation lifecycle this skill drives. Invoke its
   CLI as:
@@ -68,7 +68,7 @@ Each plan's code must meet the repo bar in `AGENTS.md` and the per-directory `AG
 the relevant language/toolchain standards skills (`typescript-standards`, `react-standards`,
 `css-standards`, `typescript-toolchain-standards`, `db-standards`, ...). Honor `CLAUDE.md`: plain `-`
 never `—`, no `Co-Authored-By` trailer on commits, quality over development cost. Storage placement
-follows the root taxonomy in `AGENTS.md` (`@trevor/session/node-paths`).
+follows the root taxonomy in `AGENTS.md` (`@belay/session/node-paths`).
 
 ## Build the run order (dependency-aware, serial)
 
@@ -84,7 +84,7 @@ follows the root taxonomy in `AGENTS.md` (`@trevor/session/node-paths`).
 
 1. **Expand `TARGET`** into a concrete plan set. For `all`, take every plan dir that has a `plan.db`.
    For `next`, compute the eligible set then take the first. Read the plan set from **`main`**
-   (`git -C /Users/kevin/dev/trevor ls-tree --name-only main .plans/`), which is the source of
+   (`git -C /Users/kevin/dev/belay ls-tree --name-only main .plans/`), which is the source of
    truth for what's still open - a deleted plan dir means that plan is already done.
 2. **Order topologically.** For each plan read `## 0. Hard Dependencies` in its `implementation.md`.
    A plan is eligible only when **every** hard-dependency plan is complete (its `.plans/<dep>/`
@@ -99,8 +99,8 @@ follows the root taxonomy in `AGENTS.md` (`@trevor/session/node-paths`).
 
 ## Per-plan lifecycle
 
-Run these steps for each plan `P = <NN[.n]>-<name>` in order. `REPO=/Users/kevin/dev/trevor`,
-`WT=/Users/kevin/dev/.trevor-wt/P`.
+Run these steps for each plan `P = <NN[.n]>-<name>` in order. `REPO=/Users/kevin/dev/belay`,
+`WT=/Users/kevin/dev/.belay-wt/P`.
 
 ### 1. Gate on dependencies and freshness
 

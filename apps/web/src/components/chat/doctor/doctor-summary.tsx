@@ -3,7 +3,7 @@ import {
   type DoctorSnapshotState,
   type DoctorStatus,
   type DoctorSummary,
-} from "@trevor/session";
+} from "@belay/session";
 import { Braces, Copy, ListFilter, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";

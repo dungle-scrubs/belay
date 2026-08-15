@@ -1,4 +1,4 @@
-import type { LucidAnchor, LucidElementAnchor, LucidRangeAnchor } from "@trevor/session";
+import type { LucidAnchor, LucidElementAnchor, LucidRangeAnchor } from "@belay/session";
 
 /**
  * The CANONICAL Lucid addressability algorithm (plan 27, M4): anchor CAPTURE and RESOLUTION against a

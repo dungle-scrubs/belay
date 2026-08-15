@@ -1,12 +1,12 @@
-import { redactHookText } from "@host/hooks/redact";
-import type { PreToolUseOutcome, StopOutcome } from "@host/hooks/runtime";
-import { clipLine } from "@host/tools/shared";
 import {
   events,
   type HookDecisionEventName,
   type HookDecisionKind,
   type TrevorEventInput,
-} from "@trevor/session";
+} from "@belay/session";
+import { redactHookText } from "@host/hooks/redact";
+import type { PreToolUseOutcome, StopOutcome } from "@host/hooks/runtime";
+import { clipLine } from "@host/tools/shared";
 import type { TurnHooks } from "./loop";
 
 /**

@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@belay/session";
 import { MAX_LSP_CODE_ACTIONS, MAX_LSP_PROPOSAL_TEXT_CHARS } from "@host/lsp/caps";
 import type { LspClient } from "@host/lsp/client";
 import { degraded, type LspOutcome, type LspServerStatus, ok } from "@host/lsp/contract";
 import type { LspManager } from "@host/lsp/manager";
-import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { buildLspCodeActionsTool, type LspCodeActionsArgs } from "./lsp-code-actions";
@@ -20,7 +20,7 @@ import { buildLspCodeActionsTool, type LspCodeActionsArgs } from "./lsp-code-act
  * test/lsp/tools-code-actions.test.ts.
  */
 
-const root = mkdtempSync(join(tmpdir(), "trevor-lsp-actions-unit-"));
+const root = mkdtempSync(join(tmpdir(), "belay-lsp-actions-unit-"));
 const target = join(root, "fixable.ts");
 writeFileSync(target, "oops line\n");
 afterAll(() => rmSync(root, { recursive: true, force: true }));

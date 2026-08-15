@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { missingRootError } from "@trevor/launcher";
+import { missingRootError } from "@belay/launcher";
 import {
   decodeTrevorEvent,
   events,
@@ -9,8 +9,8 @@ import {
   SUPERVISOR_SESSION_ID,
   streamTransport,
   viewerIdentity,
-} from "@trevor/session";
-import { bootStore } from "@trevor/test-kit/boot";
+} from "@belay/session";
+import { bootStore } from "@belay/test-kit/boot";
 import { afterEach, beforeEach, test } from "vitest";
 import { handleSupervisorEvent, type SupervisorDeps } from "../src/dispatch";
 

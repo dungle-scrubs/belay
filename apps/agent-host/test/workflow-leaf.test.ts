@@ -1,8 +1,8 @@
+import { testIdentity } from "@belay/session/testing";
+import { recordingTransport } from "@belay/test-kit";
 import type { DelegationContext } from "@host/agent/delegate";
 import type { ProviderEvent } from "@host/providers";
 import { type LeafHostContext, runAgentLeaf } from "@host/workflow/leaf-host";
-import { testIdentity } from "@trevor/session/testing";
-import { recordingTransport } from "@trevor/test-kit";
 import { Effect, Schema } from "effect";
 import { describe, expect, test } from "vitest";
 import { fakeProvider } from "./support/fake-provider";

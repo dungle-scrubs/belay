@@ -17,18 +17,18 @@ function renderWithTooltip(ui: ReactElement) {
 describe("ProjectLabel", () => {
   test("renders the display name", () => {
     const { getByText } = renderWithTooltip(
-      <ProjectLabel displayName="trevor" displayPath="/Users/kevin/dev/trevor" />,
+      <ProjectLabel displayName="belay" displayPath="/Users/kevin/dev/belay" />,
     );
-    expect(getByText("trevor")).toBeTruthy();
+    expect(getByText("belay")).toBeTruthy();
   });
 
   test("does NOT render the path inline (it shows in the tooltip instead)", () => {
     const { queryByText, container } = renderWithTooltip(
-      <ProjectLabel displayName="trevor" displayPath="/Users/kevin/dev/trevor" />,
+      <ProjectLabel displayName="belay" displayPath="/Users/kevin/dev/belay" />,
     );
     // The path is not rendered inline anywhere in the container (it's in the Radix portal).
-    expect(queryByText("/Users/kevin/dev/trevor")).toBeNull();
-    expect(container.textContent).toBe("trevor");
+    expect(queryByText("/Users/kevin/dev/belay")).toBeNull();
+    expect(container.textContent).toBe("belay");
   });
 
   test("omits the tooltip when the path is the same as the name", () => {
@@ -46,7 +46,7 @@ describe("ProjectLabel", () => {
 
   test("applies the injected className to the root span", () => {
     const { container } = renderWithTooltip(
-      <ProjectLabel displayName="trevor" displayPath="/dev/trevor" className="text-ui" />,
+      <ProjectLabel displayName="belay" displayPath="/dev/belay" className="text-ui" />,
     );
     expect(container.firstChild).toBeTruthy();
     expect((container.firstChild as HTMLElement).className).toContain("text-ui");

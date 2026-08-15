@@ -1,5 +1,5 @@
-import { resolveTelemetryConfig, type TelemetryEnv } from "@trevor/session/telemetry";
-import { type SanitizableSentryEvent, scrubSentryEvent } from "@trevor/session/telemetry-sentry";
+import { resolveTelemetryConfig, type TelemetryEnv } from "@belay/session/telemetry";
+import { type SanitizableSentryEvent, scrubSentryEvent } from "@belay/session/telemetry-sentry";
 
 /**
  * Node Sentry ERROR-sink bootstrap (plan 13 M9). App-owned (D-003): the package defines the privacy
@@ -14,7 +14,7 @@ import { type SanitizableSentryEvent, scrubSentryEvent } from "@trevor/session/t
  * unit-tested without the SDK, and `main.ts` passes the real one.
  *
  * Responsible for: opt-in, error-only Node Sentry initialization (DSN-gated, scrubbed beforeSend).
- * Not for: the scrubbing rules - @trevor/session/telemetry-sentry.
+ * Not for: the scrubbing rules - @belay/session/telemetry-sentry.
  */
 
 /** The minimal `@sentry/node` surface the bootstrap drives (so it is testable without the SDK). */

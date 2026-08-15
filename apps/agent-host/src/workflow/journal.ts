@@ -11,8 +11,9 @@
  * Not for: the ordinal machinery (ordinal.ts), running a leaf (leaf-host.ts), or the budget governor
  * (M5 - it wires `onUsage`).
  */
+
+import { events, type TrevorEventInput } from "@belay/session";
 import { canonicalJson } from "@host/boot/canonical-json";
-import { events, type TrevorEventInput } from "@trevor/session";
 import { Effect } from "effect";
 import type { LeafResult, TurnUsage } from "./leaf";
 import { consumeOrdinal, type Ordinal, ordinalKey } from "./ordinal";

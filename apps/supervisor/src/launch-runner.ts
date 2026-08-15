@@ -1,5 +1,5 @@
-import { type LaunchPlatform, launch, nodePlatform } from "@trevor/launcher";
-import type { SessionLaunchOkStatus } from "@trevor/session";
+import { type LaunchPlatform, launch, nodePlatform } from "@belay/launcher";
+import type { SessionLaunchOkStatus } from "@belay/session";
 
 /**
  * The node-backed launch runner (plan 44.1). It reuses the launcher core's FULL spawn-or-reuse

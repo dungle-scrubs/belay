@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { ProviderDiagnostic } from "@trevor/session";
+import type { ProviderDiagnostic } from "@belay/session";
 import { test } from "vitest";
 import { ProviderUnavailable } from "./errors";
 import { providerDiagnostic } from "./provider-diagnostic";

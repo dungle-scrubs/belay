@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { type KeyboardEvent, type ReactNode, type RefObject, useState } from "react";
 import { artifactSrc } from "@/blob";
 import { segmentBySpans } from "@/lib/segment-by-spans";

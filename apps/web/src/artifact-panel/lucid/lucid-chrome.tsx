@@ -1,5 +1,5 @@
-import type { LucidAnchor, LucidReviewState } from "@trevor/session";
-import { describeLucidAnchor } from "@trevor/session";
+import type { LucidAnchor, LucidReviewState } from "@belay/session";
+import { describeLucidAnchor } from "@belay/session";
 import { AlertTriangle, Check, MessageSquarePlus, RotateCw, Send, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,7 @@ import {
 } from "./lucid-panel-state";
 
 /**
- * The native Trevor CHROME around a Lucid surface (plan 27, M7): the composer, the composed-but-unsent
+ * The native Belay CHROME around a Lucid surface (plan 27, M7): the composer, the composed-but-unsent
  * queue, the orphan tray, the version indicator, and the review controls - all driven by the pure
  * {@link LucidPanelState} reducer. Presentational only (props in, callbacks out), so every M7 state
  * (drafting, queued, orphaned, review resolved, deferred version) is a jsdom + Storybook render with

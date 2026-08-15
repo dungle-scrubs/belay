@@ -52,7 +52,7 @@ export function createTypeScriptLanguageServerAdapter(
   return {
     id: "typescript",
     displayName: TS_SERVER_BINARY,
-    initializeOptions: { hostInfo: "trevor" },
+    initializeOptions: { hostInfo: "belay" },
     detects: (workspaceRoot) =>
       isFile(join(workspaceRoot, "tsconfig.json")) ||
       isFile(join(workspaceRoot, "jsconfig.json")) ||

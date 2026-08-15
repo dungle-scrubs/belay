@@ -10,7 +10,7 @@ import { events, type TrevorEventInput } from "./protocol";
  * catch-up and the web's queued-prompt panel both read. Pending = every answerable user.message no turn
  * has claimed yet and that is not superseded, in seq order.
  *
- * Events are built inline (no @trevor/test-kit - that would cycle into this core package).
+ * Events are built inline (no @belay/test-kit - that would cycle into this core package).
  */
 
 let seq = 0;

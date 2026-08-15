@@ -6,7 +6,7 @@ import { afterEach, test } from "vitest";
 import { type CommandFileRoot, loadCommandFilesFrom } from "./command-loader";
 
 /**
- * The `.trevor/commands/*.md` loader (plan 44.5 M3): ordered project->user roots, project-over-user
+ * The `.belay/commands/*.md` loader (plan 44.5 M3): ordered project->user roots, project-over-user
  * precedence (D-006), subdir recursion + `.md` filter + basename id, and fail-soft skips with a
  * structured diagnostic. Driven with temp-dir fixtures (the skills.test.ts pattern) - no global state.
  */
@@ -20,11 +20,11 @@ afterEach(() => {
 
 /** A fresh temp base holding a project root and a user root. */
 function roots(): { project: CommandFileRoot; user: CommandFileRoot; base: string } {
-  const base = mkdtempSync(join(tmpdir(), "trevor-commands-"));
+  const base = mkdtempSync(join(tmpdir(), "belay-commands-"));
   temps.push(base);
   return {
     base,
-    project: { kind: "project", dir: join(base, "project", ".trevor", "commands") },
+    project: { kind: "project", dir: join(base, "project", ".belay", "commands") },
     user: { kind: "user", dir: join(base, "user", "commands") },
   };
 }
@@ -37,7 +37,7 @@ function writeCommand(root: CommandFileRoot, relative: string, body: string): st
   return path;
 }
 
-test("loads project `.trevor/commands/*.md` as CommandFiles (id, rootKind, stripped body)", () => {
+test("loads project `.belay/commands/*.md` as CommandFiles (id, rootKind, stripped body)", () => {
   const r = roots();
   writeCommand(
     r.project,

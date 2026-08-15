@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "vitest";
-import { collectTrevorRuleSources } from "./rules";
+import { collectBelayRuleSources } from "./rules";
 import { CONTEXT_SOURCE_KINDS } from "./sources";
 
 function tree(): string {
-  return mkdtempSync(join(tmpdir(), "trevor-rules-"));
+  return mkdtempSync(join(tmpdir(), "belay-rules-"));
 }
 
 function write(path: string, content: string): void {
@@ -15,10 +15,10 @@ function write(path: string, content: string): void {
   writeFileSync(path, content, "utf8");
 }
 
-test("collects .trevor/rules markdown files as typed context sources", () => {
+test("collects .belay/rules markdown files as typed context sources", () => {
   const root = tree();
   write(
-    join(root, ".trevor", "rules", "review.md"),
+    join(root, ".belay", "rules", "review.md"),
     [
       "---",
       "id: review",
@@ -33,12 +33,12 @@ test("collects .trevor/rules markdown files as typed context sources", () => {
     ].join("\n"),
   );
 
-  const report = collectTrevorRuleSources(root);
+  const report = collectBelayRuleSources(root);
 
   assert.equal(report.diagnostics.length, 0);
   assert.equal(report.rules.length, 1);
   const [rule] = report.rules;
-  assert.equal(rule?.kind, CONTEXT_SOURCE_KINDS.trevorRule);
+  assert.equal(rule?.kind, CONTEXT_SOURCE_KINDS.belayRule);
   assert.equal(rule?.metadata.id, "review");
   assert.equal(rule?.metadata.title, "Review guide");
   assert.equal(rule?.metadata.description, "How to review changes");
@@ -51,7 +51,7 @@ test("collects .trevor/rules markdown files as typed context sources", () => {
 test("applies nearest folder metadata as provenance and defaults for rules", () => {
   const root = tree();
   write(
-    join(root, ".trevor", "rules", "apps", "metadata.yaml"),
+    join(root, ".belay", "rules", "apps", "metadata.yaml"),
     [
       "title: Apps folder",
       "description: Rules for app packages",
@@ -61,11 +61,11 @@ test("applies nearest folder metadata as provenance and defaults for rules", () 
     ].join("\n"),
   );
   write(
-    join(root, ".trevor", "rules", "apps", "react.md"),
+    join(root, ".belay", "rules", "apps", "react.md"),
     ["---", "id: react", "inclusion: scoped", "---", "Keep React behavior tested."].join("\n"),
   );
 
-  const report = collectTrevorRuleSources(root);
+  const report = collectBelayRuleSources(root);
   const [rule] = report.rules;
 
   assert.equal(rule?.folder?.title, "Apps folder");
@@ -78,20 +78,20 @@ test("applies nearest folder metadata as provenance and defaults for rules", () 
 test("returns diagnostics for malformed metadata, duplicate ids, disabled rules, and unknown fields", () => {
   const root = tree();
   write(
-    join(root, ".trevor", "rules", "bad.md"),
+    join(root, ".belay", "rules", "bad.md"),
     ["---", "id: duplicate", "unknown: nope", "enabled: true", "---", "Bad metadata."].join("\n"),
   );
   write(
-    join(root, ".trevor", "rules", "disabled.md"),
+    join(root, ".belay", "rules", "disabled.md"),
     ["---", "id: disabled", "enabled: false", "---", "Do not load."].join("\n"),
   );
   write(
-    join(root, ".trevor", "rules", "duplicate.md"),
+    join(root, ".belay", "rules", "duplicate.md"),
     ["---", "id: duplicate", "---", "Duplicate id."].join("\n"),
   );
-  write(join(root, ".trevor", "rules", "malformed.md"), "---\nid: [\n---\nMalformed.");
+  write(join(root, ".belay", "rules", "malformed.md"), "---\nid: [\n---\nMalformed.");
 
-  const report = collectTrevorRuleSources(root);
+  const report = collectBelayRuleSources(root);
   const codes = report.diagnostics.map((diagnostic) => diagnostic.code);
 
   assert.ok(codes.includes("unknown_metadata"));

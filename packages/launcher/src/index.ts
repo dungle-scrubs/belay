@@ -1,6 +1,6 @@
 /**
- * `@trevor/launcher` - the pure launch-orchestration core extracted from `apps/trevor-cli` (plan 44.1),
- * callable by BOTH the `trevor` CLI and the supervisor daemon (and, later, a desktop core) over an
+ * `@belay/launcher` - the pure launch-orchestration core extracted from `apps/belay-cli` (plan 44.1),
+ * callable by BOTH the `belay` CLI and the supervisor daemon (and, later, a desktop core) over an
  * injected platform.
  *
  * It OWNS:
@@ -13,10 +13,10 @@
  *    `LaunchPlatform`, plus the real node-backed `nodePlatform`.
  *
  * It is NOT:
- *  - CLI arg parsing / usage / subcommand dispatch (that stays in `apps/trevor-cli`);
- *  - an `@trevor/sdk` client, headless verbs, or terminal rendering;
+ *  - CLI arg parsing / usage / subcommand dispatch (that stays in `apps/belay-cli`);
+ *  - an `@belay/sdk` client, headless verbs, or terminal rendering;
  *  - a session-log participant - the launcher never subscribes to a session (the supervisor does).
- * All machine-local state stays under `TREVOR_STATE_HOME` via `@trevor/session/node-paths`; this
+ * All machine-local state stays under `BELAY_STATE_HOME` via `@belay/session/node-paths`; this
  * package adds no new storage roots.
  */
 export * from "./fs";

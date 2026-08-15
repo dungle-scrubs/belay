@@ -4,6 +4,13 @@
  * Not for: failure normalization at the boundary (failure-normalizer.ts), the classification rules
  * (failure-taxonomy.ts / error-classifier.ts), or reasoning-effort policy (reasoning-policy.ts).
  */
+
+import {
+  type PastePayload,
+  parseImageTokens,
+  parsePasteTokens,
+  stripImageTokens,
+} from "@belay/session";
 import {
   type Api,
   type Context,
@@ -14,12 +21,6 @@ import {
 } from "@earendil-works/pi-ai/compat";
 import { activeStyleGuidance } from "@host/prefs/style-store";
 import { debug } from "@host/transport/log";
-import {
-  type PastePayload,
-  parseImageTokens,
-  parsePasteTokens,
-  stripImageTokens,
-} from "@trevor/session";
 import { Effect, Stream } from "effect";
 import {
   classifyResponseOverflow,

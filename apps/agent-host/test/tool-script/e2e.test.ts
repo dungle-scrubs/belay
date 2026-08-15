@@ -18,22 +18,22 @@ let priorAllow: string | undefined;
 beforeAll(() => {
   // Inside the workspace root: the bridge confines tool_script reads to the workspace, so the fixtures
   // (which the script reads by absolute path) must live under it. mkdtemp keeps the run hermetic.
-  dir = mkdtempSync(join(WORKSPACE_ROOT, "trevor-ts-e2e-"));
+  dir = mkdtempSync(join(WORKSPACE_ROOT, "belay-ts-e2e-"));
   writeFileSync(join(dir, "a.txt"), "alpha\nalpha");
   writeFileSync(join(dir, "b.txt"), "beta");
   writeFileSync(join(dir, "c.txt"), "gammagamma");
   // On a host where the Seatbelt profile cannot boot Node, tool_script fails closed by default. This
   // e2e legitimately exercises the reduced-isolation child-process path, so it opts in explicitly.
-  priorAllow = process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED;
-  process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED = "1";
+  priorAllow = process.env.BELAY_TOOL_SCRIPT_ALLOW_UNSANDBOXED;
+  process.env.BELAY_TOOL_SCRIPT_ALLOW_UNSANDBOXED = "1";
 });
 
 afterAll(() => {
   rmSync(dir, { recursive: true, force: true });
   if (priorAllow === undefined) {
-    delete process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED;
+    delete process.env.BELAY_TOOL_SCRIPT_ALLOW_UNSANDBOXED;
   } else {
-    process.env.TREVOR_TOOL_SCRIPT_ALLOW_UNSANDBOXED = priorAllow;
+    process.env.BELAY_TOOL_SCRIPT_ALLOW_UNSANDBOXED = priorAllow;
   }
 });
 

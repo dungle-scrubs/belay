@@ -37,7 +37,7 @@ const catalogMode = (process.argv
 const initMode = process.argv.find((arg) => arg.startsWith("--init="))?.slice("--init=".length);
 
 const dispatcher = createFixtureDispatcher({
-  serverInfoName: "trevor-mcp-fixture",
+  serverInfoName: "belay-mcp-fixture",
   protocolVersion: protocolOverride,
   catalog: catalogMode,
 });

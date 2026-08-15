@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { SPAN_NAMES } from "@trevor/session/telemetry";
-import { recordingTelemetrySink } from "@trevor/test-kit";
+import { SPAN_NAMES } from "@belay/session/telemetry";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { spanEffect } from "./span";

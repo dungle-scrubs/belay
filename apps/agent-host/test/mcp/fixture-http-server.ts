@@ -70,7 +70,7 @@ export async function startFixtureHttpServer(
   const sessions = new Set<string>();
   const recorded: RecordedFixtureRequest[] = [];
   const dispatcher = createFixtureDispatcher({
-    serverInfoName: "trevor-mcp-http-fixture",
+    serverInfoName: "belay-mcp-http-fixture",
     protocolVersion: options.protocolVersion,
     catalog: options.catalog ?? "default",
   });

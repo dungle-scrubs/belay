@@ -2,11 +2,11 @@
  * Responsible for: the host-internal `SourceRecallProvider` contract every indexed-source adapter
  * implements - capability discovery, index status, conceptual query, and refresh - plus the
  * normalized host-domain input/output shapes those methods speak. This is the provider BOUNDARY
- * (D-002): Trevor's tools depend on this contract and the {@link SourceRecallResult} wire model,
+ * (D-002): Belay's tools depend on this contract and the {@link SourceRecallResult} wire model,
  * never on a backend's raw endpoints or response schema. `source-recall` (the local FastAPI daemon)
  * is the first concrete adapter; Aleutian Trace is the second, behind the same interface.
  *
- * Not for: the serializable wire result the web renders (that is `@trevor/session/source-recall`) or
+ * Not for: the serializable wire result the web renders (that is `@belay/session/source-recall`) or
  * any one backend's HTTP shapes (those stay inside each adapter).
  */
 
@@ -16,7 +16,7 @@ import type {
   SourceRecallReadiness,
   SourceRecallRepoStatus,
   SourceRecallResultItem,
-} from "@trevor/session";
+} from "@belay/session";
 import type { Effect } from "effect";
 import type { SourceRecallProviderError } from "./errors";
 
@@ -53,7 +53,7 @@ export interface SourceRecallQueryInput {
 export interface SourceRecallQueryAnswer {
   readonly items: readonly SourceRecallResultItem[];
   readonly repo: string | null;
-  readonly freshness: import("@trevor/session").SourceRecallFreshness | null;
+  readonly freshness: import("@belay/session").SourceRecallFreshness | null;
   readonly latencyMs: number;
   /** True when at least one candidate's snippet was truncated to its per-item bound. */
   readonly truncated: boolean;

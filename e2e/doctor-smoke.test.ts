@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildDoctorCommandResult, type DoctorCommandInput } from "@host/doctor/build";
-import type { ProviderRegistry } from "@host/providers";
 import {
   type DoctorSnapshot,
   decodeDoctorSnapshot,
   type InternetSnapshot,
   overallStatus,
-} from "@trevor/session";
+} from "@belay/session";
+import { buildDoctorCommandResult, type DoctorCommandInput } from "@host/doctor/build";
+import type { ProviderRegistry } from "@host/providers";
 import { Effect, Stream } from "effect";
 import { afterEach, beforeEach, expect, test } from "vitest";
 
@@ -24,18 +24,18 @@ import { afterEach, beforeEach, expect, test } from "vitest";
  */
 
 let stateHome: string;
-const savedStateHome = process.env.TREVOR_STATE_HOME;
+const savedStateHome = process.env.BELAY_STATE_HOME;
 
 beforeEach(() => {
-  stateHome = mkdtempSync(join(tmpdir(), "trevor-doctor-e2e-"));
-  process.env.TREVOR_STATE_HOME = stateHome;
+  stateHome = mkdtempSync(join(tmpdir(), "belay-doctor-e2e-"));
+  process.env.BELAY_STATE_HOME = stateHome;
 });
 
 afterEach(() => {
   if (savedStateHome === undefined) {
-    delete process.env.TREVOR_STATE_HOME;
+    delete process.env.BELAY_STATE_HOME;
   } else {
-    process.env.TREVOR_STATE_HOME = savedStateHome;
+    process.env.BELAY_STATE_HOME = savedStateHome;
   }
   rmSync(stateHome, { recursive: true, force: true });
 });
@@ -112,7 +112,7 @@ test("a reachable provider on an online host reports Providers and Internet ok, 
     qwen: fakeProvider({ label: "Qwen", model: "qwen3", kind: "local", ready: true }),
   } as unknown as ProviderRegistry;
 
-  // Storage roots probe the REAL filesystem (e.g. an importable legacy ~/.trevor can warn), so a
+  // Storage roots probe the REAL filesystem (e.g. an importable legacy ~/.belay can warn), so a
   // hermetic run cannot assert the whole host is ok - only the areas these inputs control.
   const snap = await snapshotFor(facts({ providers, internet: ONLINE }));
   expect(areaStatus(snap, "providers")).toBe("ok");

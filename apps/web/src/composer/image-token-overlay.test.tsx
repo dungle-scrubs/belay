@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { ArtifactRef } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { ArtifactRef } from "@trevor/session";
 import { test } from "vitest";
 import { ImageTokenOverlay } from "./image-token-overlay";
 

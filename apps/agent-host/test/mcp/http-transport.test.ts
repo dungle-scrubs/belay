@@ -53,7 +53,7 @@ describe.each(["json", "sse"] as const)("http transport over %s responses", (mod
     await withTransport({ responseMode: mode }, {}, async (transport, fixture) => {
       const init = await transport.initialize();
       expect(init.protocolVersion).toBe(MCP_PROTOCOL_VERSION);
-      expect(init.serverInfo).toMatchObject({ name: "trevor-mcp-http-fixture" });
+      expect(init.serverInfo).toMatchObject({ name: "belay-mcp-http-fixture" });
       expect(transport.state()).toMatchObject({
         status: "ready",
         initialized: true,

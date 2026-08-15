@@ -5,7 +5,7 @@ import {
   type SessionTransport,
   SUPERVISOR_SESSION_ID,
   viewerIdentity,
-} from "@trevor/session";
+} from "@belay/session";
 import { handleSupervisorEvent, type SupervisorDeps } from "./dispatch";
 
 /**
@@ -44,7 +44,7 @@ export function subscribeControlSession(
     connection = transport.connectSession({
       sessionId: SUPERVISOR_SESSION_ID,
       identity: viewerIdentity({
-        displayName: "trevor-supervisor",
+        displayName: "belay-supervisor",
         instanceId,
         participantId: PRODUCER_IDS.supervisor,
       }),

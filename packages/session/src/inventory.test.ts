@@ -39,8 +39,8 @@ const hostOnlineEvent = (over: Record<string, unknown> = {}): SessionEvent =>
     providers: ["qwen"],
     default: "qwen",
     models: {},
-    cwd: "~/dev/trevor",
-    workspace: "~/dev/trevor",
+    cwd: "~/dev/belay",
+    workspace: "~/dev/belay",
     commands: [],
     agents: [],
     ...over,
@@ -68,15 +68,15 @@ const baseRow = (over: Partial<InventoryRow> = {}): InventoryRow => ({
 test("summarizeSession projects title, cwd/workspace, project, and counts", () => {
   const s = summarizeSession(baseRow());
   assert.equal(s.title, "add the resume chooser please");
-  assert.equal(s.cwd, "~/dev/trevor");
-  assert.equal(s.workspace, "~/dev/trevor");
-  assert.equal(s.project, "trevor");
+  assert.equal(s.cwd, "~/dev/belay");
+  assert.equal(s.workspace, "~/dev/belay");
+  assert.equal(s.project, "belay");
   assert.equal(s.eventCount, 12);
 });
 
 test("title falls back to the session id when there is no user message", () => {
-  const s = summarizeSession(baseRow({ sessionId: "trevor-xyz", firstUser: null }));
-  assert.equal(s.title, "trevor-xyz");
+  const s = summarizeSession(baseRow({ sessionId: "belay-xyz", firstUser: null }));
+  assert.equal(s.title, "belay-xyz");
 });
 
 test("title truncates a long first message", () => {
@@ -224,11 +224,11 @@ test("sortInventory puts the current project first, each block by recency desc",
   });
   const list = [
     mk("a", "other", "2026-06-26T05:00:00.000Z"),
-    mk("b", "trevor", "2026-06-26T01:00:00.000Z"),
-    mk("c", "trevor", "2026-06-26T09:00:00.000Z"),
+    mk("b", "belay", "2026-06-26T01:00:00.000Z"),
+    mk("c", "belay", "2026-06-26T09:00:00.000Z"),
     mk("d", "other", "2026-06-26T02:00:00.000Z"),
   ];
-  const sorted = sortInventory(list, "trevor");
+  const sorted = sortInventory(list, "belay");
   assert.deepEqual(
     sorted.map((s) => s.sessionId),
     ["c", "b", "a", "d"],

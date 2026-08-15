@@ -11,7 +11,7 @@ import {
   type SessionEvent,
   supersededMessageIds,
   type TaskSnapshot,
-} from "@trevor/session";
+} from "@belay/session";
 import type { ChatMessage } from "../providers";
 import { analyzeCompactionLog } from "./compaction-planner";
 import { toolCallGrouper } from "./tool-messages";

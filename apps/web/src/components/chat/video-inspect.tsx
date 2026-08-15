@@ -1,4 +1,4 @@
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { Film, TriangleAlert } from "lucide-react";
 import { toolActionLabelForTarget } from "@/action-label";
 import { MessageImages } from "./message-images";

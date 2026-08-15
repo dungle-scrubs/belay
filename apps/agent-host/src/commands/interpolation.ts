@@ -1,4 +1,4 @@
-import { collapsePaths, redactSecrets } from "@trevor/session/telemetry";
+import { collapsePaths, redactSecrets } from "@belay/session/telemetry";
 
 /**
  * The general-interpolation TRUST GATE + policy (plan 14 gate, plan 40 runtime). "Interpolation" is
@@ -9,7 +9,7 @@ import { collapsePaths, redactSecrets } from "@trevor/session/telemetry";
  * splitting, refusal markers, bounded-output metadata, and the diagnostic record - while the shared
  * parser lives in interpolation-engine.ts and the command-file wiring in command-file.ts.
  *
- * The built-in `trevor-expert` is INDEPENDENT of this gate (D-004): it reads the capability manifest
+ * The built-in `belay-expert` is INDEPENDENT of this gate (D-004): it reads the capability manifest
  * through the direct host seam (`manifest/source.ts` `currentManifest`), so it works whether or not general
  * interpolation is enabled. This module governs ONLY untrusted `!command` expansion inside skill/command
  * files.
@@ -46,7 +46,7 @@ export const INTERPOLATION_GATE_ENV: Record<InterpolationSource, string> = {
  * capability export (D-002). A bounded, side-effect-free command is the only kind that may be spliced -
  * never `/shell`, never a mutating command.
  */
-export const DEFAULT_INTERPOLATION_ALLOWLIST: readonly string[] = ["/trevor-export"];
+export const DEFAULT_INTERPOLATION_ALLOWLIST: readonly string[] = ["/belay-export"];
 
 /** Max bytes of interpolated output spliced into a file. */
 const DEFAULT_MAX_OUTPUT_BYTES = 8 * 1024;

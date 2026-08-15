@@ -1,12 +1,12 @@
+import { SPAN_NAMES } from "@belay/session/telemetry";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { render, screen } from "@testing-library/react";
-import { SPAN_NAMES } from "@trevor/session/telemetry";
-import { recordingTelemetrySink } from "@trevor/test-kit";
 import { assert, test, vi } from "vitest";
 import { TelemetryErrorBoundary } from "./error-boundary";
 
 /**
  * The React render-crash boundary (plan 13 M4): a child crash is caught, shows a fallback, and records a
- * redacted trevor.web.render error span - never the component tree, props, or a secret in the message.
+ * redacted belay.web.render error span - never the component tree, props, or a secret in the message.
  */
 
 function Boom(): never {

@@ -15,18 +15,18 @@ import { buildDoctorCommandResult, type DoctorCommandInput } from "./build";
  */
 
 let stateHome: string;
-const savedStateHome = process.env.TREVOR_STATE_HOME;
+const savedStateHome = process.env.BELAY_STATE_HOME;
 
 beforeEach(() => {
-  stateHome = mkdtempSync(join(tmpdir(), "trevor-doctor-command-"));
-  process.env.TREVOR_STATE_HOME = stateHome;
+  stateHome = mkdtempSync(join(tmpdir(), "belay-doctor-command-"));
+  process.env.BELAY_STATE_HOME = stateHome;
 });
 
 afterEach(() => {
   if (savedStateHome === undefined) {
-    delete process.env.TREVOR_STATE_HOME;
+    delete process.env.BELAY_STATE_HOME;
   } else {
-    process.env.TREVOR_STATE_HOME = savedStateHome;
+    process.env.BELAY_STATE_HOME = savedStateHome;
   }
   rmSync(stateHome, { recursive: true, force: true });
 });

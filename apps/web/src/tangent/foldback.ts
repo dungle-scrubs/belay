@@ -1,4 +1,4 @@
-import type { TangentFoldMode } from "@trevor/session";
+import type { TangentFoldMode } from "@belay/session";
 import { truncate } from "@/derive";
 
 /**

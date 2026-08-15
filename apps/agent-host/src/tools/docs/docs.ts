@@ -13,7 +13,7 @@
  * Not for: executing the actions - build-actions.ts and query-actions.ts own those.
  */
 
-import { storagePathByName } from "@trevor/session/node-paths";
+import { storagePathByName } from "@belay/session/node-paths";
 import { simpleTool } from "../shared";
 import { runWebFetch, webFetchLiveDeps } from "../web-fetch/web-fetch";
 import { runWebSearch } from "../web-search";
@@ -24,7 +24,7 @@ import { type DocsResult, serializeDocsResult, unavailableResult } from "./envel
 import { type DocsArgs, DocsParams } from "./params";
 import { listAction, readAction, searchAction, statusAction } from "./query-actions";
 
-/** The docs-corpus storage inventory name owned by the root policy (`@trevor/session/node-paths`). */
+/** The docs-corpus storage inventory name owned by the root policy (`@belay/session/node-paths`). */
 export const DOCS_CORPUS_ENTRY = "docs-corpus";
 
 /**

@@ -1,5 +1,5 @@
-import type { SessionSummary } from "@trevor/session";
-import { sessionSummary } from "@trevor/test-kit";
+import type { SessionSummary } from "@belay/session";
+import { sessionSummary } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
 import { buildLineage } from "./lineage";
 

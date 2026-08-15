@@ -1,4 +1,4 @@
-import type { SessionSummary, WorktreeSummary } from "@trevor/session";
+import type { SessionSummary, WorktreeSummary } from "@belay/session";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   buildProjectSidebar,

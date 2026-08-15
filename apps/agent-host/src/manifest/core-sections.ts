@@ -1,13 +1,13 @@
-import type { OutputStyle } from "@host/prefs/styles";
-import type { SkillEntry } from "@host/skills/skills";
-import { splitDescription } from "@host/skills/skills";
-import type { AgentDescriptor } from "@host/subagents/discovery";
 import type {
   CommandMenuPayload,
   CommandSpec,
   ManifestItem,
   SectionProvider,
-} from "@trevor/session";
+} from "@belay/session";
+import type { OutputStyle } from "@host/prefs/styles";
+import type { SkillEntry } from "@host/skills/skills";
+import { splitDescription } from "@host/skills/skills";
+import type { AgentDescriptor } from "@host/subagents/discovery";
 import { scopeItemCap, scopeShowsHidden } from "./scope";
 import { elide, sectionBody } from "./section-helpers";
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { streamTransport } from "@trevor/session";
-import { liveHost } from "@trevor/test-kit";
+import { streamTransport } from "@belay/session";
+import { liveHost } from "@belay/test-kit";
 import { test } from "vitest";
 
 /**
@@ -23,7 +23,7 @@ test.skipIf(!enabled)(
     const host = liveHost(transport, sid as string, { provider });
     await host.waitHostOnline();
     const result = await host.ask(
-      "Use the bash tool to run the command: echo trevor-agent-ok . Then reply with exactly what it printed.",
+      "Use the bash tool to run the command: echo belay-agent-ok . Then reply with exactly what it printed.",
       {
         label: "assistant.completed",
       },
@@ -32,7 +32,7 @@ test.skipIf(!enabled)(
 
     const calledTool = result.events.some((e) => e.type === "tool.started");
     assert.ok(calledTool, "expected the agent to call a tool");
-    assert.ok(result.text.includes("trevor-agent-ok"), result.text);
+    assert.ok(result.text.includes("belay-agent-ok"), result.text);
   },
   200_000,
 );

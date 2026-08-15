@@ -2,7 +2,7 @@ import type {
   ProviderDiagnostic,
   ProviderIncidentReason,
   ProviderPartialCounts,
-} from "@trevor/session";
+} from "@belay/session";
 import { providerFailureEvidence } from "./errors";
 import { redactSecrets } from "./failure-taxonomy";
 import type { ProviderProtocolDiagnostic } from "./protocol-anomaly";

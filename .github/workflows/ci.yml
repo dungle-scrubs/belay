@@ -1,9 +1,11 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -39,7 +41,7 @@ jobs:
   browser:
     runs-on: ubuntu-latest
     container:
-      image: mcr.microsoft.com/playwright:v1.50.0-noble
+      image: mcr.microsoft.com/playwright:v1.62.1-noble
       # --ipc=host avoids Chromium running out of shared memory in the container (Playwright's guidance).
       options: --ipc=host
     steps:

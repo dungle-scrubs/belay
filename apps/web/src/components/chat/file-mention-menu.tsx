@@ -1,4 +1,4 @@
-import { type FileMatch, splitWorkspacePath } from "@trevor/session";
+import { type FileMatch, splitWorkspacePath } from "@belay/session";
 import type { ReactNode } from "react";
 import { AutocompleteMenu, type AutocompleteRow } from "./autocomplete-menu";
 

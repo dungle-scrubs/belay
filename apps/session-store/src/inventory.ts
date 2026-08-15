@@ -1,5 +1,5 @@
-import type { InventoryRow, SessionEvent } from "@trevor/session";
-import { INVENTORY_EVENT_TYPES, LIFECYCLE_TYPES } from "@trevor/session";
+import type { InventoryRow, SessionEvent } from "@belay/session";
+import { INVENTORY_EVENT_TYPES, LIFECYCLE_TYPES } from "@belay/session";
 import type { SessionLog } from "./log";
 
 /**

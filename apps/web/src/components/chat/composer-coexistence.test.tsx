@@ -1,5 +1,5 @@
+import type { CommandSpec, FileMatch } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { CommandSpec, FileMatch } from "@trevor/session";
 import { type KeyboardEvent as ReactKeyboardEvent, useState } from "react";
 import { describe, expect, test } from "vitest";
 import { useComposer } from "@/hooks/use-composer";

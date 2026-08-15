@@ -5,7 +5,7 @@ import {
   type SupervisorProject,
   events as sessionEvents,
   type TrevorEventInput,
-} from "@trevor/session";
+} from "@belay/session";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { publishWebEvent, sessionTransport, useSessionWithTransport } from "@/session/use-session";
 import { type PathValidation, validatePath } from "./path-validation";

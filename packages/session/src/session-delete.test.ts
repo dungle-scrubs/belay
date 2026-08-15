@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest";
 import type { SessionSummary } from "./inventory";
 import { permanentDeleteEligibility } from "./session-delete";
 
-// Local fixture (the eligibility happy path is an archived session): @trevor/session is the core
-// protocol package, so its tests don't depend on @trevor/test-kit (which depends on session) - that
+// Local fixture (the eligibility happy path is an archived session): @belay/session is the core
+// protocol package, so its tests don't depend on @belay/test-kit (which depends on session) - that
 // would be a cycle into the core. The web archive tests, which may depend on test-kit, share its
 // `sessionSummary` instead.
 function summary(over: Partial<SessionSummary>): SessionSummary {

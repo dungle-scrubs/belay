@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { decodeTrevorEvent, type TrevorEventInput } from "@belay/session";
 import type { EmitEvent } from "@host/transport/services";
-import { decodeTrevorEvent, type TrevorEventInput } from "@trevor/session";
 import { test } from "vitest";
 import { makeWorktreeCommands } from "./commands";
 import type { WorktreeManager } from "./manager";
@@ -17,9 +17,9 @@ test("/worktree-new creates a concurrent session and emits a focus command resul
       ok: true,
       record: {
         id: "wt-1",
-        baseRepo: "/dev/trevor",
-        baseRepoName: "trevor",
-        worktreePath: "/dev/.worktrees/trevor/feat-x",
+        baseRepo: "/dev/belay",
+        baseRepoName: "belay",
+        worktreePath: "/dev/.worktrees/belay/feat-x",
         branch: "feat/x",
         baseCommit: "abc123",
         sessionId: "worktree-session",
@@ -54,10 +54,10 @@ test("/worktree-new creates a concurrent session and emits a focus command resul
   assert.equal(serialTargets.length, 0, "/worktree-new must not use the serial switch path");
   assert.deepEqual(concurrentTargets, [
     {
-      cwd: "/dev/.worktrees/trevor/feat-x",
+      cwd: "/dev/.worktrees/belay/feat-x",
       sessionId: "worktree-session",
-      workspace: "/dev/.worktrees/trevor/feat-x",
-      worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+      workspace: "/dev/.worktrees/belay/feat-x",
+      worktree: { id: "wt-1", branch: "feat/x", path: "/dev/.worktrees/belay/feat-x" },
     },
   ]);
   const result = emitted
@@ -66,7 +66,7 @@ test("/worktree-new creates a concurrent session and emits a focus command resul
         ...event,
         createdAt: "2026-07-09T00:00:00.000Z",
         eventId: "e",
-        producerId: "trevor-host",
+        producerId: "belay-host",
         seq: 1,
         sessionId: "source-session",
       }),

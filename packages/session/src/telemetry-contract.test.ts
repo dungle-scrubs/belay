@@ -17,7 +17,7 @@ import {
   withSpan,
 } from "./telemetry-contract";
 
-/** A recording sink for the span-core tests (the app-facing one lives in @trevor/test-kit). */
+/** A recording sink for the span-core tests (the app-facing one lives in @belay/test-kit). */
 function recordingSink(): { sink: TelemetrySink; spans: SpanRecord[] } {
   const spans: SpanRecord[] = [];
   return { sink: { span: (r) => spans.push(r), metric: () => {} }, spans };
@@ -50,7 +50,7 @@ test("redactSecrets strips bearer tokens, api keys, auth headers, and query toke
 });
 
 test("redactAttributeValue collapses raw paths and caps length", () => {
-  const path = redactAttributeValue("/Users/kevin/dev/trevor/apps/agent-host/src/main.ts");
+  const path = redactAttributeValue("/Users/kevin/dev/belay/apps/agent-host/src/main.ts");
   assert.ok(path.includes("<path>"), "an absolute path is collapsed");
   assert.ok(!path.includes("/Users/kevin"), "the raw home path never survives");
 
@@ -119,15 +119,15 @@ test("safeAttributes drops disallowed keys, keeps numbers/booleans, and redacts 
   assert.ok(String(safe.detail).includes(REDACTED));
 });
 
-test("span + metric names are namespaced under trevor.* and resource attributes are bounded identity", () => {
+test("span + metric names are namespaced under belay.* and resource attributes are bounded identity", () => {
   for (const name of Object.values(SPAN_NAMES)) {
-    assert.match(name, /^trevor\./);
+    assert.match(name, /^belay\./);
   }
   for (const name of Object.values(METRIC_NAMES)) {
-    assert.match(name, /^trevor\./);
+    assert.match(name, /^belay\./);
   }
   const res = resourceAttributes("agent-host", "2.0.0");
-  assert.equal(res["service.name"], "trevor-agent-host");
+  assert.equal(res["service.name"], "belay-agent-host");
   assert.equal(res["service.version"], "2.0.0");
   // No host/user/path identity leaks into the resource.
   assert.ok(

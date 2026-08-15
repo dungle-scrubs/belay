@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { DoctorFinding } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { DoctorFinding } from "@trevor/session";
 import { test } from "vitest";
 import { DoctorAreaRow } from "./doctor-area-row";
 import { mcpAuthNeeded, mcpError, mcpOk, mcpTimeout, mcpUnconfigured } from "./doctor-fixtures";

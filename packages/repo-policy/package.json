@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/repo-policy",
+  "name": "@belay/repo-policy",
   "private": true,
   "type": "module",
   "exports": {

@@ -1,7 +1,7 @@
+import type { HookDecisionEventName } from "@belay/session";
 import { asPositiveInt } from "@host/boot/coerce";
 import { loadJsonConfig } from "@host/boot/config";
 import { asNonEmptyString, asRecord, asStringArray } from "@host/boot/decode";
-import type { HookDecisionEventName } from "@trevor/session";
 
 /**
  * The normalized hook config model (plan 25 M1). Hooks are a NARROW host-owned command-hook

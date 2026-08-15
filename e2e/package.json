@@ -1,20 +1,20 @@
 {
-  "name": "@trevor/e2e",
+  "name": "@belay/e2e",
   "private": true,
   "type": "module",
   "scripts": {
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/agent-host": "workspace:*",
-    "@trevor/blob-store": "workspace:*",
-    "@trevor/cli": "workspace:*",
-    "@trevor/sdk": "workspace:*",
-    "@trevor/server-kit": "workspace:*",
-    "@trevor/session": "workspace:*",
-    "@trevor/session-store": "workspace:*",
-    "@trevor/test-kit": "workspace:*",
-    "@trevor/web": "workspace:*",
+    "@belay/agent-host": "workspace:*",
+    "@belay/blob-store": "workspace:*",
+    "@belay/cli": "workspace:*",
+    "@belay/sdk": "workspace:*",
+    "@belay/server-kit": "workspace:*",
+    "@belay/session": "workspace:*",
+    "@belay/session-store": "workspace:*",
+    "@belay/test-kit": "workspace:*",
+    "@belay/web": "workspace:*",
     "effect": "^3.21.4"
   },
   "devDependencies": {

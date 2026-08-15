@@ -4,7 +4,7 @@ import {
   planTangent,
   type SessionEvent,
   seedTangentPrompt,
-} from "@trevor/session";
+} from "@belay/session";
 import { describe, expect, it } from "vitest";
 import { buildHistory } from "./history-projection";
 import { tangentIsolationReport } from "./tangent-isolation";
@@ -27,7 +27,7 @@ function ev(
     seq,
     eventId: `${sessionId}-e${seq}`,
     type,
-    producerId: "trevor-web",
+    producerId: "belay-web",
     payload,
     createdAt: "2026-07-04T00:00:00.000Z",
   };

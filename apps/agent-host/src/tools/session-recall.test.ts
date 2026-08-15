@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import { TOOL_NAMES } from "@belay/session";
 import { buildCommandRegistry } from "@host/commands/commands";
-import { TOOL_NAMES } from "@trevor/session";
 import { test } from "vitest";
 import { sessionRecallTool } from "./session-recall";
 

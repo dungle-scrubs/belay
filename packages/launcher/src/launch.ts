@@ -1,4 +1,4 @@
-import { missingProjectRootReason } from "@trevor/session";
+import { missingProjectRootReason } from "@belay/session";
 import {
   NOOP_SINK,
   redactAttributeValue,
@@ -6,7 +6,7 @@ import {
   safeAttributes,
   safeEmitSpan,
   type TelemetrySink,
-} from "@trevor/session/telemetry";
+} from "@belay/session/telemetry";
 import type { LauncherFs } from "./fs";
 import {
   acquireLock,
@@ -76,7 +76,7 @@ export function missingRootError(root: string): LaunchError {
 }
 
 /** Live progress sink the orchestrator drives through each phase (a spinner in the real CLI, a no-op
- *  in tests), so `trevor` gives immediate feedback during the several seconds of startup. */
+ *  in tests), so `belay` gives immediate feedback during the several seconds of startup. */
 export interface Reporter {
   step(text: string): void;
 }
@@ -84,7 +84,7 @@ export interface Reporter {
 export interface LaunchPlatform {
   readonly fs: LauncherFs;
   readonly home: string;
-  /** The config home (TREVOR_HOME) for home-abbreviation in the project registry displayPath. */
+  /** The config home (BELAY_HOME) for home-abbreviation in the project registry displayPath. */
   readonly configHome: string;
   readonly cwd: string;
   /** This launcher process's pid (for the lock owner). */
@@ -117,7 +117,7 @@ export interface LaunchOutcome {
   readonly services: readonly ServiceReport[];
   readonly startedServices: readonly ServiceName[];
   readonly conflicts: readonly ServiceReport[];
-  /** "reused-concurrent" = another `trevor` held the lock and is spawning; we just opened the tab. */
+  /** "reused-concurrent" = another `belay` held the lock and is spawning; we just opened the tab. */
   readonly hostAction: HostAction | "reused-concurrent";
   readonly hostPid: number | null;
   readonly online: boolean;
@@ -130,7 +130,7 @@ export function sessionUrl(sessionId: string): string {
   return `${serviceUrl("web")}/?session=${sessionId}`;
 }
 
-/** Launches (or attaches to) a session, wrapped in a `trevor.cli.launch` span: the span times the whole
+/** Launches (or attaches to) a session, wrapped in a `belay.cli.launch` span: the span times the whole
  *  lifecycle and records the host action + started-service count + online outcome (no paths / session
  *  ids / URLs). Delegates to {@link launchInner}, which owns the actual orchestration. */
 export async function launch(
@@ -182,7 +182,7 @@ async function launchInner(
     readonly debug?: boolean;
     /** True for headless callers that need services + host readiness without opening the web UI. */
     readonly noBrowser?: boolean;
-    /** `trevor open <session>` (D-094 M3): launch this exact session at its root, instead of
+    /** `belay open <session>` (D-094 M3): launch this exact session at its root, instead of
      *  resolving the session from the current project directory. */
     readonly session?: { readonly sessionId: string; readonly root: string };
   } = {},

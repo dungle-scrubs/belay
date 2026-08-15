@@ -1,8 +1,8 @@
-import type { LucidAnchor, LucidReviewStatus } from "@trevor/session";
+import type { LucidAnchor, LucidReviewStatus } from "@belay/session";
 
 /**
  * The Lucid panel's REVIEW STATE (plan 27, M4/M6): a pure reducer over the annotation lifecycle the
- * native Trevor chrome drives - targeting -> drafting -> the composer queue -> delivery - plus the
+ * native Belay chrome drives - targeting -> drafting -> the composer queue -> delivery - plus the
  * version-swap and review-status lifecycle. Kept a pure module (no DOM, no React) so it is fully
  * unit-testable and can never disagree with itself across re-renders. DOM addressability
  * (anchor capture/resolution/highlight) lives in the sandboxed overlay; this owns only STATE.

@@ -1,11 +1,11 @@
+import { loopPresentation } from "@belay/session";
 import { render, screen } from "@testing-library/react";
-import { loopPresentation } from "@trevor/session";
 import { expect, test } from "vitest";
 import { LoopHelper } from "./loop-helper";
 
 /**
  * The loop helper (plan 17, M7): a pure render over the SHARED parser's presentation view-model
- * (`loopPresentation` from @trevor/session), so the web preview and the host validate the same grammar.
+ * (`loopPresentation` from @belay/session), so the web preview and the host validate the same grammar.
  * No web-local parsing or validation.
  */
 

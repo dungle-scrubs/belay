@@ -1,33 +1,33 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type ParseError, parse } from "jsonc-parser";
-import { resolveTrevorHome } from "./node-paths";
+import { resolveBelayHome } from "./node-paths";
 
 /**
- * Node-only loader for Trevor's editable `config.jsonc`.
+ * Node-only loader for Belay's editable `config.jsonc`.
  *
- * Responsible for: locating and parsing `<TREVOR_HOME>/config.jsonc` with source diagnostics.
+ * Responsible for: locating and parsing `<BELAY_HOME>/config.jsonc` with source diagnostics.
  * Not for: interpreting individual app keys or applying command-line precedence.
  */
 
-export interface TrevorConfigFile {
+export interface BelayConfigFile {
   readonly model?: string;
   readonly reasoning?: string;
 }
 
 export type ConfigValueSource = "flag" | "env" | "file" | "default";
 
-export interface LoadedTrevorConfig {
+export interface LoadedBelayConfig {
   readonly path: string;
-  readonly config: TrevorConfigFile;
+  readonly config: BelayConfigFile;
   readonly warning: string | null;
 }
 
-export interface TrevorConfigEnv extends Readonly<Record<string, string | undefined>> {
-  readonly TREVOR_HOME?: string;
+export interface BelayConfigEnv extends Readonly<Record<string, string | undefined>> {
+  readonly BELAY_HOME?: string;
 }
 
-function parseTrevorConfig(raw: unknown): TrevorConfigFile {
+function parseBelayConfig(raw: unknown): BelayConfigFile {
   if (typeof raw !== "object" || raw === null) {
     return {};
   }
@@ -42,14 +42,14 @@ function parseErrorText(errors: readonly ParseError[]): string {
   return errors.map((error) => `error ${error.error} at offset ${error.offset}`).join(", ");
 }
 
-export function trevorConfigPath(env: TrevorConfigEnv = process.env): string {
-  return join(resolveTrevorHome(env), "config.jsonc");
+export function belayConfigPath(env: BelayConfigEnv = process.env): string {
+  return join(resolveBelayHome(env), "config.jsonc");
 }
 
-export function loadTrevorConfig(
-  options: { readonly env?: TrevorConfigEnv; readonly readFile?: (path: string) => string } = {},
-): LoadedTrevorConfig {
-  const path = trevorConfigPath(options.env);
+export function loadBelayConfig(
+  options: { readonly env?: BelayConfigEnv; readonly readFile?: (path: string) => string } = {},
+): LoadedBelayConfig {
+  const path = belayConfigPath(options.env);
   const readFile = options.readFile ?? ((p: string) => readFileSync(p, "utf8"));
   let text: string;
   try {
@@ -66,5 +66,12 @@ export function loadTrevorConfig(
       warning: `config.jsonc is malformed (${parseErrorText(errors)}); using env/defaults`,
     };
   }
-  return { path, config: parseTrevorConfig(parsed), warning: null };
+  return { path, config: parseBelayConfig(parsed), warning: null };
 }
+
+/** @deprecated Use LoadedBelayConfig */
+export type LoadedTrevorConfig = LoadedBelayConfig;
+/** @deprecated Use loadBelayConfig */
+export const loadTrevorConfig = loadBelayConfig;
+/** @deprecated Use belayConfigPath */
+export const trevorConfigPath = belayConfigPath;

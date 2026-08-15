@@ -27,11 +27,11 @@ import { RuleCollector, type TrevorRuleSource } from "./rules";
 export class ContextRegistry {
   /** Below-cwd AGENTS.md that have been lazily loaded, keyed by their directory (so each loads once). */
   private lazy = new Map<string, ContextScope>();
-  /** Scoped .trevor/rules loaded after matching file access, keyed by rule path. */
+  /** Scoped .belay/rules loaded after matching file access, keyed by rule path. */
   private lazyRules = new Map<string, TrevorRuleSource>();
   /** Directories already checked for a below-cwd AGENTS.md (present or not), so a re-touch never re-stats. */
   private scanned = new Set<string>();
-  /** The cached `.trevor/rules` collector for the current cwd. Building one walks the rules tree, so it
+  /** The cached `.belay/rules` collector for the current cwd. Building one walks the rules tree, so it
    *  is reused across file touches + the per-turn report and only rebuilt on a cwd change or `reset()`. */
   private rules: { cwd: string; collector: RuleCollector } | null = null;
 
@@ -104,7 +104,7 @@ export class ContextRegistry {
     const eager = collectEagerSources({ cwd, workspaceRoot });
     const rules = this.rulesFor(cwd);
     const alwaysRuleSources = rules.alwaysRules();
-    const alwaysRules = alwaysRuleSources.map((rule) => rules.contextScope(rule, "trevor-rule"));
+    const alwaysRules = alwaysRuleSources.map((rule) => rules.contextScope(rule, "belay-rule"));
     // Below-cwd is the MOST specific, so it sits last (highest precedence); sort parent-before-child.
     const lazy = [...this.lazy.values()].sort((a, b) => a.path.localeCompare(b.path));
     const lazyRuleSources = [...this.lazyRules.values()].sort((a, b) =>

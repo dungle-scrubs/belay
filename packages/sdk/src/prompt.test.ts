@@ -1,5 +1,5 @@
-import { events, PRODUCER_IDS, type SessionEvent } from "@trevor/session";
-import { recordingTransport, storedLog } from "@trevor/test-kit";
+import { events, PRODUCER_IDS, type SessionEvent } from "@belay/session";
+import { recordingTransport, storedLog } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
 import { createTrevorClient } from "./client";
 import { readModelSwitches } from "./prompt";

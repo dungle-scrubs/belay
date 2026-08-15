@@ -9,8 +9,8 @@ import type {
   PastePayload,
   SessionEvent,
   TaskSnapshot,
-} from "@trevor/session";
-import { isSelfProducer } from "@trevor/session";
+} from "@belay/session";
+import { isSelfProducer } from "@belay/session";
 
 /**
  * The baseline that both the prompt projection (history-projection.ts) and the compaction planner

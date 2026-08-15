@@ -1,5 +1,5 @@
 import { lookup } from "node:dns/promises";
-import { raceTimeout } from "@trevor/session/async";
+import { raceTimeout } from "@belay/session/async";
 import type { ProbeIo, ProbeTargets } from "./probe";
 
 /**

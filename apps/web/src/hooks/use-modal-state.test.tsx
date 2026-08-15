@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
-import { act, renderHook } from "@testing-library/react";
 import {
   events,
   type SessionEvent,
   type SessionSummary,
   type TrevorEventInput,
   type WorktreeSummary,
-} from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, test, vi } from "vitest";
 import type { HostStatus } from "../derive";
 import { hostAnnouncement, worktreesFrom } from "../derive";
@@ -45,7 +45,7 @@ const session = (over: Partial<SessionSummary> = {}): SessionSummary => ({
   title: "Current",
   cwd: null,
   workspace: null,
-  project: "trevor",
+  project: "belay",
   projectPath: null,
   branch: null,
   git: null,
@@ -64,10 +64,10 @@ const session = (over: Partial<SessionSummary> = {}): SessionSummary => ({
 
 const worktree: WorktreeSummary = {
   id: "wt-feature",
-  baseRepo: "/Users/kevin/dev/trevor",
-  baseRepoName: "trevor",
+  baseRepo: "/Users/kevin/dev/belay",
+  baseRepoName: "belay",
   branch: "feature/modal-state",
-  path: "~/.trevor/.worktrees/feature-modal-state",
+  path: "~/.belay/.worktrees/feature-modal-state",
   sessionId: "s-worktree",
   dirty: false,
   ahead: 0,
@@ -133,7 +133,7 @@ test("owns modal toggles, inventory gating, project stickiness, and activity ove
 
   // The project sidebar (plan 58) defaults open, so the inventory fetch is enabled on first render.
   assert.deepEqual(mockInventory.enabledCalls, [true]);
-  assert.equal(result.current.currentProject, "trevor");
+  assert.equal(result.current.currentProject, "belay");
   assert.deepEqual(result.current.worktrees, [worktree]);
   assert.deepEqual(result.current.worktreeActivity.get("s-worktree"), {
     host: "stale",
@@ -145,7 +145,7 @@ test("owns modal toggles, inventory gating, project stickiness, and activity ove
   assert.equal(mockInventory.enabledCalls.at(-1), true);
 
   rerender({ sessions: [] });
-  assert.equal(result.current.currentProject, "trevor");
+  assert.equal(result.current.currentProject, "belay");
 });
 
 test("opening the archive browser enables the inventory fetch", () => {

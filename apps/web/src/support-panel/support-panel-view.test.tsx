@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { JobSnapshot, TaskSnapshot } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { JobSnapshot, TaskSnapshot } from "@trevor/session";
 import { test, vi } from "vitest";
 import type { SupportSubagent } from "./support-panel";
 import { SupportPanel } from "./support-panel-view";

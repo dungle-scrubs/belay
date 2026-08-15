@@ -1,4 +1,4 @@
-import { events, type ModelRef, type TrevorEventInput } from "@trevor/session";
+import { events, type ModelRef, type TrevorEventInput } from "@belay/session";
 
 /**
  * The continuation-handoff orchestration (02, M2: direct flow), kept pure over injected effects so the

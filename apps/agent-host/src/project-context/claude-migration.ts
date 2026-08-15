@@ -32,11 +32,11 @@ function read(path: string): string {
 }
 
 /**
- * The sentinel line every Trevor-written pointer CLAUDE.md carries. Detection matches EXACTLY this
+ * The sentinel line every Belay-written pointer CLAUDE.md carries. Detection matches EXACTLY this
  * marker - a fuzzy phrase match ("see AGENTS.md", "reuse the AGENTS.md patterns") false-positives on
  * real instruction bodies and would silently exclude them from migration.
  */
-export const CLAUDE_POINTER_SENTINEL = "<!-- trevor:claude-md-pointer -->";
+export const CLAUDE_POINTER_SENTINEL = "<!-- belay:claude-md-pointer -->";
 
 /**
  * Whether a CLAUDE.md body is an already-converted pointer to its sibling AGENTS.md (D-011): it

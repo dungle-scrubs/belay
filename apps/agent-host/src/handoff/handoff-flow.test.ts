@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { TrevorEventInput } from "@trevor/session";
+import type { TrevorEventInput } from "@belay/session";
 import { test } from "vitest";
 import { type DirectHandoffDeps, executeFinalizedHandoff, runDirectHandoff } from "./handoff-flow";
 

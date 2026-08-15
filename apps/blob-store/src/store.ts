@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { HEX64, type PutBlobResult } from "@trevor/session/blob-contract";
+import { HEX64, type PutBlobResult } from "@belay/session/blob-contract";
 import {
   METRIC_NAMES,
   NOOP_SINK,
@@ -9,7 +9,7 @@ import {
   SPAN_NAMES,
   type TelemetrySink,
   withSpan,
-} from "@trevor/session/telemetry";
+} from "@belay/session/telemetry";
 
 /**
  * The content-addressed blob store on disk (D-028). Bytes are named by their
@@ -23,13 +23,13 @@ import {
  * This is the storage core, kept free of HTTP so it is directly testable; the
  * server in `main.ts` is a thin transport over it.
  *
- * The hash format + wire result are the shared `@trevor/session/blob-contract` leaf (a zero-dep
+ * The hash format + wire result are the shared `@belay/session/blob-contract` leaf (a zero-dep
  * subpath, the same exception ports.ts gets), so the client and this server no longer keep two
  * hand-synced copies. `StoredBlob` IS the wire `PutBlobResult`.
  */
 
 // Re-exported so server.ts + the store tests keep importing HEX64 from this module.
-export { HEX64 } from "@trevor/session/blob-contract";
+export { HEX64 } from "@belay/session/blob-contract";
 
 /** Per-blob metadata persisted alongside the bytes. */
 export interface BlobMeta {

@@ -1,4 +1,4 @@
-import type { LoopLifecycle, LoopSpec, LoopStopReason } from "@trevor/session";
+import type { LoopLifecycle, LoopSpec, LoopStopReason } from "@belay/session";
 
 /**
  * The `/loop` DOMAIN + lifecycle (plan 17, M4): a pure, side-effect-free state machine for one recurring

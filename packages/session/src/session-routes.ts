@@ -7,7 +7,7 @@
  * single-ownership.
  *
  * Zero-dependency (strings, regexes, and wire-shape types only) and exposed via the
- * `@trevor/session/session-routes` subpath, so the Vite config can import the proxy path without
+ * `@belay/session/session-routes` subpath, so the Vite config can import the proxy path without
  * pulling in the rest of the package.
  */
 

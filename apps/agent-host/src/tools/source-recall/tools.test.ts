@@ -3,7 +3,7 @@ import {
   decodeSourceRecallIndexStatus,
   decodeSourceRecallRefreshResult,
   decodeSourceRecallResult,
-} from "@trevor/session";
+} from "@belay/session";
 import { Effect, JSONSchema } from "effect";
 import { test } from "vitest";
 import type { Tool } from "../types";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type { CatalogSnapshot } from "@trevor/sdk";
-import type { CatalogEntry, SourceSummary } from "@trevor/session";
+import type { CatalogSnapshot } from "@belay/sdk";
+import type { CatalogEntry, SourceSummary } from "@belay/session";
 import { test } from "vitest";
 import { formatCatalog, ModelFlagError, resolveModelRef } from "./model-flags";
 
@@ -63,7 +63,7 @@ test("resolveModelRef fails fast on ambiguous, unknown, or unsupported values", 
   const snapshot = catalog([entry("openai", "chat"), entry("anthropic", "chat")]);
 
   assert.throws(() => resolveModelRef(snapshot, { model: "chat" }), ModelFlagError);
-  assert.throws(() => resolveModelRef(snapshot, { model: "missing" }), /trevor models/);
+  assert.throws(() => resolveModelRef(snapshot, { model: "missing" }), /belay models/);
   assert.throws(
     () => resolveModelRef(snapshot, { model: "openai/chat", reasoning: "xhigh" }),
     /does not support reasoning/,

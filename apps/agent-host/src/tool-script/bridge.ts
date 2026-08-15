@@ -1,7 +1,7 @@
 import { lstatSync, readlinkSync } from "node:fs";
 import { dirname, isAbsolute, join, sep } from "node:path";
+import { TOOLSET_TOOLS, type ToolScriptToolset } from "@belay/session";
 import { WORKSPACE_ROOT } from "@host/boot/paths";
-import { TOOLSET_TOOLS, type ToolScriptToolset } from "@trevor/session";
 import type { ToolScriptBridge } from "./host-manager";
 
 /**

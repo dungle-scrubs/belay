@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { TrevorEventInput } from "@belay/session";
 import type { TurnHooks } from "@host/agent/loop";
 import { publishTurn } from "@host/agent/turn";
 import { type ProviderEvent, ProviderUnavailable } from "@host/providers";
-import type { TrevorEventInput } from "@trevor/session";
 import { Effect, Fiber, Stream } from "effect";
 import { afterEach, describe, expect, test } from "vitest";
 import { collectingEmit, fakeProvider, runTurn, scriptedStep } from "../support/fake-provider";

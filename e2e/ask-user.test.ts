@@ -4,15 +4,15 @@ import {
   providerQuestionRuntime,
   publishTurnVia,
   transportEmit,
-} from "@trevor/agent-host/testing";
-import type { RunningServer } from "@trevor/server-kit";
+} from "@belay/agent-host/testing";
+import type { RunningServer } from "@belay/server-kit";
 import {
   type ProviderQuestionAnswer,
   events as sessionEvents,
   streamTransport,
-} from "@trevor/session";
-import { createWorkflowDriver, questionAnswerDrain } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
+} from "@belay/session";
+import { createWorkflowDriver, questionAnswerDrain } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { Stream } from "effect";
 import { afterAll, afterEach, beforeAll, test } from "vitest";
 

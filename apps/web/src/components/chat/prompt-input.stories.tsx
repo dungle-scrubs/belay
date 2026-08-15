@@ -1,5 +1,5 @@
+import type { ArtifactRef } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { ArtifactRef } from "@trevor/session";
 import { useRef, useState } from "react";
 import { CommandMenu } from "@/components/chat/command-menu";
 import { PromptInput } from "@/components/chat/prompt-input";

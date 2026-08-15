@@ -1,10 +1,10 @@
 import type { Server } from "node:http";
-import { nodeMigrationFs, planLegacyMigration } from "@trevor/session/legacy-migration";
-import { abbreviateHome } from "@trevor/session/node-paths";
+import { nodeMigrationFs, planLegacyMigration } from "@belay/session/legacy-migration";
+import { abbreviateHome } from "@belay/session/node-paths";
 import { type RunningServer, startServer } from "./server";
 
 /**
- * Shared production boot path for Trevor's local stores.
+ * Shared production boot path for Belay's local stores.
  *
  * Responsible for: env-driven port/host convention, detect-only legacy migration nudge,
  * startServer binding, and the standard listen banner.

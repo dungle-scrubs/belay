@@ -1,4 +1,4 @@
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary } from "@belay/session";
 import { expect, test } from "vitest";
 import { calendarDayStatus, launchRootForSession, resumeActionForSession } from "./resume-policy";
 
@@ -16,7 +16,7 @@ function summary(overrides: Partial<SessionSummary>): SessionSummary {
     forkedFrom: null,
     git: null,
     host: "stale",
-    project: "trevor",
+    project: "belay",
     projectPath: "/repo/project",
     sessionId: "s1",
     tangentOf: null,

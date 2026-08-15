@@ -105,7 +105,7 @@ function initializeResult(): unknown {
       ...(droppedCapabilities.has("workspaceSymbol") ? {} : { workspaceSymbolProvider: true }),
       ...(droppedCapabilities.has("codeAction") ? {} : { codeActionProvider: true }),
     },
-    serverInfo: { name: "trevor-lsp-fixture", version: "0.0.1" },
+    serverInfo: { name: "belay-lsp-fixture", version: "0.0.1" },
   };
 }
 

@@ -1,12 +1,12 @@
 import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { idSlug, shortHash } from "@trevor/session";
-import { storagePathByName } from "@trevor/session/node-paths";
+import { idSlug, shortHash } from "@belay/session";
+import { storagePathByName } from "@belay/session/node-paths";
 import { Data } from "effect";
 
 /**
  * Dedicated cwd-path advisory lock (plan 01 - managed-worktree hardening). It protects a real working
- * directory as a RESOURCE against two DIFFERENT Trevor sessions mutating it at once - the hazard the
+ * directory as a RESOURCE against two DIFFERENT Belay sessions mutating it at once - the hazard the
  * per-session launcher lock (keyed by sessionId) and the deterministic worktree session ids do not
  * cover when two identities resolve to the same realpath (a symlinked path, a managed worktree reached
  * via `/cd` under a fresh session, two repos aliased to one directory). The lock keys on the cwd's

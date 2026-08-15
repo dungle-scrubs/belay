@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { ArtifactRef } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { ArtifactRef } from "@trevor/session";
 import { test, vi } from "vitest";
 import { RECOVERY_ACTION_LABEL, reconnectActionLabel } from "@/action-label";
 import { TranscriptRowView } from "@/components/chat/transcript-row-view";

@@ -1,4 +1,4 @@
-import { type ModelRef, resolveUserTurnModel } from "@trevor/session";
+import { type ModelRef, resolveUserTurnModel } from "@belay/session";
 import { buildSourceProvider } from "./catalog";
 import type { Provider } from "./types";
 

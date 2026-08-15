@@ -13,7 +13,7 @@ type RenderState =
 export type MermaidRender = (id: string, source: string) => Promise<string>;
 
 interface MermaidSvgStyle extends CSSProperties {
-  readonly "--trevor-mermaid-zoom": number;
+  readonly "--belay-mermaid-zoom": number;
 }
 
 type MermaidThemeVariables = Record<string, string>;
@@ -251,7 +251,7 @@ export function MermaidBlock({
 }) {
   const reactId = useId();
   const renderId = useMemo(
-    () => `trevor-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
+    () => `belay-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
     [reactId],
   );
   const [state, setState] = useState<RenderState>({ status: "loading" });
@@ -259,7 +259,7 @@ export function MermaidBlock({
   const [fullscreenOpen, { setFalse: closeFullscreen, setTrue: openFullscreen }] =
     useBoolean(false);
   const [zoom, setZoom] = useState(1);
-  const svgStyle: MermaidSvgStyle = useMemo(() => ({ "--trevor-mermaid-zoom": zoom }), [zoom]);
+  const svgStyle: MermaidSvgStyle = useMemo(() => ({ "--belay-mermaid-zoom": zoom }), [zoom]);
 
   useEventListener(
     "keydown",
@@ -307,10 +307,10 @@ export function MermaidBlock({
   };
 
   return (
-    <figure className="trevor-mermaid" data-testid="mermaid-block">
-      <div className="trevor-mermaid__toolbar">
-        <span className="trevor-mermaid__label">Mermaid</span>
-        <div className="trevor-mermaid__actions">
+    <figure className="belay-mermaid" data-testid="mermaid-block">
+      <div className="belay-mermaid__toolbar">
+        <span className="belay-mermaid__label">Mermaid</span>
+        <div className="belay-mermaid__actions">
           <button
             type="button"
             aria-label="Copy Mermaid source"
@@ -363,32 +363,32 @@ export function MermaidBlock({
           ) : null}
         </div>
       </div>
-      <div className="trevor-mermaid__canvas" aria-live="polite">
+      <div className="belay-mermaid__canvas" aria-live="polite">
         {state.status === "loading" ? (
-          <div className="trevor-mermaid__loading">Rendering diagram...</div>
+          <div className="belay-mermaid__loading">Rendering diagram...</div>
         ) : null}
         {state.status === "rendered" ? (
           <div
-            className="trevor-mermaid__svg"
+            className="belay-mermaid__svg"
             style={svgStyle}
             // biome-ignore lint/security/noDangerouslySetInnerHtml: Mermaid SVG is sanitized with DOMPurify before insertion.
             dangerouslySetInnerHTML={{ __html: state.svg }}
           />
         ) : null}
         {state.status === "error" ? (
-          <div className="trevor-mermaid__error" role="alert">
+          <div className="belay-mermaid__error" role="alert">
             <strong>Mermaid could not render this diagram.</strong>
             <span>{state.message}</span>
           </div>
         ) : null}
       </div>
       {sourceOpen || state.status === "error" ? (
-        <pre className="trevor-mermaid__source" data-testid="mermaid-source">
+        <pre className="belay-mermaid__source" data-testid="mermaid-source">
           {source}
         </pre>
       ) : (
         <pre
-          className="trevor-mermaid__source trevor-mermaid__source--collapsed"
+          className="belay-mermaid__source belay-mermaid__source--collapsed"
           data-testid="mermaid-source"
         >
           {source}
@@ -396,14 +396,14 @@ export function MermaidBlock({
       )}
       {state.status === "rendered" && fullscreenOpen ? (
         <div
-          className="trevor-mermaid__fullscreen"
+          className="belay-mermaid__fullscreen"
           role="dialog"
           aria-modal="true"
           aria-label="Mermaid diagram fullscreen viewer"
         >
-          <div className="trevor-mermaid__fullscreen-toolbar">
-            <span className="trevor-mermaid__label">Mermaid</span>
-            <div className="trevor-mermaid__actions">
+          <div className="belay-mermaid__fullscreen-toolbar">
+            <span className="belay-mermaid__label">Mermaid</span>
+            <div className="belay-mermaid__actions">
               <button
                 type="button"
                 aria-label="Zoom fullscreen Mermaid diagram out"
@@ -438,9 +438,9 @@ export function MermaidBlock({
               </button>
             </div>
           </div>
-          <div className="trevor-mermaid__fullscreen-canvas">
+          <div className="belay-mermaid__fullscreen-canvas">
             <div
-              className="trevor-mermaid__svg trevor-mermaid__svg--fullscreen"
+              className="belay-mermaid__svg belay-mermaid__svg--fullscreen"
               style={svgStyle}
               // biome-ignore lint/security/noDangerouslySetInnerHtml: Mermaid SVG is sanitized with DOMPurify before insertion.
               dangerouslySetInnerHTML={{ __html: state.svg }}

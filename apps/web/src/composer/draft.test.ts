@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import type { ArtifactRef, PastePayload } from "@trevor/session";
-import { parseImageTokens, parsePasteTokens } from "@trevor/session";
+import type { ArtifactRef, PastePayload } from "@belay/session";
+import { parseImageTokens, parsePasteTokens } from "@belay/session";
 import { test } from "vitest";
 import {
   type ComposerDraft,

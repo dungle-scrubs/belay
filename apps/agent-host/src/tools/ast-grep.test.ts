@@ -13,7 +13,7 @@ import { afterAll, test } from "vitest";
  * registry inclusion.
  */
 
-const ws = mkdtempSync(join(tmpdir(), "trevor-sg-"));
+const ws = mkdtempSync(join(tmpdir(), "belay-sg-"));
 mkdirSync(join(ws, "src"), { recursive: true });
 // Two console.log calls with DIFFERENT formatting - an AST pattern matches both regardless.
 writeFileSync(

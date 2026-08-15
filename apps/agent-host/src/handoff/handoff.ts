@@ -1,5 +1,5 @@
+import type { HandoffMode } from "@belay/session";
 import { stripMatchingQuotes } from "@host/boot/args";
-import type { HandoffMode } from "@trevor/session";
 
 /**
  * The `/handoff` argument parser (M1), kept as a pure function separate from the host orchestration in

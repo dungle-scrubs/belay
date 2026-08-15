@@ -1,5 +1,5 @@
+import { events } from "@belay/session";
 import type { EmitEvent } from "@host/transport/services";
-import { events } from "@trevor/session";
 import {
   type OAuthLogin,
   runSourceSignIn,

@@ -7,12 +7,12 @@ import {
   ContextRegistry,
   collectEagerSources,
   renderContext,
-} from "@trevor/agent-host/testing";
+} from "@belay/agent-host/testing";
 import { afterEach, test } from "vitest";
 
 /**
  * S-E2E project context (hermetic, plan 26 M8): exercises the real host context modules over throwaway
- * temp workspaces - eager AGENTS.md ordering, always/scoped `.trevor/rules`, lazy below-cwd loading on
+ * temp workspaces - eager AGENTS.md ordering, always/scoped `.belay/rules`, lazy below-cwd loading on
  * file access, and the `/init` proposal - plus a regression proving that a workspace WITHOUT rules or
  * CLAUDE.md renders byte-for-byte the shipped D-080 context. No store is booted: this is the context
  * workflow half of the "hermetic context and migration workflows" gate.
@@ -27,7 +27,7 @@ afterEach(() => {
 });
 
 function tree(): string {
-  const root = mkdtempSync(join(tmpdir(), "trevor-ctx-"));
+  const root = mkdtempSync(join(tmpdir(), "belay-ctx-"));
   roots.push(root);
   return root;
 }
@@ -47,11 +47,11 @@ test("context ordering: project AGENTS.md, then always rule, then lazy below-cwd
   write(join(root, "AGENTS.md"), "# Root guide\n\nRoot rule.");
   write(join(root, "apps", "AGENTS.md"), "# Apps guide\n\nApps rule.");
   write(
-    join(root, ".trevor", "rules", "always.md"),
+    join(root, ".belay", "rules", "always.md"),
     "---\nid: always-rule\ninclusion: always\n---\nAlways body.",
   );
   write(
-    join(root, ".trevor", "rules", "scoped.md"),
+    join(root, ".belay", "rules", "scoped.md"),
     "---\nid: scoped-rule\ninclusion: scoped\nglobs:\n  - apps/**\n---\nScoped body.",
   );
 
@@ -61,7 +61,7 @@ test("context ordering: project AGENTS.md, then always rule, then lazy below-cwd
   const before = registry.report(root, root);
   assert.ok(scopeAt(before.scopes, "project") >= 0, "the root AGENTS.md is eager");
   assert.ok(
-    scopeAt(before.scopes, "project") < scopeAt(before.scopes, "trevor-rule"),
+    scopeAt(before.scopes, "project") < scopeAt(before.scopes, "belay-rule"),
     "the always rule renders after project AGENTS.md",
   );
   assert.equal(
@@ -82,7 +82,7 @@ test("context ordering: project AGENTS.md, then always rule, then lazy below-cwd
   // Touching a file under apps/ lazily loads the below-cwd AGENTS.md AND the path-scoped rule.
   registry.noteFileAccess(join(root, "apps", "service.ts"), root);
   const after = registry.report(root, root);
-  const order = ["project", "trevor-rule", "below-cwd", "below-cwd-rule"].map((s) =>
+  const order = ["project", "belay-rule", "below-cwd", "below-cwd-rule"].map((s) =>
     scopeAt(after.scopes, s),
   );
   assert.ok(
@@ -108,12 +108,12 @@ test("/init drafts from real repo evidence: rules, nested AGENTS.md, and a merge
   const root = tree();
   write(join(root, "AGENTS.md"), "# Root guide\n\nRoot rule.");
   write(join(root, "apps", "AGENTS.md"), "# Apps guide\n\nApps rule.");
-  write(join(root, ".trevor", "rules", "always.md"), "---\ninclusion: always\n---\nAlways body.");
+  write(join(root, ".belay", "rules", "always.md"), "---\ninclusion: always\n---\nAlways body.");
   write(join(root, "package.json"), JSON.stringify({ scripts: { test: "vitest run" } }));
 
   const proposal = buildInitProposal(root);
 
-  assert.equal(proposal.evidence.rules.length, 1, "the .trevor/rules file is inventoried");
+  assert.equal(proposal.evidence.rules.length, 1, "the .belay/rules file is inventoried");
   assert.deepEqual(
     [...proposal.evidence.existingAgents].sort(),
     ["AGENTS.md", "apps/AGENTS.md"],
@@ -124,7 +124,7 @@ test("/init drafts from real repo evidence: rules, nested AGENTS.md, and a merge
     "merge",
     "an existing root AGENTS.md means a merge/refresh proposal",
   );
-  assert.match(proposal.draft, /Trevor rules:/, "the draft points at the rules it found");
+  assert.match(proposal.draft, /Belay rules:/, "the draft points at the rules it found");
   assert.match(proposal.preview, /No files were written/, "the proposal is review-only");
 });
 
@@ -144,7 +144,7 @@ test("regression: a workspace with no rules or CLAUDE.md renders byte-for-byte t
     /Project context \(AGENTS\.md\)\./,
     "the intro is the plain AGENTS.md form",
   );
-  assert.ok(!eager.text.includes(".trevor/rules"), "no rules mentioned when none exist");
+  assert.ok(!eager.text.includes(".belay/rules"), "no rules mentioned when none exist");
 
   // Lazy below-cwd loading still works and injects no rule scopes.
   registry.noteFileAccess(join(root, "nested", "file.ts"), root);

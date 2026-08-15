@@ -1,5 +1,5 @@
+import { PROVIDER_QUESTION_ADAPTERS } from "@belay/session";
 import { runClaudeMigrationFlow } from "@host/project-context/claude-migration-flow";
-import { PROVIDER_QUESTION_ADAPTERS } from "@trevor/session";
 import { Effect, Schema } from "effect";
 import { providerQuestionRuntime } from "../agent/provider-questions";
 import type { Tool, ToolContext } from "./types";

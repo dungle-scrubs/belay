@@ -1,9 +1,9 @@
+import type { CapabilityManifest, ManifestScope } from "@belay/session";
+import { MANIFEST_VERSION } from "@belay/session";
 import { type CommandFile, expandCommandFile } from "@host/commands/command-file";
 import { buildCommandRegistry, type CommandContext } from "@host/commands/commands";
 import { resolveInterpolationConfig } from "@host/commands/interpolation";
 import { registerManifestSource } from "@host/manifest/source";
-import type { CapabilityManifest, ManifestScope } from "@trevor/session";
-import { MANIFEST_VERSION } from "@trevor/session";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
@@ -48,15 +48,15 @@ afterEach(() => {
 describe("command-file interpolation through the real runner (M8)", () => {
   it("gate OFF: a trusted command file loads literally", async () => {
     registerManifest("Tools");
-    const out = await expandCommandFile(trusted("intro\n!/trevor-export --compact\nend"), OFF);
-    expect(out.text).toBe("intro\n!/trevor-export --compact\nend");
+    const out = await expandCommandFile(trusted("intro\n!/belay-export --compact\nend"), OFF);
+    expect(out.text).toBe("intro\n!/belay-export --compact\nend");
   });
 
-  it("gate ON + trusted: !/trevor-export expands to the real (bounded) manifest export", async () => {
+  it("gate ON + trusted: !/belay-export expands to the real (bounded) manifest export", async () => {
     registerManifest("Model catalog");
-    const out = await expandCommandFile(trusted("caps:\n!/trevor-export --compact"), ON);
+    const out = await expandCommandFile(trusted("caps:\n!/belay-export --compact"), ON);
     expect(out.text).toContain("Model catalog");
-    expect(out.text).not.toContain("!/trevor-export");
+    expect(out.text).not.toContain("!/belay-export");
     expect(out.diagnostics[0]?.status).toBe("expanded");
   });
 
@@ -85,9 +85,9 @@ describe("immediate slash commands never interpolate (M8 regression)", () => {
  * behavior an operator verifies by hand.
  */
 describe("gated live interpolation lane (opt-in via process env)", () => {
-  it.skipIf(!LIVE)("expands !/trevor-export end-to-end when the real env gate is set", async () => {
+  it.skipIf(!LIVE)("expands !/belay-export end-to-end when the real env gate is set", async () => {
     registerManifest("Live tools");
-    const out = await expandCommandFile(trusted("!/trevor-export --compact"), ON);
+    const out = await expandCommandFile(trusted("!/belay-export --compact"), ON);
     expect(out.text).toContain("Live tools");
   });
 
@@ -100,9 +100,9 @@ describe("gated live interpolation lane (opt-in via process env)", () => {
   it.skipIf(!LIVE)("leaves an untrusted file literal even under the live gate", async () => {
     registerManifest("Live tools");
     const out = await expandCommandFile(
-      { id: "x", rootKind: "untrusted", body: "!/trevor-export" },
+      { id: "x", rootKind: "untrusted", body: "!/belay-export" },
       ON,
     );
-    expect(out.text).toBe("!/trevor-export");
+    expect(out.text).toBe("!/belay-export");
   });
 });

@@ -231,7 +231,7 @@ function handle(message: JsonRpcIn): void {
         workspaceSymbolProvider: true,
         codeActionProvider: true,
       },
-      serverInfo: { name: "trevor-lsp-eval-fixture", version: "0.0.1" },
+      serverInfo: { name: "belay-lsp-eval-fixture", version: "0.0.1" },
     });
     return;
   }

@@ -1,24 +1,24 @@
 import {
   addProject,
+  BELAY_HOME,
+  BELAY_STATE_HOME,
   directoryExistsAsync,
   listProjects,
   nodeFs,
   removeProject,
   renameProject,
   setCollapsed,
-  TREVOR_HOME,
-  TREVOR_STATE_HOME,
-} from "@trevor/launcher";
-import { createService, startServer } from "@trevor/server-kit";
+} from "@belay/launcher";
+import { createService, startServer } from "@belay/server-kit";
 import {
   errorMessage,
   PRODUCER_IDS,
   SUPERVISOR_SESSION_ID,
   streamTransport,
   type TrevorEventInput,
-} from "@trevor/session";
-import { RESERVED_PORTS, serviceUrl } from "@trevor/session/ports";
-import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
+} from "@belay/session";
+import { RESERVED_PORTS, serviceUrl } from "@belay/session/ports";
+import { createTelemetrySink } from "@belay/session/telemetry-file-sink";
 import type { SupervisorDeps } from "./dispatch";
 import { pickProjectFolder } from "./folder-picker";
 import { nodeLaunch } from "./launch-runner";
@@ -27,11 +27,11 @@ import { subscribeControlSession } from "./subscribe";
 import { startStoreWatchdog } from "./watchdog";
 
 /**
- * The `trevor supervisor` daemon (plan 44.1): the one persistent local actor that can spawn a host on
+ * The `belay supervisor` daemon (plan 44.1): the one persistent local actor that can spawn a host on
  * demand. It (1) mounts a minimal `GET /health` server on the reserved supervisor port, so the
  * launcher's probe identifies it as ours and ensures it as the fourth shared service; and (2)
  * subscribes as a VIEWER to the reserved control session, dispatching each browser-published request
- * to `@trevor/launcher` and publishing the paired result back over the session log. Every browser
+ * to `@belay/launcher` and publishing the paired result back over the session log. Every browser
  * <-> supervisor exchange rides the session transport - there is no private IPC.
  *
  * All node IO (the real transport, the node launcher) is wired here and handed to the injectable
@@ -69,26 +69,26 @@ const deps: SupervisorDeps = {
   publishToSession,
   launch: nodeLaunch,
   pickFolder: pickProjectFolder,
-  // The registry read lives under TREVOR_STATE_HOME (the launcher's projects.json), read through the
+  // The registry read lives under BELAY_STATE_HOME (the launcher's projects.json), read through the
   // launcher's own map loader so there is one reader.
-  listProjects: () => readRecents(nodeFs, TREVOR_STATE_HOME),
+  listProjects: () => readRecents(nodeFs, BELAY_STATE_HOME),
   // The canonical project registry (plan 58): path-keyed metadata with CRUD over the real node fs
-  // + state home. `add` passes TREVOR_HOME so `displayPath` is home-abbreviated.
+  // + state home. `add` passes BELAY_HOME so `displayPath` is home-abbreviated.
   projectRegistry: {
     add: (path, now) => {
-      const r = addProject(nodeFs, TREVOR_STATE_HOME, path, now, TREVOR_HOME);
+      const r = addProject(nodeFs, BELAY_STATE_HOME, path, now, BELAY_HOME);
       return { path: r.path, displayName: r.displayName };
     },
     rename: (path, displayName, now) => {
-      const r = renameProject(nodeFs, TREVOR_STATE_HOME, path, displayName, now);
+      const r = renameProject(nodeFs, BELAY_STATE_HOME, path, displayName, now);
       return r ? { path: r.path, displayName: r.displayName } : null;
     },
     setCollapsed: (path, collapsed, now) => {
-      const r = setCollapsed(nodeFs, TREVOR_STATE_HOME, path, collapsed, now);
+      const r = setCollapsed(nodeFs, BELAY_STATE_HOME, path, collapsed, now);
       return r ? { path: r.path, collapsed: r.collapsed } : null;
     },
-    remove: (path) => removeProject(nodeFs, TREVOR_STATE_HOME, path),
-    list: () => listProjects(nodeFs, TREVOR_STATE_HOME),
+    remove: (path) => removeProject(nodeFs, BELAY_STATE_HOME, path),
+    list: () => listProjects(nodeFs, BELAY_STATE_HOME),
   },
   // The SAME existence semantics the launch gate uses (the launcher's directory check), async so
   // a hung stat never blocks dispatch; the sidebar's missing marking and a launch's missing-root

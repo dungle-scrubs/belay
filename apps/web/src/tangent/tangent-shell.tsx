@@ -1,4 +1,4 @@
-import type { TangentFoldMode } from "@trevor/session";
+import type { TangentFoldMode } from "@belay/session";
 import { CornerUpLeft, GitBranch } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, useRef } from "react";
 import { ActionShimmer } from "@/components/chat/action-shimmer";

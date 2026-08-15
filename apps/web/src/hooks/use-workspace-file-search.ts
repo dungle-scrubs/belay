@@ -3,7 +3,7 @@ import {
   type FileMatch,
   type SessionEvent,
   searchWorkspaceFiles,
-} from "@trevor/session";
+} from "@belay/session";
 import { useDebounce } from "ahooks";
 import { useMemo, useRef } from "react";
 

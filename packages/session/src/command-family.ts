@@ -9,7 +9,7 @@
  *
  * This lives in `apps/web` so it can ship in Storybook without touching the
  * agent host. When the host adopts it, the descriptor + parser move into
- * `@trevor/session` and the host parses authoritatively over the same shapes;
+ * `@belay/session` and the host parses authoritatively over the same shapes;
  * the browser keeps parsing locally on every keystroke for responsiveness.
  */
 

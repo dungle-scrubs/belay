@@ -10,7 +10,7 @@ import { renderCompactManifest } from "./capability-manifest-compact";
 import { redactAttributeValue } from "./telemetry-contract";
 
 /**
- * The `trevor-export` FORMATTER (plan 14, M6). It turns a built {@link CapabilityManifest} into the export
+ * The `belay-export` FORMATTER (plan 14, M6). It turns a built {@link CapabilityManifest} into the export
  * variants the command/API serves - full human text, the compact prompt block, machine JSON, and
  * section-scoped slices - and it owns the final REDACTION pass. Formatting lives here, deliberately apart
  * from manifest construction (M6 REFACTOR): the builder composes structured data; this module decides how it
@@ -137,7 +137,7 @@ function renderSectionBlock(section: ManifestSection): string {
 /** Renders the full human-readable manifest, capped at {@link MAX_TEXT_CHARS} with an explicit cut note. */
 function renderFullManifest(manifest: CapabilityManifest): string {
   const head = [
-    `Trevor capability manifest (scope: ${manifest.scope}, generated ${manifest.generatedAt})`,
+    `Belay capability manifest (scope: ${manifest.scope}, generated ${manifest.generatedAt})`,
     `schema v${manifest.version}${manifest.truncated ? " · some sections truncated" : ""}`,
   ];
   const blocks = manifest.sections.map(renderSectionBlock);
@@ -166,7 +166,7 @@ export function renderManifestExport(
 
 /**
  * Renders a chosen subset of a manifest's sections as redacted human-readable blocks WITHOUT the top
- * manifest header - the primitive the built-in `trevor-expert` uses to assemble a multi-section answer from
+ * manifest header - the primitive the built-in `belay-expert` uses to assemble a multi-section answer from
  * ONE manifest read (so the answer carries a single coherent header, not one per section). Ids not present
  * in the manifest are ignored; an empty selection yields an explicit note.
  */

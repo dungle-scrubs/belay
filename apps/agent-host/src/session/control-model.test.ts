@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { controlProducerId, type ModelRef, events as sessionEvents } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+import { controlProducerId, type ModelRef, events as sessionEvents } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import { buildControlTurns, controlPromptModel, controlPromptProvider } from "./control-model";
 

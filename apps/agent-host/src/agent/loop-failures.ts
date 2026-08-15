@@ -5,6 +5,9 @@
  * Not for: classifying failures or building their evidence - that is the providers subsystem;
  * this module only emits what it produces.
  */
+
+import type { ProviderDiagnostic } from "@belay/session";
+import type { ProviderTraceWriter } from "@belay/session/telemetry-provider-trace";
 import {
   type Provider,
   type ProviderError,
@@ -21,8 +24,6 @@ import { recordObservation } from "@host/providers/observation-store";
 import { providerFailures } from "@host/providers/provider-failure-log";
 import { providerIncidents } from "@host/providers/provider-incidents";
 import { debug } from "@host/transport/log";
-import type { ProviderDiagnostic } from "@trevor/session";
-import type { ProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { Effect, Stream } from "effect";
 
 /**
@@ -91,7 +92,7 @@ export function observationInputFromFailure(
 
 /**
  * Best-effort: when a model step fails terminally with an UNKNOWN provider failure shape, record it
- * as a redacted, deduped observation under TREVOR_STATE_HOME (D-076 M5, plan 29 M6). Emits nothing and
+ * as a redacted, deduped observation under BELAY_STATE_HOME (D-076 M5, plan 29 M6). Emits nothing and
  * never fails - the underlying store swallows any write error - so it can be `concat`-ed ahead of the
  * real failure without changing the turn's outcome. Only classifier-gap (`unknown`) shapes are
  * observed; well-classified terminal failures already carry their own action.

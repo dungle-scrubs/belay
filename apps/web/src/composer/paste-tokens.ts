@@ -4,7 +4,7 @@ import {
   parsePasteTokens,
   pasteTokenFor,
   pasteTokenText,
-} from "@trevor/session";
+} from "@belay/session";
 import { positionalTokenDraft } from "./positional-tokens";
 
 /**
@@ -14,13 +14,13 @@ import { positionalTokenDraft } from "./positional-tokens";
  * is purely positional, so removing a token renumbers the rest.
  *
  * The `[Pasted text #N +M lines]` FORMAT (parser, `pasteTokenText`) is the cross-surface contract
- * owned by `@trevor/session` (the host expands the same tokens when projecting to the provider). The
+ * owned by `@belay/session` (the host expands the same tokens when projecting to the provider). The
  * editing INVARIANTS live once in the shared {@link positionalTokenDraft} engine; this module is the
  * paste codec (its token carries a `+M` line count read back from the span, so a renumber preserves
  * `+M` while moving only the display number) plus the thin `PasteDraft`-shaped surface. <!-- D-002 D-004 -->
  */
 
-export type { PasteTokenSpan } from "@trevor/session";
+export type { PasteTokenSpan } from "@belay/session";
 export { parsePasteTokens, pasteTokenText };
 
 /** A draft pairing the visible `[Pasted text #N +M lines]` tokens in `text` with their payloads. */

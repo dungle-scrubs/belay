@@ -6,7 +6,7 @@ import {
   type PastePayload,
   queuedFollowUps,
   type SessionEvent,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * The browser's view of the DURABLE follow-up queue + the hard-steer fold (plan 47). A prompt submitted

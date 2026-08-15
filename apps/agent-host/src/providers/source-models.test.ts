@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { LM_STUDIO_NATIVE_LIST } from "@trevor/test-kit/lmstudio";
+import { LM_STUDIO_NATIVE_LIST } from "@belay/test-kit/lmstudio";
 import { afterEach, test } from "vitest";
 import { fetchSourceModels } from "./source-models";
 

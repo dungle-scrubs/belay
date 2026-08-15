@@ -1,5 +1,5 @@
+import { sessionSummary } from "@belay/test-kit";
 import { fireEvent, render } from "@testing-library/react";
-import { sessionSummary } from "@trevor/test-kit";
 import type { ReactElement } from "react";
 import { describe, expect, test, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -30,10 +30,10 @@ function project(over: Partial<ProjectSidebarRecord> & { path: string }): Projec
   };
 }
 
-function groupsWithSession(displayName = "My Trevor") {
+function groupsWithSession(displayName = "My Belay") {
   return buildProjectSidebar(
-    [project({ path: "/dev/trevor", displayName })],
-    [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", title: "Fix bugs" })],
+    [project({ path: "/dev/belay", displayName })],
+    [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay", title: "Fix bugs" })],
   );
 }
 
@@ -109,13 +109,13 @@ describe("ProjectSidebar action UI", () => {
       />,
     );
     fireEvent.click(getByLabelText("New session"));
-    expect(onNewSession).toHaveBeenCalledWith("/dev/trevor");
+    expect(onNewSession).toHaveBeenCalledWith("/dev/belay");
   });
 
   test("the New Session button is absent on collapsed projects", () => {
     const collapsedGroups = buildProjectSidebar(
-      [project({ path: "/dev/trevor", collapsed: true })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay", collapsed: true })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     const { queryByLabelText } = renderWithTooltip(
       <ProjectSidebar
@@ -296,7 +296,7 @@ describe("ProjectSidebar action UI", () => {
     expect(input).toBeTruthy();
     fireEvent.change(input, { target: { value: "New Name" } });
     fireEvent.keyDown(input, { key: "Enter" });
-    expect(onRenameProject).toHaveBeenCalledWith("/dev/trevor", "New Name");
+    expect(onRenameProject).toHaveBeenCalledWith("/dev/belay", "New Name");
   });
 
   test("Escape in the rename input cancels without calling onRenameProject", () => {
@@ -322,8 +322,8 @@ describe("ProjectSidebar action UI", () => {
 
   test("Remove is disabled when the project has active sessions", () => {
     const activeGroups = buildProjectSidebar(
-      [project({ path: "/dev/trevor", displayName: "Busy" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor", activity: "running" })],
+      [project({ path: "/dev/belay", displayName: "Busy" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay", activity: "running" })],
     );
     const onRemoveProject = vi.fn<(key: string) => void>();
     const { getByText, container } = renderWithTooltip(
@@ -361,20 +361,20 @@ describe("ProjectSidebar action UI", () => {
     );
     openMenu(container);
     fireEvent.click(getByText("Remove"));
-    expect(onRemoveProject).toHaveBeenCalledWith("/dev/trevor");
+    expect(onRemoveProject).toHaveBeenCalledWith("/dev/belay");
   });
 });
 
 describe("ProjectSidebar session context menu (worktree actions)", () => {
   function groupsWithWorktreeSession() {
     return buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "wt-s1",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
           title: "worktree session",
-          worktree: { id: "wt-abc", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+          worktree: { id: "wt-abc", branch: "feat/x", path: "/dev/.worktrees/belay/feat-x" },
         }),
       ],
     );
@@ -441,23 +441,23 @@ describe("ProjectSidebar session context menu (worktree actions)", () => {
     const onDeleteWorktree =
       vi.fn<(worktreeId: string, sessionId: string, force: boolean) => void>();
     const dirtyGroups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" })],
+      [project({ path: "/dev/belay" })],
       [
         sessionSummary({
           sessionId: "wt-s1",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
           title: "dirty wt",
-          worktree: { id: "wt-dirty", branch: "feat/x", path: "/dev/.worktrees/trevor/feat-x" },
+          worktree: { id: "wt-dirty", branch: "feat/x", path: "/dev/.worktrees/belay/feat-x" },
         }),
       ],
       // Live snapshot marks the worktree dirty.
       [
         {
           id: "wt-dirty",
-          baseRepo: "/dev/trevor",
-          baseRepoName: "trevor",
+          baseRepo: "/dev/belay",
+          baseRepoName: "belay",
           branch: "feat/x",
-          path: "/dev/.worktrees/trevor/feat-x",
+          path: "/dev/.worktrees/belay/feat-x",
           sessionId: "wt-s1",
           dirty: true,
           ahead: 0,
@@ -512,9 +512,9 @@ describe("ProjectSidebar session context menu (worktree actions)", () => {
 describe("ProjectSidebar Show more", () => {
   test("clicking Show N more expands the session list past SESSION_CAP", () => {
     const many = Array.from({ length: 8 }, (_, i) =>
-      sessionSummary({ sessionId: `s${i}`, projectPath: "/dev/trevor", title: `session ${i}` }),
+      sessionSummary({ sessionId: `s${i}`, projectPath: "/dev/belay", title: `session ${i}` }),
     );
-    const groups = buildProjectSidebar([project({ path: "/dev/trevor" })], many);
+    const groups = buildProjectSidebar([project({ path: "/dev/belay" })], many);
     const { getByText, queryByText } = renderWithTooltip(
       <ProjectSidebar
         groups={groups}

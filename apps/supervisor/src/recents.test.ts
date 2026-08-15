@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { LauncherFs } from "@trevor/launcher";
+import type { LauncherFs } from "@belay/launcher";
 import { test } from "vitest";
 import { readRecents } from "./recents";
 
@@ -19,7 +19,7 @@ function fakeFs(files: Record<string, string> = {}): LauncherFs {
   };
 }
 
-const HOME = "/state/trevor";
+const HOME = "/state/belay";
 
 test("readRecents returns projects.json entries recency-sorted (newest first)", () => {
   const fs = fakeFs({

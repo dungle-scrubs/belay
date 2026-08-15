@@ -13,7 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 const cleanups: string[] = [];
 
 function tempWorkspace(): string {
-  const dir = mkdtempSync(join(tmpdir(), "trevor-lsp-adapter-"));
+  const dir = mkdtempSync(join(tmpdir(), "belay-lsp-adapter-"));
   cleanups.push(dir);
   return dir;
 }

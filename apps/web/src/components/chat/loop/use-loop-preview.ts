@@ -5,7 +5,7 @@ import {
   LOOP_COMMAND_NAMES,
   LOOP_FAMILY,
   parseLoopCommand,
-} from "@trevor/session";
+} from "@belay/session";
 import { useMemo } from "react";
 import { lineEnd, lineStart } from "../../../text-lines";
 

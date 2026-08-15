@@ -97,7 +97,7 @@ test("renders sanitized Mermaid SVG output with a locked renderer", async () => 
     `graph TD
   A-->B`,
   );
-  assert.ok(container.querySelector(".trevor-mermaid__svg svg"));
+  assert.ok(container.querySelector(".belay-mermaid__svg svg"));
 });
 
 test("falls back to readable source when Mermaid reports a syntax error", async () => {
@@ -189,7 +189,7 @@ test("rerendering replaces the prior SVG instead of duplicating nodes", async ()
   );
 
   assert.ok(await screen.findByText("Second"));
-  assert.equal(container.querySelectorAll(".trevor-mermaid__svg svg").length, 1);
+  assert.equal(container.querySelectorAll(".belay-mermaid__svg svg").length, 1);
   assert.equal(screen.queryByText("First"), null);
 });
 

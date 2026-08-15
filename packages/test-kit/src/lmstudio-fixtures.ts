@@ -1,4 +1,4 @@
-import type { CatalogEntry } from "@trevor/session";
+import type { CatalogEntry } from "@belay/session";
 
 /**
  * Shared LM Studio native `/api/v0` catalog fixtures (09.3 M5). ONE source of truth for the two
@@ -10,7 +10,7 @@ import type { CatalogEntry } from "@trevor/session";
  * - the agent-host integration test serves it from a fake `/api/v0/models`,
  * - the web chooser test renders {@link LM_STUDIO_LOCAL_ENTRIES} (the derived shape).
  *
- * Depends only on `@trevor/session` types, so the web jsdom project imports it the same as node tests.
+ * Depends only on `@belay/session` types, so the web jsdom project imports it the same as node tests.
  */
 
 /** The raw `/api/v0/models` LIST response LM Studio returns (snake_case wire shape, OpenAI-style

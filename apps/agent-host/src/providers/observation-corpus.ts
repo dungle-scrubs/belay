@@ -1,7 +1,7 @@
 import { access, appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { resolveTrevorHome, storagePathByName } from "@belay/session/node-paths";
 import { writeFileAtomicVia } from "@host/io/atomic-write";
-import { resolveTrevorHome, storagePathByName } from "@trevor/session/node-paths";
 import type { ProviderFailureClass } from "./failure-taxonomy";
 import {
   decodeObservationEnvelope,
@@ -17,7 +17,7 @@ import {
 /**
  * The filesystem persistence layer for the local observation corpus (plan 29 M1/M3/M5). Each producer
  * kind appends redacted shape deltas to its own append-only JSONL log under
- * `<TREVOR_STATE_HOME>/observations/`; a single `index.json` holds the deduped aggregate folded over
+ * `<BELAY_STATE_HOME>/observations/`; a single `index.json` holds the deduped aggregate folded over
  * those logs. The JSONL is the source of truth, so a corrupt or stale index is always repairable by
  * replaying the logs. Writes are best-effort - a disk problem never throws into a user's turn - and
  * export/delete give the corpus user-visible control paths.
@@ -27,7 +27,7 @@ import {
  * or the producer callsites (observation-store.ts).
  */
 
-/** The corpus directory `<TREVOR_STATE_HOME>/observations`, resolved through the storage inventory. */
+/** The corpus directory `<BELAY_STATE_HOME>/observations`, resolved through the storage inventory. */
 export function corpusDir(): string {
   return storagePathByName("observation-corpus");
 }

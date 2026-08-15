@@ -1,7 +1,7 @@
+import { type TaskSnapshot, type TaskStatus, taskSnapshotReplaces } from "@belay/session";
 import { ToolExecutionError, ToolInputError } from "@host/tools/errors";
 import type { Tool } from "@host/tools/types";
 import { msg } from "@host/transport/messages";
-import { type TaskSnapshot, type TaskStatus, taskSnapshotReplaces } from "@trevor/session";
 import { Effect, Schema } from "effect";
 
 /**

@@ -1,4 +1,4 @@
-import { type FileMatch, fileMentionText } from "@trevor/session";
+import { type FileMatch, fileMentionText } from "@belay/session";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type RefObject,

@@ -8,8 +8,8 @@ import type {
   SessionEvent,
   StoreDiagPayload,
   StreamEnvelope,
-} from "@trevor/session";
-import { frames, INVENTORY_EVENT_TYPES, LIFECYCLE_TYPES } from "@trevor/session";
+} from "@belay/session";
+import { frames, INVENTORY_EVENT_TYPES, LIFECYCLE_TYPES } from "@belay/session";
 import {
   NOOP_SINK,
   SPAN_NAMES,
@@ -17,7 +17,7 @@ import {
   safeEmitSpan,
   type TelemetrySink,
   withSpanSync,
-} from "@trevor/session/telemetry";
+} from "@belay/session/telemetry";
 
 /**
  * The local session log on SQLite (the durable substrate for local-mode sessions,
@@ -41,7 +41,7 @@ import {
  */
 
 // A stored event is the shared SessionEvent, and the fields a publisher supplies
-// are PublishInput - both owned by @trevor/session (the event shape is the
+// are PublishInput - both owned by @belay/session (the event shape is the
 // contract; the log assigns seq/eventId/createdAt). EventRow below is the
 // genuinely private SQLite row (payload is a JSON string on disk).
 
@@ -63,7 +63,7 @@ interface AggregateRow {
   readonly updatedAt: string;
 }
 
-/** The store's `/diag` self-check payload - an alias of the SHARED wire shape (@trevor/session's
+/** The store's `/diag` self-check payload - an alias of the SHARED wire shape (@belay/session's
  *  session-routes), so the log's producer, the server route, and the host doctor's decoder can
  *  never drift field-by-field. */
 export type SessionLogDiag = StoreDiagPayload;
@@ -142,7 +142,7 @@ type BreakerState =
       readonly sinceQuery: string;
     };
 
-/** The git HEAD at store startup (the launcher spawns the store with cwd = the trevor checkout, so
+/** The git HEAD at store startup (the launcher spawns the store with cwd = the belay checkout, so
  *  this is the running code's sha), or null when the process is not in a git checkout. Argv-based,
  *  no shell parsing; tests inject the constructor's `startupSha` instead of stubbing this. */
 function readStartupSha(): string | null {

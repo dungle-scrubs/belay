@@ -1,4 +1,4 @@
-import type { TrevorEventInput } from "@trevor/session";
+import type { TrevorEventInput } from "@belay/session";
 import { describe, expect, test } from "vitest";
 import {
   applyModelPrefsCommand,
@@ -10,7 +10,7 @@ import {
 import type { ModelPrefsFile } from "./model-prefs-store";
 
 /**
- * M3 (plan 51): the set-default / toggle-favorite host command. The pure apply reuses the @trevor/session
+ * M3 (plan 51): the set-default / toggle-favorite host command. The pure apply reuses the @belay/session
  * transitions over the persisted `{ default, pinned }` subset; the runner decodes the JSON ref, applies +
  * persists + re-announces on success, and rejects a malformed ref without touching the store. A tiny fake
  * store + event sink stand in for disk + transport.

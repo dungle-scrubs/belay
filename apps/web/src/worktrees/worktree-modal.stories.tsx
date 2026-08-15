@@ -1,5 +1,5 @@
+import type { WorktreeSummary } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { WorktreeSummary } from "@trevor/session";
 import { RowChooserModal } from "@/components/command-modal";
 import { WORKTREE_CHOOSER, type WorktreeActivity, type WorktreeRowsContext } from "./worktree-rows";
 
@@ -12,10 +12,10 @@ import { WORKTREE_CHOOSER, type WorktreeActivity, type WorktreeRowsContext } fro
 
 const wt = (over: Partial<WorktreeSummary>): WorktreeSummary => ({
   id: "wt",
-  baseRepo: "/dev/trevor",
-  baseRepoName: "trevor",
+  baseRepo: "/dev/belay",
+  baseRepoName: "belay",
   branch: "feat/x",
-  path: "~/.trevor/.worktrees/h/feat-x-wt",
+  path: "~/.belay/.worktrees/h/feat-x-wt",
   sessionId: "s-wt",
   dirty: false,
   ahead: 0,
@@ -32,7 +32,7 @@ const worktrees: WorktreeSummary[] = [
   wt({
     id: "baseline",
     branch: "main",
-    path: "~/dev/trevor",
+    path: "~/dev/belay",
     baseline: true,
     current: true,
     sessionId: "base",
@@ -122,12 +122,12 @@ export const Empty: Story = {
 export const ManyRows: Story = {
   args: {
     worktrees: [
-      wt({ id: "baseline", branch: "main", path: "~/dev/trevor", baseline: true, current: true }),
+      wt({ id: "baseline", branch: "main", path: "~/dev/belay", baseline: true, current: true }),
       ...Array.from({ length: 30 }, (_, i) =>
         wt({
           id: `m${i}`,
           branch: `feat/branch-${i}`,
-          path: `~/.trevor/.worktrees/h/feat-branch-${i}`,
+          path: `~/.belay/.worktrees/h/feat-branch-${i}`,
           dirty: i % 4 === 0,
           ahead: i % 3,
           sessionId: `s-m${i}`,
@@ -140,11 +140,11 @@ export const ManyRows: Story = {
 export const LongBranch: Story = {
   args: {
     worktrees: [
-      wt({ id: "baseline", branch: "main", path: "~/dev/trevor", baseline: true }),
+      wt({ id: "baseline", branch: "main", path: "~/dev/belay", baseline: true }),
       wt({
         id: "long",
         branch: "feature/extremely-long-branch-name-that-should-truncate-cleanly-in-the-row",
-        path: "~/.trevor/.worktrees/h/feature-extremely-long-branch-name-that-should-truncate-cleanly-in-the-row-abcd",
+        path: "~/.belay/.worktrees/h/feature-extremely-long-branch-name-that-should-truncate-cleanly-in-the-row-abcd",
         dirty: true,
         ahead: 12,
         behind: 7,

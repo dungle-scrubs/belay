@@ -1,4 +1,4 @@
-import { lucidArtifactRef } from "@trevor/session";
+import { lucidArtifactRef } from "@belay/session";
 import type { Message, ToolMessage } from "../../transcript";
 import { inlineAgent } from "./inline-agent-fixtures";
 

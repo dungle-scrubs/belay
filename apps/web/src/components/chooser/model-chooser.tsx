@@ -1,4 +1,3 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type CatalogEntry,
   filterCatalog,
@@ -9,7 +8,8 @@ import {
   type SourceSummary,
   type SourceType,
   sameModel,
-} from "@trevor/session";
+} from "@belay/session";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   ArrowLeft,
   BadgeCheck,

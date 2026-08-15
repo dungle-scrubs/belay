@@ -1,8 +1,8 @@
 import { homedir } from "node:os";
+import { type DoctorFinding, relativeTime } from "@belay/session";
 import { MAX_LSP_DEGRADED_DETAIL_CHARS } from "@host/lsp/caps";
 import type { LspServerStatus } from "@host/lsp/contract";
 import { clipLine } from "@host/tools/shared";
-import { type DoctorFinding, relativeTime } from "@trevor/session";
 import { plural, statusHistogram } from "./format";
 import { classifyPeripheral, type PeripheralClassificationRule } from "./peripheral-classifier";
 import type { DoctorLspDiagnostics, PeripheralState } from "./probe-input";

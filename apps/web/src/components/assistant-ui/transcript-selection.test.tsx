@@ -204,7 +204,7 @@ test("paints a highlight resolved from the logical range", () => {
   mount(`<div data-message-id="m1">paint me please</div>`);
   withHighlightApi((registry) => {
     paintTranscriptHighlight({ start: { segmentId: "m1", offset: 0 }, end: { segmentId: "m1", offset: 5 } }, root);
-    const highlight = registry.get("trevor-transcript-selection");
+    const highlight = registry.get("belay-transcript-selection");
     assert.ok(highlight);
     assert.equal(highlight?.ranges[0]?.toString(), "paint");
   });
@@ -214,9 +214,9 @@ test("a null range clears any existing highlight (dismissal)", () => {
   mount(`<div data-message-id="m1">clear me</div>`);
   withHighlightApi((registry) => {
     paintTranscriptHighlight({ start: { segmentId: "m1", offset: 0 }, end: { segmentId: "m1", offset: 5 } }, root);
-    assert.ok(registry.has("trevor-transcript-selection"));
+    assert.ok(registry.has("belay-transcript-selection"));
     paintTranscriptHighlight(null, root);
-    assert.equal(registry.has("trevor-transcript-selection"), false);
+    assert.equal(registry.has("belay-transcript-selection"), false);
   });
 });
 
@@ -224,10 +224,10 @@ test("a range whose segment is unmounted clears rather than leaving a stale high
   mount(`<div data-message-id="m1">only one here</div>`);
   withHighlightApi((registry) => {
     paintTranscriptHighlight({ start: { segmentId: "m1", offset: 0 }, end: { segmentId: "m1", offset: 4 } }, root);
-    assert.ok(registry.has("trevor-transcript-selection"));
+    assert.ok(registry.has("belay-transcript-selection"));
     // The end segment scrolls out of the virtual window: the highlight must not linger stale.
     paintTranscriptHighlight({ start: { segmentId: "m1", offset: 0 }, end: { segmentId: "gone", offset: 4 } }, root);
-    assert.equal(registry.has("trevor-transcript-selection"), false);
+    assert.equal(registry.has("belay-transcript-selection"), false);
   });
 });
 
@@ -235,8 +235,8 @@ test("clearTranscriptHighlight removes the painted highlight", () => {
   mount(`<div data-message-id="m1">bye</div>`);
   withHighlightApi((registry) => {
     paintTranscriptHighlight({ start: { segmentId: "m1", offset: 0 }, end: { segmentId: "m1", offset: 3 } }, root);
-    assert.ok(registry.has("trevor-transcript-selection"));
+    assert.ok(registry.has("belay-transcript-selection"));
     clearTranscriptHighlight();
-    assert.equal(registry.has("trevor-transcript-selection"), false);
+    assert.equal(registry.has("belay-transcript-selection"), false);
   });
 });

@@ -1,4 +1,4 @@
-import { decodeTrevorEvent, type SessionEvent } from "@trevor/session";
+import { decodeTrevorEvent, type SessionEvent } from "@belay/session";
 
 /**
  * The SDK transcript projection (plan 28 M4): a lightweight, headless-appropriate fold of a session's

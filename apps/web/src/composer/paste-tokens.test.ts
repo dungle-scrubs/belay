@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { PastePayload } from "@trevor/session";
+import type { PastePayload } from "@belay/session";
 import { test } from "vitest";
 import {
   EMPTY_PASTE_DRAFT,

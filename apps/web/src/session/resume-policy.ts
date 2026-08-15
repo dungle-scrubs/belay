@@ -1,4 +1,4 @@
-import type { SessionSummary } from "@trevor/session";
+import type { SessionSummary } from "@belay/session";
 import { sessionProjectPath } from "./session-root";
 
 export type CalendarDayStatus = "today" | "older";

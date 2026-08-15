@@ -68,7 +68,7 @@ export function spawnStdioTransport(
   server: McpStdioServerConfig,
   options: StdioTransportOptions = {},
 ): McpTransport {
-  const clientInfo = options.clientInfo ?? { name: "trevor", version: "dev" };
+  const clientInfo = options.clientInfo ?? { name: "belay", version: "dev" };
   const closeGraceMs = options.closeGraceMs ?? DEFAULT_CLOSE_GRACE_MS;
 
   const child = spawnHardenedChild({

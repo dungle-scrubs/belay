@@ -4,7 +4,7 @@ import { createMcpRuntime, type McpRuntime } from "./runtime";
 
 /**
  * The host-wide MCP runtime singleton (plan 23 M7), in the supervisor/taskRegistry tradition:
- * one lazy runtime over the user's `<TREVOR_HOME>/mcp-servers.json`, shared by the model-facing
+ * one lazy runtime over the user's `<BELAY_HOME>/mcp-servers.json`, shared by the model-facing
  * `mcp` tool (tools/mcp.ts via tools/index.ts), the /doctor facts, and main.ts shutdown.
  * Construction connects NOTHING (the runtime is lazy per server), so an unconfigured or unused
  * MCP install costs no process, socket, or file handle. Config issues are structured warnings
@@ -29,5 +29,5 @@ for (const issue of config.issues) {
 
 /** The one host MCP runtime; lazy, so importing this connects to nothing. */
 export const mcpRuntime: McpRuntime = createMcpRuntime(config.servers, {
-  clientInfo: { name: "trevor", version: process.env.npm_package_version ?? "dev" },
+  clientInfo: { name: "belay", version: process.env.npm_package_version ?? "dev" },
 });

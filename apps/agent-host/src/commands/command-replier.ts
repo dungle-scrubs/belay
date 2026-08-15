@@ -1,6 +1,6 @@
+import { events } from "@belay/session";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import { events } from "@trevor/session";
 
 /**
  * The programmatic command-reply seam (deepen C-20). The immediate command lane shapes its reply

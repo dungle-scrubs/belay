@@ -1,7 +1,7 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { type FakeLmStudioResidency, makeFakeLmStudioResidency } from "@trevor/agent-host/testing";
-import { tempDir } from "@trevor/test-kit";
+import { type FakeLmStudioResidency, makeFakeLmStudioResidency } from "@belay/agent-host/testing";
+import { tempDir } from "@belay/test-kit";
 import { afterAll, afterEach, beforeAll, expect, test } from "vitest";
 
 /**
@@ -25,7 +25,7 @@ let fake: FakeLmStudioResidency;
 let seq = 0;
 
 beforeAll(() => {
-  stateHome = tempDir("trevor-residency-state-");
+  stateHome = tempDir("belay-residency-state-");
 });
 
 afterEach(() => {
@@ -105,7 +105,7 @@ test("a model no instance loaded (external) is never unloaded", async () => {
   const a = fake.instance({ hostId: "host-a" });
   const X = target("unsloth/qwen3.6-27b-mlx");
 
-  // Only X is Trevor-loaded; an externally-loaded model was never recorded, so it is not a candidate.
+  // Only X is Belay-loaded; an externally-loaded model was never recorded, so it is not a candidate.
   a.load(X);
   await a.residency.onActiveModelChanged(X);
   await a.residency.shutdown(); // release + sweep this instance's endpoint

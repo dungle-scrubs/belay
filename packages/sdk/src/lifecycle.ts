@@ -1,4 +1,4 @@
-import { events, type SessionSummary, sessionsForProject } from "@trevor/session";
+import { events, type SessionSummary, sessionsForProject } from "@belay/session";
 import type { TrevorClient } from "./client";
 
 /**
@@ -6,7 +6,7 @@ import type { TrevorClient } from "./client";
  * a `list` shows and where an `open <id>` should launch - lives here as the single source, so the CLI
  * and any other headless consumer cannot drift from each other (the CLI re-exports these). Archive /
  * unarchive publish the durable `session.archived` marker through the client. The SDK deliberately does
- * NOT own stop/kill (OS signals) or process-ownership records - those stay in `apps/trevor-cli`; the SDK
+ * NOT own stop/kill (OS signals) or process-ownership records - those stay in `apps/belay-cli`; the SDK
  * only reaches protocol-safe lifecycle state (M6 REFACTOR). `cancel` (a run control) is distinct again:
  * it lives in the prompt workflow, not here.
  */
@@ -22,7 +22,7 @@ export interface ListSessionsOptions {
 
 /**
  * Current-project sessions, newest first: active by default, or archived only with `archived: true`. A
- * thin CLI-facing alias over `@trevor/session`'s {@link sessionsForProject} (the one owner of the scope +
+ * thin CLI-facing alias over `@belay/session`'s {@link sessionsForProject} (the one owner of the scope +
  * recency rule), so the headless `list` can't drift from the web sidebar.
  */
 export function selectSessions(
@@ -93,12 +93,12 @@ export function resolveOpenTarget(
   home: string,
 ): OpenTarget | { readonly error: string } {
   if (!sessionId) {
-    return { error: "usage: trevor open <session>" };
+    return { error: "usage: belay open <session>" };
   }
   const summary = summaries.find((s) => s.sessionId === sessionId);
   if (!summary) {
     return {
-      error: `No session "${sessionId}" found. Run \`trevor list\` to see this project's sessions.`,
+      error: `No session "${sessionId}" found. Run \`belay list\` to see this project's sessions.`,
     };
   }
   if (summary.deleted) {
@@ -106,7 +106,7 @@ export function resolveOpenTarget(
   }
   if (summary.archived) {
     return {
-      error: `Session "${sessionId}" is archived. Run \`trevor unarchive ${sessionId}\` first, then open it.`,
+      error: `Session "${sessionId}" is archived. Run \`belay unarchive ${sessionId}\` first, then open it.`,
     };
   }
   const dir = summary.workspace ?? summary.cwd;

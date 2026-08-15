@@ -1,6 +1,29 @@
 import { execFile, execSync } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import {
+  catalogEntryFor,
+  clipProducerId,
+  controlProducerId,
+  DEFAULT_SESSION_ID,
+  decodeTrevorEvent,
+  events,
+  inputEstimateTokens,
+  isAnswerableProducer,
+  PRODUCER_IDS,
+  recallProducerId,
+  type SessionEvent,
+  streamTransport,
+  type TrevorEventInput,
+  tangentsOf,
+  toPublishInput,
+  viewerIdentity,
+} from "@belay/session";
+import { storagePathByName } from "@belay/session/node-paths";
+import { serviceUrl } from "@belay/session/ports";
+import { resolveTelemetryConfig } from "@belay/session/telemetry";
+import { createTelemetrySink } from "@belay/session/telemetry-file-sink";
+import { createProviderTraceWriter } from "@belay/session/telemetry-provider-trace";
 import { leaseOptions, makeLeadership } from "@host/boot/leadership";
 import { abbrevHome, WORKSPACE_ROOT } from "@host/boot/paths";
 import { ensureSessionWithRetry } from "@host/boot/startup";
@@ -32,29 +55,6 @@ import { taskRegistry } from "@host/tools/tasks/tasks";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import * as Sentry from "@sentry/node";
-import {
-  catalogEntryFor,
-  clipProducerId,
-  controlProducerId,
-  DEFAULT_SESSION_ID,
-  decodeTrevorEvent,
-  events,
-  inputEstimateTokens,
-  isAnswerableProducer,
-  PRODUCER_IDS,
-  recallProducerId,
-  type SessionEvent,
-  streamTransport,
-  type TrevorEventInput,
-  tangentsOf,
-  toPublishInput,
-  viewerIdentity,
-} from "@trevor/session";
-import { storagePathByName } from "@trevor/session/node-paths";
-import { serviceUrl } from "@trevor/session/ports";
-import { resolveTelemetryConfig } from "@trevor/session/telemetry";
-import { createTelemetrySink } from "@trevor/session/telemetry-file-sink";
-import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
 import { capacityResolver, loadAdmissionConfig } from "./admission/config";
 import { createLocalAdmissionGate } from "./admission/service";
 import { nodeAdmissionCaps } from "./admission/store";
@@ -98,15 +98,15 @@ import { nodeWorktreeManager } from "./worktrees";
 import { makeWorktreeCommands } from "./worktrees/commands";
 
 /**
- * Trevor host: a session participant that runs an agent loop (model <-> tools) for
+ * Belay host: a session participant that runs an agent loop (model <-> tools) for
  * each new user.message over the full conversation, via a per-message-selectable
  * Provider (local qwen, or GPT-5.x over Codex OAuth) - both with tool calling.
  * It builds history from the event log, gates on replay, reports cold/warm
- * readiness, and defaults to a shared session ("trevor-local") so host and
+ * readiness, and defaults to a shared session ("belay-local") so host and
  * browser auto-attach; override with SESSION_ID.
  *
  * The session contract (event shape, the `events` constructors, `decodeTrevorEvent`)
- * lives in @trevor/session and is shared with the web client, so host and browser
+ * lives in @belay/session and is shared with the web client, so host and browser
  * can never disagree on the protocol. The durable log is reached through a
  * SessionTransport; by default this host plugs in the local session-store, and sets
  * TETHER_URL to opt into Tether instead. Either way the loop below depends only on
@@ -182,7 +182,7 @@ const residency = createHostResidency({
   staleAfterMs: admissionConfig.staleAfterMs,
 });
 const providers = buildProviders({ admissionGate, residency: residency.recorder });
-// File-loaded custom commands (plan 44.5): `.trevor/commands/*.md` bodies with `$0`/`$ARGUMENTS`
+// File-loaded custom commands (plan 44.5): `.belay/commands/*.md` bodies with `$0`/`$ARGUMENTS`
 // placeholders, loaded once at startup (a new/edited file needs a host restart, like skills). Their
 // specs are announced on host.online so the web menu lists them; invoking one takes the SUBMIT branch
 // below. A skip is fail-soft - it never blocks the rest of command registration.
@@ -190,7 +190,7 @@ const commandFileLoad = loadCommandFiles();
 for (const diagnostic of commandFileLoad.diagnostics) {
   warn("host", "command file skipped", { path: diagnostic.path, code: diagnostic.code });
 }
-// Reserve the debug command names (`/restart`, `/stop`, ...) so a same-named `.trevor/commands/*.md`
+// Reserve the debug command names (`/restart`, `/stop`, ...) so a same-named `.belay/commands/*.md`
 // can't double-list itself beside its debug spec and shadow the real handler at dispatch (plan 44.5).
 // The programmatic dispatcher's own names (`/worktree-*`, ...) are built further down and can't reach
 // here (the registry is consumed by makePresence above) - a file so named still dispatches to the real
@@ -240,11 +240,11 @@ function refreshCatalog(): void {
     .catch((error) => warn("catalog", "load failed", { error: msg(error) }));
 }
 
-// Trevor-managed worktrees (D-091): the registry+git manager, rooted at TREVOR_STATE_HOME, with the
+// Belay-managed worktrees (D-091): the registry+git manager, rooted at BELAY_STATE_HOME, with the
 // shared home-abbreviation as its display closure.
 const worktrees = nodeWorktreeManager(abbrevHome);
 
-// Debug mode: a runtime flag (booted from `TREVOR_DEBUG`, set by `trevor --debug`, toggled at
+// Debug mode: a runtime flag (booted from `TREVOR_DEBUG`, set by `belay --debug`, toggled at
 // runtime by `/debug`) that gates a collection of dev-only host commands - hidden from a normal
 // session. `/restart` re-execs the host to pick up code changes on demand; `/archive`, `/unarchive`,
 // and `/stop` are the debug lifecycle controls (D-094 M4). The gated set + the `/stop` confirm live in
@@ -547,7 +547,7 @@ const {
   forceCompact,
 });
 
-// The file-loaded-command SUBMIT branch (plan 44.5, M4): expands a `.trevor/commands/*.md` body
+// The file-loaded-command SUBMIT branch (plan 44.5, M4): expands a `.belay/commands/*.md` body
 // (interpolate-then-substitute, D-007) and publishes it as the turn's prompt through the control-prompt
 // seam - so a custom command drives the model like a typed prompt, not a `command.result`. Wired after
 // `publishControlPrompt` exists; the dispatch calls it only on the live leader (below).
@@ -787,7 +787,7 @@ registerDoctorSnapshotSource(async () =>
 );
 
 // The capability manifest (plan 14) reads the SAME live registries the announced inventory, /help, and
-// /doctor read, so `/trevor-export` and the built-in trevor-expert never disagree with them. The catalog
+// /doctor read, so `/belay-export` and the built-in belay-expert never disagree with them. The catalog
 // load and doctor snapshot are best-effort - a failed read degrades that one section to unavailable, never
 // the whole export.
 registerManifestSource(async (scope) => {
@@ -1278,7 +1278,7 @@ function configureRecall(): void {
       // A passive viewer identity (web runtime kind), so reading a sibling never registers this
       // host as a live host presence on that session.
       identity: viewerIdentity({
-        displayName: "trevor-recall",
+        displayName: "belay-recall",
         instanceId: INSTANCE_ID,
         participantId: recallProducerId(PRODUCER_ID),
       }),
@@ -1310,7 +1310,7 @@ process.once("SIGINT", () => {
   process.exit(0);
 });
 
-// `trevor stop` sends SIGTERM: a GRACEFUL session shutdown (D-094 M5), distinct from cancel (which
+// `belay stop` sends SIGTERM: a GRACEFUL session shutdown (D-094 M5), distinct from cancel (which
 // only aborts the active turn and stays attached) and kill (SIGKILL, no in-process orchestration).
 // Abort active work - a clean cancelled completion where it can still flush; a successor leader's
 // orphan-reap closes it durably otherwise - clear the deferred queue so no successor answers stale

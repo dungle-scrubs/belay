@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { ProviderQuestionAnswer } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { ProviderQuestionAnswer } from "@trevor/session";
 import { test, vi } from "vitest";
 import * as fx from "./fixtures";
 import { QuestionSurface } from "./question-surface";

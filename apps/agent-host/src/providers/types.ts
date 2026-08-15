@@ -2,12 +2,12 @@
  * Responsible for: the shared provider contract - the Provider interface, the DescribableProvider
  * base, and the event/message/tool/readiness/capability types every adapter speaks.
  */
-import type { ArtifactRef, LimitStatus, PastePayload, ProviderModel, Usage } from "@trevor/session";
+import type { ArtifactRef, LimitStatus, PastePayload, ProviderModel, Usage } from "@belay/session";
 import type { Effect, Stream } from "effect";
 import type { LocalModelTarget } from "../admission/contract";
 import type { ProviderAuthError, ProviderUnavailable } from "./errors";
 
-// Wire types owned in @trevor/session, re-exported so importers can reach them through the
+// Wire types owned in @belay/session, re-exported so importers can reach them through the
 // providers barrel: `Usage` (the host's per-step usage and the serialized turn usage are the
 // same shape, so they share one declaration - D-005) and `ProviderModel` (the per-provider
 // descriptor the host announces in host.online).
@@ -60,7 +60,7 @@ export interface ToolCall {
  * `AgentEvent` (agent/loop.ts), so the loop forwards them rather than re-declaring them.
  *
  * `limit` (plan 44.4) is the provider's usage-limit reading (Claude's `anthropic-ratelimit-unified-*`
- * success headers, a terminal Codex 429), already normalized to the Trevor-native status/scope. It
+ * success headers, a terminal Codex 429), already normalized to the Belay-native status/scope. It
  * carries no `provider` - `turn.ts` stamps the turn's `provider.id` when it publishes `assistant.limit`.
  */
 export type ModelEvent =

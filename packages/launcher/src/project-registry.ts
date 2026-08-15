@@ -1,5 +1,5 @@
 import { basename, join } from "node:path";
-import { abbreviateHome } from "@trevor/session/node-paths";
+import { abbreviateHome } from "@belay/session/node-paths";
 import { type LauncherFs, readJson, writeJson } from "./fs";
 import { loadProjectMap } from "./project";
 
@@ -10,7 +10,7 @@ import { loadProjectMap } from "./project";
  * and read only for migration.
  *
  * Pure over an injected `LauncherFs` so registry persistence is unit-tested without real disk. Stored
- * under `TREVOR_STATE_HOME` (machine-local runtime state), not the config dir.
+ * under `BELAY_STATE_HOME` (machine-local runtime state), not the config dir.
  */
 
 /** One persisted project record: metadata only, never a session id. */

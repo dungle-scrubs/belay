@@ -1,4 +1,4 @@
-import type { TurnStop } from "@trevor/session";
+import type { TurnStop } from "@belay/session";
 
 /**
  * Pure adaptive turn-termination policy.

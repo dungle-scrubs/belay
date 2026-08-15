@@ -10,8 +10,8 @@
  * or discovery (claude-migration.ts) - this module composes those pure pieces and owns nothing else.
  */
 import { resolve } from "node:path";
+import type { ProviderQuestionAnswer, ProviderQuestionContract } from "@belay/session";
 import { msg } from "@host/transport/messages";
-import type { ProviderQuestionAnswer, ProviderQuestionContract } from "@trevor/session";
 import { Effect } from "effect";
 import { type ClaudeMigrationItem, discoverClaudeMigrations } from "./claude-migration";
 import { addPermanentlyIgnored, loadPermanentlyIgnored } from "./claude-migration-ignores";

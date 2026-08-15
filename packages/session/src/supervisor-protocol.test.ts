@@ -17,7 +17,7 @@ const stored = (input: TrevorEventInput, over: Partial<SessionEvent> = {}): Sess
   sessionId: SUPERVISOR_SESSION_ID,
   seq: 1,
   eventId: "ev-1",
-  producerId: "trevor-web",
+  producerId: "belay-web",
   createdAt: "2026-07-04T00:00:00.000Z",
   type: input.type,
   payload: input.payload as Record<string, unknown>,
@@ -25,7 +25,7 @@ const stored = (input: TrevorEventInput, over: Partial<SessionEvent> = {}): Sess
 });
 
 test("SUPERVISOR_SESSION_ID is the reserved control session constant", () => {
-  assert.equal(SUPERVISOR_SESSION_ID, "trevor-supervisor-control");
+  assert.equal(SUPERVISOR_SESSION_ID, "belay-supervisor-control");
 });
 
 test("session.launch.requested round-trips its requestId + root", () => {

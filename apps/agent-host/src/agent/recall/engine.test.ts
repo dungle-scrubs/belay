@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { events, type SessionEvent, type TrevorEventInput } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+import { events, type SessionEvent, type TrevorEventInput } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderError, ProviderEvent } from "../../providers";
@@ -16,7 +16,7 @@ import { type RecallDeps, runRecall, type SiblingRead } from "./engine";
  */
 
 let seq = 0;
-const ev = (input: TrevorEventInput, sessionId: string, producerId = "trevor-web"): SessionEvent =>
+const ev = (input: TrevorEventInput, sessionId: string, producerId = "belay-web"): SessionEvent =>
   storedEvent(input, { seq: seq++, sessionId, producerId });
 
 function fakeProvider(text: string, fail = false): Provider {
@@ -75,7 +75,7 @@ test("runRecall finds compacted-away current detail, distills, and cites a sourc
     ev(
       events.assistantCompleted({ runId: "r1", text: "we picked SQLite for the durable log" }),
       "cur",
-      "trevor-host",
+      "belay-host",
     ),
     ev(
       events.contextCompacted({
@@ -88,7 +88,7 @@ test("runRecall finds compacted-away current detail, distills, and cites a sourc
         model: "qwen",
       }),
       "cur",
-      "trevor-host",
+      "belay-host",
     ),
     {
       ...ev(events.userMessage({ text: "active prompt tail", provider: "qwen" }), "cur"),
@@ -128,7 +128,7 @@ test("runRecall searches sibling project sessions", async () => {
     ev(
       events.assistantCompleted({ runId: "r1", text: "the lease heartbeat is every 500ms" }),
       "sib",
-      "trevor-host",
+      "belay-host",
     ),
   ];
 

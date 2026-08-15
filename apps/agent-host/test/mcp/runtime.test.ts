@@ -270,7 +270,7 @@ describe("mcp runtime - status snapshot failure detail", () => {
     await withRuntime(
       [
         stdioFixtureConfig("alpha", {
-          command: "/nonexistent/trevor-mcp-fixture-binary",
+          command: "/nonexistent/belay-mcp-fixture-binary",
           args: [],
         }),
       ],

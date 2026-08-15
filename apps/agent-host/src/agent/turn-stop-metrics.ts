@@ -4,9 +4,9 @@
  */
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { TREVOR_STATE_HOME } from "@host/boot/paths";
+import type { TurnStop } from "@belay/session";
+import { BELAY_STATE_HOME } from "@host/boot/paths";
 import { log } from "@host/transport/log";
-import type { TurnStop } from "@trevor/session";
 
 export interface TurnStopRecord {
   readonly runId: string;
@@ -17,7 +17,7 @@ export interface TurnStopRecord {
 }
 
 export function turnStopMetricsPath(): string {
-  return join(TREVOR_STATE_HOME, "turn-stops.jsonl");
+  return join(BELAY_STATE_HOME, "turn-stops.jsonl");
 }
 
 /** Appends one turn-stop record to the durable jsonl metric file (best-effort). */

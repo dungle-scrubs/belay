@@ -1,4 +1,4 @@
-import type { CommandKeywordChip } from "@trevor/session";
+import type { CommandKeywordChip } from "@belay/session";
 import { cn } from "@/lib/utils";
 
 /**

@@ -8,7 +8,7 @@ import {
   type SessionLaunchOkStatus,
   type SupervisorProject,
   type TrevorEventInput,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * The supervisor's request dispatcher (plan 44.1). It decodes a control-session event, ignores its own

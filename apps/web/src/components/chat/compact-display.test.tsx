@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { lucidArtifactRef } from "@trevor/session";
+import { lucidArtifactRef } from "@belay/session";
 import {
   BookOpenText,
   Brain,

@@ -1,4 +1,4 @@
-import type { CommandMenuPayload } from "@trevor/session";
+import type { CommandMenuPayload } from "@belay/session";
 
 /**
  * Output-style metadata and the `/style` command logic (plan 03, M4-M6). Styles are HOST-owned: each is
@@ -22,12 +22,12 @@ export interface OutputStyle {
   readonly isDefault?: boolean;
 }
 
-/** The built-in output styles. The default carries no guidance (Trevor's standard voice). */
+/** The built-in output styles. The default carries no guidance (Belay's standard voice). */
 export const BUILTIN_STYLES: readonly OutputStyle[] = [
   {
     id: "default",
     label: "Default",
-    description: "Trevor's standard voice",
+    description: "Belay's standard voice",
     guidance: "",
     isDefault: true,
   },

@@ -1,11 +1,11 @@
-import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { CommandSpec } from "@trevor/session";
+import type { CommandSpec } from "@belay/session";
 import {
   LOOP_FAMILY,
   type LoopInventoryRow,
   loopPresentation,
   parseLoopCommand,
-} from "@trevor/session";
+} from "@belay/session";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { CommandMenu } from "../command-menu";
 import { CommandInput } from "./command-input";

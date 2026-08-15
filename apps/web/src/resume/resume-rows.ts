@@ -1,4 +1,4 @@
-import { activeSessions, relativeTime, type SessionSummary, sortInventory } from "@trevor/session";
+import { activeSessions, relativeTime, type SessionSummary, sortInventory } from "@belay/session";
 import type { CommandRow, RowChooserAdapter, RowTone } from "@/components/command-modal";
 
 /** The current project / session context the resume rows are projected against. */
@@ -54,7 +54,7 @@ export function buildResumeRows(
   ctx: ResumeContext,
 ): CommandRow[] {
   // Archived and soft-deleted sessions (D-094) never appear in the default resume view - they are
-  // reached only through an explicit archive browser / `trevor list --archived`.
+  // reached only through an explicit archive browser / `belay list --archived`.
   const visible = activeSessions(sessions);
   // Scope to the current working directory's project; with no known project (e.g. the default
   // shared session) we can't identify a cwd to scope to, so fall back to the full list.

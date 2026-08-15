@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { type CatalogEntry, type ModelRef, modelRefKey, type SourceSummary } from "@belay/session";
+import { LM_STUDIO_LOCAL_ENTRIES } from "@belay/test-kit/lmstudio";
 import { fireEvent, render, within } from "@testing-library/react";
-import { type CatalogEntry, type ModelRef, modelRefKey, type SourceSummary } from "@trevor/session";
-import { LM_STUDIO_LOCAL_ENTRIES } from "@trevor/test-kit/lmstudio";
 import { test } from "vitest";
 import { ModelChooser } from "./model-chooser";
 

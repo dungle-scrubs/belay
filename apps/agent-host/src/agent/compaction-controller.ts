@@ -3,7 +3,7 @@
  * window, last measured usage, fold snapshots, and the needed()/planFold() surface callers drive.
  * Not for: fold planning or summarization - compaction-planner.ts and compactor.ts.
  */
-import type { SessionEvent, TrevorEventInput } from "@trevor/session";
+import type { SessionEvent, TrevorEventInput } from "@belay/session";
 import type { Effect } from "effect";
 import type { Provider, ProviderError } from "../providers";
 import { COMPACT_WHEN, overBudget, runCompaction } from "./compactor";

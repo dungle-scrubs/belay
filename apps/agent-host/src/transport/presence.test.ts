@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { decodeTrevorEvent, type TrevorEventInput, UNKNOWN_INTERNET } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+import { decodeTrevorEvent, type TrevorEventInput, UNKNOWN_INTERNET } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import { makePresence } from "./presence";
 
@@ -42,7 +42,7 @@ test("announceOnline puts the host model preference on host.online (plan 51)", (
   assert.equal(decoded?.type, "host.online");
   if (decoded?.type !== "host.online") return;
   // Assert the FIELD is announced and correctly shaped (the plan-51 wiring rides host.online) - NOT its
-  // exact value, which reads the host's REAL config home (`<TREVOR_HOME>/model-prefs.json`) and so varies
+  // exact value, which reads the host's REAL config home (`<BELAY_HOME>/model-prefs.json`) and so varies
   // by machine. The empty-load + parse behavior is unit-tested hermetically in model-prefs-store.test.ts
   // (via its injectable `read`); here we only pin that the shaped preference is on the wire.
   assert.ok(decoded.modelPrefs, "modelPrefs rides host.online");

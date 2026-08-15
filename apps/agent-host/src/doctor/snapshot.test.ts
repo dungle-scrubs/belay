@@ -4,7 +4,7 @@ import {
   type InternetSnapshot,
   overallStatus,
   summarizeSnapshot,
-} from "@trevor/session";
+} from "@belay/session";
 import { test } from "vitest";
 import type { DoctorProbeInput, DoctorRootProbe, PeripheralState } from "./probe-input";
 import { buildDoctorSnapshot } from "./snapshot";
@@ -26,7 +26,7 @@ const ONLINE: InternetSnapshot = {
 function root(over: Partial<DoctorRootProbe> & Pick<DoctorRootProbe, "id">): DoctorRootProbe {
   return {
     label: over.id,
-    ownership: "trevor",
+    ownership: "belay",
     path: `~/.${over.id}`,
     exists: true,
     writable: true,
@@ -38,13 +38,13 @@ function root(over: Partial<DoctorRootProbe> & Pick<DoctorRootProbe, "id">): Doc
 
 /** A healthy resolved root set (sanitized paths) the storage default builds from. */
 const HEALTHY_ROOTS: readonly DoctorRootProbe[] = [
-  root({ id: "config", label: "config", path: "~/.trevor" }),
-  root({ id: "state", label: "state", path: "~/.local/state/trevor" }),
+  root({ id: "config", label: "config", path: "~/.belay" }),
+  root({ id: "state", label: "state", path: "~/.local/state/belay" }),
   root({
     id: "legacy",
     label: "legacy",
-    ownership: "trevor",
-    path: "~/.trevor",
+    ownership: "belay",
+    path: "~/.belay",
     exists: false,
     writable: null,
   }),
@@ -72,9 +72,9 @@ function input(over: Partial<DoctorProbeInput> = {}): DoctorProbeInput {
     providers: [{ key: "qwen", label: "Qwen", model: "qwen3", kind: "local", status: "warm" }],
     internet: ONLINE,
     tools: ["read", "grep", "bash"],
-    workspace: { cwd: "~/dev/trevor", workspace: "~/dev/trevor", branch: "main" },
+    workspace: { cwd: "~/dev/belay", workspace: "~/dev/belay", branch: "main" },
     storage: { roots: HEALTHY_ROOTS },
-    build: { version: "2.0.0", node: "v22.0.0", runtime: "trevor" },
+    build: { version: "2.0.0", node: "v22.0.0", runtime: "belay" },
     peripherals: {
       mcp: { kind: "unconfigured" },
       lsp: { kind: "unconfigured" },
@@ -127,7 +127,7 @@ test("the Updates / Version area reports build facts ok when a version is embedd
   const updates = snap.areas.find((a) => a.id === "updates");
   assert.equal(updates?.status, "ok", "a known version + Node/runtime facts roll up to ok");
   assert.ok(
-    updates?.facts?.some((f) => f.label === "Trevor" && f.value === "2.0.0"),
+    updates?.facts?.some((f) => f.label === "Belay" && f.value === "2.0.0"),
     "the embedded version is a fact",
   );
   assert.ok(
@@ -143,7 +143,7 @@ test("the Updates / Version area reports build facts ok when a version is embedd
 
 test("a dev build with no embedded version reports the Updates area as not_checked", () => {
   const snap = buildDoctorSnapshot(
-    input({ build: { version: null, node: "v22.0.0", runtime: "trevor" } }),
+    input({ build: { version: null, node: "v22.0.0", runtime: "belay" } }),
   );
   const updates = snap.areas.find((a) => a.id === "updates");
   assert.equal(
@@ -710,8 +710,8 @@ test("an unwritable state root is an error finding and lifts the Storage area to
   const finding = area?.findings?.find((f) => f.id === "storage.state");
   assert.ok(finding, "an unwritable root gets a problem finding");
   assert.equal(finding?.status, "error");
-  assert.equal(finding?.source, "~/.local/state/trevor");
-  assert.equal(finding?.nextAction?.command, "~/.local/state/trevor");
+  assert.equal(finding?.source, "~/.local/state/belay");
+  assert.equal(finding?.nextAction?.command, "~/.local/state/belay");
   assert.ok(
     area?.facts?.some((f) => f.label === "state" && /not writable/.test(f.value)),
     "the state fact reads not writable",
@@ -731,7 +731,7 @@ test("an importable legacy root warns with a migration hint", () => {
   assert.equal(area?.status, "warn");
   const finding = area?.findings?.find((f) => f.id === "storage.legacy");
   assert.equal(finding?.status, "warn");
-  assert.match(finding?.message ?? "", /Importable ~\/\.trevor data/);
+  assert.match(finding?.message ?? "", /Importable ~\/\.belay data/);
   assert.match(finding?.nextAction?.label ?? "", /SESSION_STORE_DB \/ BLOB_STORE_DIR/);
   assert.ok(
     area?.facts?.some((f) => f.label === "legacy" && /legacy data \(importable\)/.test(f.value)),
@@ -870,10 +870,10 @@ test("the Workspace area shows the cwd-lock state as a fact (held reads ok, no f
   const snap = buildDoctorSnapshot(
     input({
       workspace: {
-        cwd: "~/dev/trevor",
-        workspace: "~/dev/trevor",
+        cwd: "~/dev/belay",
+        workspace: "~/dev/belay",
         branch: "main",
-        cwdLock: { state: "held", path: "~/.local/state/trevor/cwd-locks/x.lock" },
+        cwdLock: { state: "held", path: "~/.local/state/belay/cwd-locks/x.lock" },
       },
     }),
   );
@@ -893,12 +893,12 @@ test("a contended cwd lock raises a warn finding with a non-destructive next act
   const snap = buildDoctorSnapshot(
     input({
       workspace: {
-        cwd: "~/dev/trevor",
-        workspace: "~/dev/trevor",
+        cwd: "~/dev/belay",
+        workspace: "~/dev/belay",
         branch: "main",
         cwdLock: {
           state: "contended",
-          path: "~/.local/state/trevor/cwd-locks/x.lock",
+          path: "~/.local/state/belay/cwd-locks/x.lock",
           owner: "host deadbeef (session other-9999, pid 4242, alive, ...)",
         },
       },
@@ -918,12 +918,12 @@ test("a stale cwd lock raises a warn finding that explains it is auto-reclaimed"
   const snap = buildDoctorSnapshot(
     input({
       workspace: {
-        cwd: "~/dev/trevor",
-        workspace: "~/dev/trevor",
+        cwd: "~/dev/belay",
+        workspace: "~/dev/belay",
         branch: "main",
         cwdLock: {
           state: "stale",
-          path: "~/.local/state/trevor/cwd-locks/x.lock",
+          path: "~/.local/state/belay/cwd-locks/x.lock",
           owner: "host deadbeef (session gone-0000, pid 999, no live process, ...)",
         },
       },

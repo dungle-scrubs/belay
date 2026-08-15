@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { events, PRODUCER_IDS, type SessionEvent, type TrevorEventInput } from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+import { events, PRODUCER_IDS, type SessionEvent, type TrevorEventInput } from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import { assembleCorpus, buildRecords } from "./corpus";
 import type { RecallSessionRef } from "./types";
@@ -30,7 +30,7 @@ const ev = (
 const REF: RecallSessionRef = {
   sessionId: "s",
   label: "a session",
-  project: "trevor",
+  project: "belay",
   origin: "sibling-session",
 };
 
@@ -147,7 +147,7 @@ test("assembleCorpus excludes the current session's active-prompt tail and fold 
       session: {
         sessionId: "cur",
         label: "current",
-        project: "trevor",
+        project: "belay",
         origin: "current-compacted",
       },
       events: currentLog,

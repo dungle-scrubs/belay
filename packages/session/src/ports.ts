@@ -1,12 +1,12 @@
 /**
  * The reserved loopback ports the shared local services bind - the ONE source of truth for the whole
- * system. The launcher (trevor-cli) checks them, the stores bind them, the web dev server + /sessions
+ * system. The launcher (belay-cli) checks them, the stores bind them, the web dev server + /sessions
  * proxy and the host's blob client point at them. A port change edits only this object and propagates
  * to every surface; no literal shadows it. Per-callsite env-var overrides still win at runtime - this
  * is the fallback/default, not a hard binding. The human-facing port registry document mirrors this; this
  * mirrors it for code.
  *
- * Deliberately a zero-dependency leaf module exposed via the `@trevor/session/ports` subpath so the
+ * Deliberately a zero-dependency leaf module exposed via the `@belay/session/ports` subpath so the
  * Vite config and the dependency-free blob-store can import the constant without pulling in the rest
  * of the protocol package (and its `effect` dependency).
  */
@@ -27,7 +27,7 @@ export type ServiceName = keyof typeof RESERVED_PORTS;
  * (and the lone hard-coded `17424`). Each consumer layers its own env override on top, e.g.
  * `process.env.SESSION_STORE_URL ?? serviceUrl("store")`; the override NAME stays at the callsite
  * because it is runtime-specific (node `process.env.BLOB_STORE_URL` vs the Vite client's
- * `VITE_BLOB_STORE_URL`). Stays zero-dependency so the `@trevor/session/ports` subpath consumers
+ * `VITE_BLOB_STORE_URL`). Stays zero-dependency so the `@belay/session/ports` subpath consumers
  * (Vite config, dependency-free blob-store) can import it.
  */
 export function serviceUrl(name: ServiceName): string {

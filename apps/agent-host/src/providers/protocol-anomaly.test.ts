@@ -76,7 +76,7 @@ test("ignores ordinary HTML, XML, and code snippets as prose, not protocol marku
   const prose = [
     '<div class="card"><p>Hello</p></div>',
     '<config><server port="8080" /></config>',
-    'The package manifest reads {"name": "trevor", "version": "2.0.0"}.',
+    'The package manifest reads {"name": "belay", "version": "2.0.0"}.',
     'Call it with arguments: { "arguments": ["--watch"], "name": "dev" }.',
     "```ts\nfunction name() {\n  return readFile(path);\n}\n```",
   ];

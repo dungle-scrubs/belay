@@ -1,5 +1,5 @@
+import type { LoopInventoryRow } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { LoopInventoryRow } from "@trevor/session";
 import { expect, test } from "vitest";
 import { loopControlCommand } from "./loop-actions";
 import { LoopInventory } from "./loop-inventory";

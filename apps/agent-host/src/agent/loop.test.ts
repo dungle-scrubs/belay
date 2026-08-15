@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { SPAN_NAMES } from "@trevor/session/telemetry";
-import { recordingTelemetrySink } from "@trevor/test-kit";
+import { SPAN_NAMES } from "@belay/session/telemetry";
+import { recordingTelemetrySink } from "@belay/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";
@@ -716,7 +716,7 @@ const toolEnds = (events: readonly AgentEvent[]): string[] =>
     .filter((e): e is Extract<AgentEvent, { type: "tool_end" }> => e.type === "tool_end")
     .map((e) => e.result);
 
-test("each tool execution emits a trevor.tool span (tool name + ok status, no args/output)", async () => {
+test("each tool execution emits a belay.tool span (tool name + ok status, no args/output)", async () => {
   const recorder = recordingTelemetrySink();
   const events = await collect(
     repeatedToolProvider({ tool: "read", args: JSON.stringify({ path: "secret.ts" }), rounds: 2 }),

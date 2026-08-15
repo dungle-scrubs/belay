@@ -1,86 +1,88 @@
 import { join, resolve, sep } from "node:path";
 import {
   abbreviateHome,
+  BELAY_HOME,
+  BELAY_STATE_HOME,
   type RootCategory,
   type RootCategoryId,
   resolveRootPolicy,
   rootCategory,
-  TREVOR_HOME,
-  TREVOR_STATE_HOME,
-} from "@trevor/session/node-paths";
+  BELAY_STATE_HOME as TREVOR_STATE_HOME,
+} from "@belay/session/node-paths";
 
-// `@trevor/session/node-paths` OWNS root resolution (the env overrides, the default directory names,
+// `@belay/session/node-paths` OWNS root resolution (the env overrides, the default directory names,
 // and the D-009 root taxonomy). This module is the host's single CONSUMER entry point: it re-exports
 // those helpers so host code reads roots from one place rather than re-deriving home-relative paths.
 export {
+  BELAY_HOME,
+  BELAY_STATE_HOME,
+  BELAY_STATE_HOME as TREVOR_STATE_HOME,
   type RootCategory,
   type RootCategoryId,
   resolveRootPolicy,
   rootCategory,
-  TREVOR_HOME,
-  TREVOR_STATE_HOME,
 };
 
 /**
  * The host's path/workspace owner: it owns BOTH the user-global base directories AND the workspace
  * root + confinement policy.
  *
- * - User-global (D-081): `TREVOR_HOME` (config) and `TREVOR_STATE_HOME` (runtime state) are imported
- *   from the node-only `@trevor/session/node-paths` subpath, the one project-wide owner of the env
+ * - User-global (D-081): `BELAY_HOME` (config) and `BELAY_STATE_HOME` (runtime state) are imported
+ *   from the node-only `@belay/session/node-paths` subpath, the one project-wide owner of the env
  *   overrides and default directory names. Browser code imports only browser-safe subpaths.
  * - Workspace (D-028): `WORKSPACE_ROOT` plus the confinement policy that was previously in
  *   tools/workspace.ts. These are workspace/path concepts, not tool internals.
  *
  * Responsible for: the host's path constants (user config files, workspace root) + confinement.
- * Not for: root resolution/env overrides - @trevor/session/node-paths owns those (re-exported).
+ * Not for: root resolution/env overrides - @belay/session/node-paths owns those (re-exported).
  */
 
 /** The user-global `AGENTS.md`, the lowest-precedence (loaded-first) source of the eager context (D-080). */
-export const USER_AGENTS_MD = join(TREVOR_HOME, "AGENTS.md");
+export const USER_AGENTS_MD = join(BELAY_HOME, "AGENTS.md");
 
 /**
  * The user-global model-metadata override file: hand-edited JSON that corrects per-model metadata
  * pi-ai's bundled registry gets wrong (e.g. a stale `contextWindow`). Lives in the config home beside
  * `AGENTS.md`, the same way pi-ai keeps `~/.pi/auth.json`. Optional - absent means "no corrections".
  */
-export const USER_MODELS_JSON = join(TREVOR_HOME, "models.json");
+export const USER_MODELS_JSON = join(BELAY_HOME, "models.json");
 
 /**
  * The user's active output-style preference (plan 03): a small `{ activeStyle }` JSON under the config
  * home, written when `/style` selects a style and read at turn start for run attribution. Host-owned and
- * portable (it travels with `TREVOR_HOME`), separate from provider/model/reasoning preferences.
+ * portable (it travels with `BELAY_HOME`), separate from provider/model/reasoning preferences.
  */
-export const USER_STYLE_JSON = join(TREVOR_HOME, "style.json");
+export const USER_STYLE_JSON = join(BELAY_HOME, "style.json");
 
 /**
  * The user's Vim-mode prompt preference (plan 06): a small `{ enabled }` JSON under the config home,
- * read at host startup and announced to the web (so opt-in Vim motions follow Trevor sessions on this
- * machine). Host-owned + portable (travels with `TREVOR_HOME`); disabled unless this file enables it.
+ * read at host startup and announced to the web (so opt-in Vim motions follow Belay sessions on this
+ * machine). Host-owned + portable (travels with `BELAY_HOME`); disabled unless this file enables it.
  */
-export const USER_VIM_JSON = join(TREVOR_HOME, "vim.json");
+export const USER_VIM_JSON = join(BELAY_HOME, "vim.json");
 
 /**
  * The user's model-selection preference (plan 51): a small `{ default, pinned }` JSON under the config
  * home holding the durable DEFAULT model (the one a fresh session starts on) and the FAVORITES (pinned
- * models). Host-owned + portable (travels with `TREVOR_HOME`) and shared across every session/browser
+ * models). Host-owned + portable (travels with `BELAY_HOME`) and shared across every session/browser
  * talking to this host - which is what makes the default durable, closing the per-browser "reset to
  * qwen" bug. Announced on `host.online` and mutated by the set-default / toggle-favorite command.
  */
-export const USER_MODEL_PREFS_JSON = join(TREVOR_HOME, "model-prefs.json");
+export const USER_MODEL_PREFS_JSON = join(BELAY_HOME, "model-prefs.json");
 
 /**
  * The user's local-admission config (plan 11): an optional `{ defaultCapacity, staleAfterMs,
  * capacityByResource }` JSON under the config home, read at host startup to size local-model concurrency.
  * Absent means the conservative default (one active generation per resource). Host-owned + portable.
  */
-export const USER_ADMISSION_JSON = join(TREVOR_HOME, "admission.json");
+export const USER_ADMISSION_JSON = join(BELAY_HOME, "admission.json");
 
 /**
  * The named MCP server registry file (plan 23): an optional `{ servers: { "<name>": ... } }` JSON
  * under the config home, read at host startup to configure MCP servers (tool-proxy is just one
  * ordinary named entry, D-001). Absent means no MCP servers. Host-owned + portable.
  */
-export const USER_MCP_SERVERS_JSON = join(TREVOR_HOME, "mcp-servers.json");
+export const USER_MCP_SERVERS_JSON = join(BELAY_HOME, "mcp-servers.json");
 
 /**
  * The indexed source-recall provider config (plan 38): an optional
@@ -89,15 +91,15 @@ export const USER_MCP_SERVERS_JSON = join(TREVOR_HOME, "mcp-servers.json");
  * available. Absent means no source-recall provider (the tools degrade to "unavailable"). Host-owned
  * + portable; endpoints and repo/project mapping only - no secrets.
  */
-export const USER_SOURCE_RECALL_JSON = join(TREVOR_HOME, "source-recall.json");
+export const USER_SOURCE_RECALL_JSON = join(BELAY_HOME, "source-recall.json");
 
 /**
  * The user-global hooks file (plan 25): an optional `{ hooks: { "<id>": ... } }` JSON under the
  * config home, the USER root of hook discovery (project hooks live in the workspace's
- * `.trevor/hooks.json`). Hooks from either root never execute before explicit approval (D-006).
+ * `.belay/hooks.json`). Hooks from either root never execute before explicit approval (D-006).
  * Host-owned + portable; absent means no user hooks.
  */
-export const USER_HOOKS_JSON = join(TREVOR_HOME, "hooks.json");
+export const USER_HOOKS_JSON = join(BELAY_HOME, "hooks.json");
 
 /**
  * The directory the workspace-confined tools operate inside. Point the agent at a

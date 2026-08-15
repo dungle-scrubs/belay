@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { type CatalogEntry, catalogEntryFor } from "@trevor/session";
-import { LM_STUDIO_NATIVE_LIST, LM_STUDIO_V1_LIST } from "@trevor/test-kit/lmstudio";
+import { type CatalogEntry, catalogEntryFor } from "@belay/session";
+import { LM_STUDIO_NATIVE_LIST, LM_STUDIO_V1_LIST } from "@belay/test-kit/lmstudio";
 import { afterEach, test } from "vitest";
 import { buildCatalogSnapshot } from "../src/providers/catalog";
 import { fetchSourceModels } from "../src/providers/source-models";

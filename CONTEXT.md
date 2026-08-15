@@ -1,7 +1,7 @@
-# Trevor - Domain Context
+# Belay - Domain Context
 
 Durable home for cross-cutting domain vocabulary. The former canonical umbrella
-(`.plans/trevor-v2/implementation.md` §3) is being retired in favor of the numbered plans; new
+(`.plans/belay-v2/implementation.md` §3) is being retired in favor of the numbered plans; new
 cross-plan terms are anchored here. When a term is baked into the protocol, keep it stable.
 
 ## Orchestration vocabulary (`.plans/21-workflows-runtime`, `.plans/46-worktree-fleet`)
@@ -38,7 +38,7 @@ cross-plan terms are anchored here. When a term is baked into the protocol, keep
 
 ## Dropped term: "teams"
 
-"Teams" (trevor legacy multi-user roster/inbox/DM/audit) is **permanently cut** (umbrella §4, D-003). Do **not**
+"Teams" (belay legacy multi-user roster/inbox/DM/audit) is **permanently cut** (umbrella §4, D-003). Do **not**
 reintroduce "teams" for multi-agent orchestration. The orchestration nouns are **workflow** (the
 engine/pattern) and **fleet** (the worktree application). Likewise, **inline self-validation** is cut
 (D-033); a verifier *subagent/auditor leaf* is distinct and allowed.
@@ -108,43 +108,43 @@ from live `assistant.progress` usage - all already on the session log.
 ## Supervisor and launcher vocabulary (`.plans/44.1-supervisor-foundation`, `.plans/44.2-browser-folder-sessions`, `.plans/44.3-supervisor-lifecycle-glue`)
 
 Extracted from the residual D-061 "session manager" audit (plan 44, now retired): the pieces needed to
-start a folder-bound session from the **web UI**, not just the `trevor` CLI. The premise correction that
-drove these terms: `trevor` is a fire-and-exit CLI and the browser reaches only session-store + blob-store,
+start a folder-bound session from the **web UI**, not just the `belay` CLI. The premise correction that
+drove these terms: `belay` is a fire-and-exit CLI and the browser reaches only session-store + blob-store,
 so there was **no browser-reachable launcher** - hence a supervisor.
 
 | Term | Meaning | Notes |
 |---|---|---|
-| **Launcher core (`@trevor/launcher`)** | The pure launch orchestration extracted from `apps/trevor-cli`: project-root resolution, session-id derivation/persistence, host reuse/spawn/replace-stale decisions, ownership records, and locks - over an injected platform. | `.plans/44.1`. **One** source of project/session identity + host ownership for the CLI, the supervisor, and (later) the plan-48 desktop core. The CLI keeps only arg parsing / debug / `main.ts`. |
+| **Launcher core (`@belay/launcher`)** | The pure launch orchestration extracted from `apps/belay-cli`: project-root resolution, session-id derivation/persistence, host reuse/spawn/replace-stale decisions, ownership records, and locks - over an injected platform. | `.plans/44.1`. **One** source of project/session identity + host ownership for the CLI, the supervisor, and (later) the plan-48 desktop core. The CLI keeps only arg parsing / debug / `main.ts`. |
 | **Supervisor** | The small long-running local process that subscribes to the reserved **control session** and calls the launcher core on a browser request. The one persistent local actor that can spawn a host on demand, pop the native folder picker, and read the project registry - all answered over the session log. | `.plans/44.1`. Runs as a **fourth ensured shared local service** (alongside session-store / blob-store / web). **"Supervision is not communication"** (shared with `.plans/48` desktop supervisor). **Not** the fleet-run "launcher" of `.plans/46` (an orchestration noun) nor the interactive `delegate_*` path. |
 | **Control session** | A reserved session id the supervisor subscribes to; the browser publishes `session.launch.requested` / `folder.pick.requested` / `projects.list.requested` there and reads the matching `*.result` events. | `.plans/44.1`. A pure request/response side-channel modeled on `file.index.requested`/`result`. The **launch result carries the new session's id**; the spawned host announces `host.online` on **its own** session. |
-| **Browser-created folder session** | Starting a new folder-bound session from the web UI: sidebar `＋` / `/new` -> picker (recents + host-validated path + native folder icon) -> supervisor launch -> navigate on `host.online`. | `.plans/44.2`. The browser analog of the CLI `trevor` launch and the plan-48 desktop session open. Folder selection is **host-driven** (the browser cannot read the host filesystem; the File System Access API yields no host path). |
+| **Browser-created folder session** | Starting a new folder-bound session from the web UI: sidebar `＋` / `/new` -> picker (recents + host-validated path + native folder icon) -> supervisor launch -> navigate on `host.online`. | `.plans/44.2`. The browser analog of the CLI `belay` launch and the plan-48 desktop session open. Folder selection is **host-driven** (the browser cannot read the host filesystem; the File System Access API yields no host path). |
 | **Native folder pick** | The supervisor shelling out to the OS folder dialog (`osascript choose folder` on macOS) and returning a real POSIX path to fill the picker's path field. | `.plans/44.1` + `.plans/44.2`. **Local-only and best-effort** - the dialog opens on the supervisor's display, so it degrades to paste-a-path when the supervisor is non-local/headless. |
 | **Launch state machine** | `idle -> starting -> online \| failed -> (retry) starting`, with stale-host replacement folding into `starting` as a "restarting host…" label. | Introduced happy-path in `.plans/44.2`; extended with `failed`/`retry`/`stale` by `.plans/44.3`. **One** machine shared by the picker and the no-host session-view start, so they can't drift. |
-| **Project registry** | The local launcher/supervisor-owned registry of user-visible project folders, keyed by canonical absolute path and stored under `TREVOR_STATE_HOME`. | `.plans/58`. Replaces the legacy one-root-one-session `projects.json` product model. Stores project metadata only (display name/path, collapsed state, recency), never session ids. Browser and future desktop access it through supervisor/launcher APIs, not browser storage. |
+| **Project registry** | The local launcher/supervisor-owned registry of user-visible project folders, keyed by canonical absolute path and stored under `BELAY_STATE_HOME`. | `.plans/58`. Replaces the legacy one-root-one-session `projects.json` product model. Stores project metadata only (display name/path, collapsed state, recency), never session ids. Browser and future desktop access it through supervisor/launcher APIs, not browser storage. |
 | **Session project binding** | The immutable project path attached to a normal session. New sessions publish a durable marker before host startup; legacy sessions derive from `workspace`/`cwd` until touched by new flows. | `.plans/58`. Normal sessions have exactly one project path. `/new` and `/cd <path>` create fresh project-bound sessions; they do not move an existing session between projects. |
 | **Project-scoped New Session** | Creating a fresh session id under a selected project path, then navigating to it and starting the host. | `.plans/58`. Supersedes the old app-level recent-project popup as the normal local flow. Add Project records a folder only; New Session is explicit and always project-backed. |
 
 ## CLI headless agent surface vocabulary (`.plans/50-cli-headless-agent-surface`)
 
-Making the `trevor` CLI a first-class headless agent surface (like `claude -p` / `codex exec`), not
-only a browser-launcher plus a session-addressed `trevor prompt`. The premise: Trevor v2 is purely
+Making the `belay` CLI a first-class headless agent surface (like `claude -p` / `codex exec`), not
+only a browser-launcher plus a session-addressed `belay prompt`. The premise: Belay v2 is purely
 client/server - the agent loop lives in the agent-host and is driven over the session log via
-`@trevor/sdk`, so a headless one-shot **drives a host**, it does not run the loop in-process (unlike
-trevor legacy's in-process `cli/prompt.ts`). Selection plumbing (`ModelRef`, `reasoningLevels`,
+`@belay/sdk`, so a headless one-shot **drives a host**, it does not run the loop in-process (unlike
+belay legacy's in-process `cli/prompt.ts`). Selection plumbing (`ModelRef`, `reasoningLevels`,
 `PromptInput.model`) already exists end to end; this plan wires it to CLI flags + defaults.
 
 | Term | Meaning | Notes |
 |---|---|---|
-| **Headless one-shot (`trevor -p`)** | `trevor -p "…"` resolves the project session, ensures a host online without a browser, runs one turn to completion, and prints the answer (deltas to stderr, final to stdout; `--json` for the turn record). | `.plans/50`. Drives a host via the existing `runPrompt` (`client.prompt` + `streamTurn`), not an in-process agent (D-001). Distinct from the pre-existing session-addressed `trevor prompt <session> <text>`, which needs an already-running host. |
+| **Headless one-shot (`belay -p`)** | `belay -p "…"` resolves the project session, ensures a host online without a browser, runs one turn to completion, and prints the answer (deltas to stderr, final to stdout; `--json` for the turn record). | `.plans/50`. Drives a host via the existing `runPrompt` (`client.prompt` + `streamTurn`), not an in-process agent (D-001). Distinct from the pre-existing session-addressed `belay prompt <session> <text>`, which needs an already-running host. |
 | **Browser-less spawn (`launch({ noBrowser })`)** | A launcher-core option that runs the spawn-or-reuse-host path but skips the two unconditional `openBrowser` calls in `launchInner`, exposing "ensure a host online" as a reusable primitive. | `.plans/50` D-003. The **single seam** shared with the `.plans/48` desktop supervisor (which spawns hosts headlessly too); they must not fork it. `spawnHost` was already fully headless. |
-| **Ephemeral session (`--ephemeral`)** | `trevor -p --ephemeral` mints a throwaway session, spawns a host, runs the turn, then tears down - but **only a host this invocation spawned**, never a reused/pre-existing one. | `.plans/50` D-002. Default `-p` instead reuses the project session and leaves the host running (mirrors no-arg `trevor`). Spawn ownership is tracked so teardown can't kill a host a browser tab / supervisor owns. |
-| **Catalog read (`client.listCatalog`)** | An SDK read of the host-announced `sources` + `catalogBySource` (per-model `reasoningLevels` / `defaultReasoning`) from presence / `host.online`; `trevor models [--json]` prints it and `--model`/`--reasoning` validation resolves against it. | `.plans/50` D-006. The catalog data (from `~/.pi/auth.json` at host startup) was already on the wire but had no SDK accessor. Needs a live host, so it reuses the browser-less ensure-host-online primitive. |
-| **Per-request `--model` / `--reasoning`** | CLI flags on `prompt` / `-p` that build a `ModelRef {sourceId, modelId, reasoning}` in the CLI layer and ride the already-wired `PromptInput.model` path. `--model` is `<sourceId>/<modelId>` (bare modelId only when unambiguous); `--reasoning` is validated against that model's `reasoningLevels`. | `.plans/50` D-004/D-005/D-009. Unknown model / unsupported level **fails fast** with a catalog-derived error pointing at `trevor models` (trevor legacy silently dropped effort to `undefined`). |
-| **Config resolver (`config.jsonc`)** | The `${TREVOR_HOME}/config.jsonc` loader + precedence `--flag > TREVOR_MODEL`/`TREVOR_REASONING` env `> config.jsonc file > host-side default` (plan 51 `active ?? default ?? legacy`). | `.plans/50` D-007/D-008/D-011. **Exactly one** loader, shared with `.plans/49`/WS3 (which owns it and is numbered first): whichever of 49-WS3 / 50-M4 lands first builds it, the other extends it (49-WS3 to the full `TREVOR_*` scatter + `trevor init`; 50-M4 to `model`/`reasoning`). Env-wins-over-file matches WS3. |
+| **Ephemeral session (`--ephemeral`)** | `belay -p --ephemeral` mints a throwaway session, spawns a host, runs the turn, then tears down - but **only a host this invocation spawned**, never a reused/pre-existing one. | `.plans/50` D-002. Default `-p` instead reuses the project session and leaves the host running (mirrors no-arg `belay`). Spawn ownership is tracked so teardown can't kill a host a browser tab / supervisor owns. |
+| **Catalog read (`client.listCatalog`)** | An SDK read of the host-announced `sources` + `catalogBySource` (per-model `reasoningLevels` / `defaultReasoning`) from presence / `host.online`; `belay models [--json]` prints it and `--model`/`--reasoning` validation resolves against it. | `.plans/50` D-006. The catalog data (from `~/.pi/auth.json` at host startup) was already on the wire but had no SDK accessor. Needs a live host, so it reuses the browser-less ensure-host-online primitive. |
+| **Per-request `--model` / `--reasoning`** | CLI flags on `prompt` / `-p` that build a `ModelRef {sourceId, modelId, reasoning}` in the CLI layer and ride the already-wired `PromptInput.model` path. `--model` is `<sourceId>/<modelId>` (bare modelId only when unambiguous); `--reasoning` is validated against that model's `reasoningLevels`. | `.plans/50` D-004/D-005/D-009. Unknown model / unsupported level **fails fast** with a catalog-derived error pointing at `belay models` (belay legacy silently dropped effort to `undefined`). |
+| **Config resolver (`config.jsonc`)** | The `${BELAY_HOME}/config.jsonc` loader + precedence `--flag > BELAY_MODEL`/`BELAY_REASONING` env `> config.jsonc file > host-side default` (plan 51 `active ?? default ?? legacy`). | `.plans/50` D-007/D-008/D-011. **Exactly one** loader, shared with `.plans/49`/WS3 (which owns it and is numbered first): whichever of 49-WS3 / 50-M4 lands first builds it, the other extends it (49-WS3 to the full `BELAY_*` scatter + `belay init`; 50-M4 to `model`/`reasoning`). Env-wins-over-file matches WS3. |
 
 ## Command argument substitution vocabulary (`.plans/44.5-command-arg-substitution`)
 
-User-defined custom commands loaded from `.trevor/commands/*.md` whose body templates carry `$`
+User-defined custom commands loaded from `.belay/commands/*.md` whose body templates carry `$`
 placeholders that are expanded on invocation with shell-style tokenization. Parity target: the current
 Claude Code skills-doc substitution behavior. **Distinct from plan-40 "interpolation"** - orthogonal
 token spaces (`$` vs `!`), see the reconciliation note below.
@@ -152,10 +152,10 @@ token spaces (`$` vs `!`), see the reconciliation note below.
 | Term | Meaning | Notes |
 |---|---|---|
 | **Argument substitution** | Replacing `$`-placeholders in a command file's body with the invocation's arguments at dispatch. The `$`-space feature. | The shared engine is `packages/session/src/command-args.ts` (`tokenizeArgs` + `expandArgs`), dual-consumed by the host (authoritative) and web (keystroke preview), per the `command-family.ts:10` hoist doctrine. |
-| **Positional `$N`** | 0-based positional argument: `$0` = first token, `$1` = second, … | Diverges from trevor legacy (1-based) and shell; chosen for Claude-Code parity (D-001). A reference beyond the provided count substitutes empty string (D-004). |
-| **`$ARGUMENTS`** | Expands to the **raw** argument string exactly as typed - quotes and interior whitespace preserved. | Not the tokenized re-join (trevor legacy behavior); positional `$N` use tokenized values, `$ARGUMENTS` stays raw (D-002). |
+| **Positional `$N`** | 0-based positional argument: `$0` = first token, `$1` = second, … | Diverges from belay legacy (1-based) and shell; chosen for Claude-Code parity (D-001). A reference beyond the provided count substitutes empty string (D-004). |
+| **`$ARGUMENTS`** | Expands to the **raw** argument string exactly as typed - quotes and interior whitespace preserved. | Not the tokenized re-join (belay legacy behavior); positional `$N` use tokenized values, `$ARGUMENTS` stays raw (D-002). |
 | **Shell-style tokenizer** | Whitespace splits tokens; single **and** double quotes group + strip; backslash escapes the next char; `\$1` stays literal while `$1` expands. | Richer than `loop-parser.ts` `tokenize()` (double-quote-only regex, no escapes), so a new char-scanning module, not a reuse (D-003). |
-| **Custom command file** | A `.trevor/commands/*.md` (project root) or config-home (user root) file; command name = `/<basename>`. Loaded into the plan-40 `CommandFile` primitive (`rootKind` project/user). | Project overrides same-named user file (D-006). Loader mirrors `skills/skills.ts` ordered roots. `.claude/commands/` import is a non-goal (D-009). |
+| **Custom command file** | A `.belay/commands/*.md` (project root) or config-home (user root) file; command name = `/<basename>`. Loaded into the plan-40 `CommandFile` primitive (`rootKind` project/user). | Project overrides same-named user file (D-006). Loader mirrors `skills/skills.ts` ordered roots. `.claude/commands/` import is a non-goal (D-009). |
 | **No-placeholder auto-append** | When a body carries NO `$` placeholder and the invocation has non-empty args, the raw args are appended as a trailing `ARGUMENTS: <raw>` block. | Claude-Code parity default (the M2 open question, resolved): a placeholder-free command body still receives its input. An escaped `\$0` is literal, not a placeholder, so it does not suppress the append. |
 | **Submit branch** | Invoking a custom command SUBMITS its expanded body as the turn's `user.message` prompt (via the control-prompt seam), not a `command.result`. | The load-bearing M4 wiring: a file-loaded command drives the model like a typed prompt; built-in immediate commands keep the `command.result` lane with their raw args. A built-in name always wins over a same-named file. |
 | **Live preview** | The web renders the substitution live past the first space (`/fix ‹args›`), complementary to the slash menu (which closes on that space). | Reuses the shared `expandArgs`; the command `body` + `argumentHint` ride `CommandSpec` on `host.online` so the preview matches host expansion (M5/M6). |
@@ -164,7 +164,7 @@ token spaces (`$` vs `!`), see the reconciliation note below.
 
 - **Argument substitution (`$`) is NOT interpolation (`!`).** Plan-40 **interpolation** splices the
   *output* of an allow-listed `!command` into a trusted command-file body (gated by
-  `TREVOR_ENABLE_INTERPOLATION`, disabled by default). Plan-44.5 **argument substitution** replaces
+  `BELAY_ENABLE_INTERPOLATION`, disabled by default). Plan-44.5 **argument substitution** replaces
   `$`-placeholders with the user's invocation arguments. Different trigger tokens, different sources
   (command output vs user args), different modules (`interpolation-engine.ts` vs `command-args.ts`).
 - **Ordering is fixed: interpolate, then substitute (D-007).** A command file's trusted body is
@@ -175,14 +175,14 @@ token spaces (`$` vs `!`), see the reconciliation note below.
 ## Project sidebar vocabulary (`.plans/58-project-sidebar-sessions`)
 
 The left sidebar is a project-first navigation surface. A **project** is a user-visible folder record
-keyed by canonical absolute path, stored as local launcher/supervisor state under `TREVOR_STATE_HOME`
+keyed by canonical absolute path, stored as local launcher/supervisor state under `BELAY_STATE_HOME`
 (not a session-store row, not browser storage). Sessions remain durable session-store logs; project
 membership is a join over the session inventory by each session's resolved project path, never a
 duplicated list stored on the project record.
 
 | Term | Meaning | Notes |
 |---|---|---|
-| **Project registry** | Canonical-path-keyed project metadata (display name, collapsed state, timestamps) with NO session ids. Stored as `project-registry.json` under `TREVOR_STATE_HOME`. | `packages/launcher/src/project-registry.ts`. Replaces the old one-root-one-session `projects.json` (kept only for migration). CRUD lives in the launcher; the supervisor exposes it over the control session. |
+| **Project registry** | Canonical-path-keyed project metadata (display name, collapsed state, timestamps) with NO session ids. Stored as `project-registry.json` under `BELAY_STATE_HOME`. | `packages/launcher/src/project-registry.ts`. Replaces the old one-root-one-session `projects.json` (kept only for migration). CRUD lives in the launcher; the supervisor exposes it over the control session. |
 | **Project-scoped session** | A session bound to one immutable project path for its whole life. `/cd` and `/new <path>` create a FRESH session instead of moving the current one. | Fresh context is a real new session, never an in-place clear. The `session.project` marker stamps the binding durably. |
 | **`session.project` marker** | The durable, immutable project-path marker on a session log: wins over `host.online` workspace/cwd for resolving a session's project path. | Plan 58 M3. Lets the sidebar/archive group sessions without a live host. Folded into `SessionSummary.projectPath`. |
 | **Project sidebar read model** | A pure projection: groups active (non-archived, non-deleted, non-tangent) sessions under their project by resolved project path, merging known registry records with transient projects (sessions whose path has no record). | `apps/web/src/sidebar/project-sidebar-model.ts` (`buildProjectSidebar`). The browser owns it; it never scans local state. Lists ALL projects, not just the current one. |
@@ -203,7 +203,7 @@ duplicated list stored on the project record.
 
 ## assistant-ui dependency governance (`.plans/58.6.1-assistant-ui-audit-followups`)
 
-Trevor **owns copies** of the assistant-ui components it uses (vendored under
+Belay **owns copies** of the assistant-ui components it uses (vendored under
 `apps/web/src/components/assistant-ui/`); it does **not** run the assistant-ui runtime (`AssistantRuntimeProvider`,
 `ExternalStore`, thread adapters). The durable session log + host turn loop + transcript projection are the
 source of truth (58.6 D-002), so the coupling to the upstream packages is small and **deliberately pinned to
@@ -237,7 +237,7 @@ exact versions** - a bump is a reviewed action, never a silent transitive drift.
   `chat/diff-render-smoke.test.tsx`, and the existing `chat/reasoning-trace.test.tsx` assert the STRUCTURAL
   output (data-slots, add/del line typing, the reasoning disclosure) of the assistant-ui-derived surfaces -
   not styling - so a bump that breaks the render fails at review time.
-- **Vendored-component drift check**: `pnpm --filter @trevor/web check:assistant-ui-drift` runs
+- **Vendored-component drift check**: `pnpm --filter @belay/web check:assistant-ui-drift` runs
   `apps/web/scripts/assistant-ui-drift.sh`, an `assistant-ui add --dry` dry-run over the vendored files, so an
   upstream change to a component we copied is visible before we adopt it. It is a review aid, not a CI gate.
 - **Update path**: to bump, change the exact pin, run `pnpm install`, run the render smoke tests + the drift

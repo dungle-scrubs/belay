@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TrevorEventInput } from "@trevor/session";
+import type { TrevorEventInput } from "@belay/session";
 import { Effect } from "effect";
 import { afterEach, test, vi } from "vitest";
 import { providerQuestionRuntime } from "../agent/provider-questions";

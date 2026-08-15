@@ -1,6 +1,6 @@
+import type { SessionSummary, WorktreeSummary } from "@belay/session";
+import { sessionSummary } from "@belay/test-kit";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { SessionSummary, WorktreeSummary } from "@trevor/session";
-import { sessionSummary } from "@trevor/test-kit";
 import { useState } from "react";
 import { ProjectSidebar } from "./project-sidebar";
 import {
@@ -44,10 +44,10 @@ function project(over: Partial<ProjectSidebarRecord> & { path: string }): Projec
 function summary(over: Partial<SessionSummary> & { sessionId: string }): SessionSummary {
   return sessionSummary({
     title: `session ${over.sessionId}`,
-    projectPath: "/dev/trevor",
-    workspace: "/dev/trevor",
-    cwd: "/dev/trevor",
-    project: "trevor",
+    projectPath: "/dev/belay",
+    workspace: "/dev/belay",
+    cwd: "/dev/belay",
+    project: "belay",
     updatedAt: ago(1000 * 60 * 30),
     ...over,
   });
@@ -127,7 +127,7 @@ export const EmptyProject: Story = {
 export const ActiveProject: Story = {
   render: () => (
     <InteractiveSidebar
-      projects={[project({ path: "/dev/trevor" })]}
+      projects={[project({ path: "/dev/belay" })]}
       sessions={[
         summary({
           sessionId: "cur",
@@ -162,7 +162,7 @@ export const MissingProject: Story = {
     <InteractiveSidebar
       withNewSession
       projects={[
-        project({ path: "/dev/trevor" }),
+        project({ path: "/dev/belay" }),
         project({ path: "/dev/deleted-worktree", missing: true }),
         project({ path: "/dev/deleted-empty", missing: true }),
       ]}
@@ -188,12 +188,12 @@ export const DuplicateBasenames: Story = {
   render: () => (
     <InteractiveSidebar
       projects={[
-        project({ path: "/work/trevor", displayPath: "~/work/trevor" }),
-        project({ path: "/home/trevor", displayPath: "~/home/trevor" }),
+        project({ path: "/work/belay", displayPath: "~/work/belay" }),
+        project({ path: "/home/belay", displayPath: "~/home/belay" }),
       ]}
       sessions={[
-        summary({ sessionId: "w1", title: "work session one", projectPath: "/work/trevor" }),
-        summary({ sessionId: "h1", title: "home session one", projectPath: "/home/trevor" }),
+        summary({ sessionId: "w1", title: "work session one", projectPath: "/work/belay" }),
+        summary({ sessionId: "h1", title: "home session one", projectPath: "/home/belay" }),
       ]}
     />
   ),
@@ -202,7 +202,7 @@ export const DuplicateBasenames: Story = {
 export const RunningCollapsed: Story = {
   render: () => (
     <InteractiveSidebar
-      projects={[project({ path: "/dev/trevor", collapsed: true })]}
+      projects={[project({ path: "/dev/belay", collapsed: true })]}
       sessions={[
         summary({
           sessionId: "run",
@@ -236,7 +236,7 @@ export const ArchiveOnly: Story = {
 export const ShowMore: Story = {
   render: () => (
     <InteractiveSidebar
-      projects={[project({ path: "/dev/trevor" })]}
+      projects={[project({ path: "/dev/belay" })]}
       sessions={Array.from({ length: 9 }, (_, i) =>
         summary({
           sessionId: `s${i}`,
@@ -251,10 +251,10 @@ export const ShowMore: Story = {
 export const SearchFiltered: Story = {
   render: () => (
     <InteractiveSidebar
-      projects={[project({ path: "/dev/trevor" }), project({ path: "/dev/other" })]}
+      projects={[project({ path: "/dev/belay" }), project({ path: "/dev/other" })]}
       sessions={[
-        summary({ sessionId: "s1", title: "fix the lease takeover", projectPath: "/dev/trevor" }),
-        summary({ sessionId: "s2", title: "unrelated work", projectPath: "/dev/trevor" }),
+        summary({ sessionId: "s1", title: "fix the lease takeover", projectPath: "/dev/belay" }),
+        summary({ sessionId: "s2", title: "unrelated work", projectPath: "/dev/belay" }),
         summary({ sessionId: "s3", title: "build the sidebar model", projectPath: "/dev/other" }),
       ]}
       initialQuery="lease"
@@ -267,7 +267,7 @@ export const AllCollapsed: Story = {
   render: () => (
     <InteractiveSidebar
       projects={[
-        project({ path: "/dev/trevor", collapsed: true }),
+        project({ path: "/dev/belay", collapsed: true }),
         project({ path: "/dev/other", collapsed: true }),
       ]}
       sessions={[
@@ -276,7 +276,7 @@ export const AllCollapsed: Story = {
           title: "running now",
           activity: "running",
           host: "live",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
         }),
         summary({ sessionId: "s2", title: "idle session", projectPath: "/dev/other" }),
       ]}
@@ -287,10 +287,10 @@ export const AllCollapsed: Story = {
 function wt(over: Partial<WorktreeSummary> & { sessionId: string }): WorktreeSummary {
   return {
     id: over.id ?? over.sessionId,
-    baseRepo: "/dev/trevor",
-    baseRepoName: "trevor",
+    baseRepo: "/dev/belay",
+    baseRepoName: "belay",
     branch: "feat/x",
-    path: "~/.worktrees/trevor/feat-x",
+    path: "~/.worktrees/belay/feat-x",
     dirty: false,
     ahead: 0,
     behind: 0,
@@ -307,10 +307,10 @@ function wt(over: Partial<WorktreeSummary> & { sessionId: string }): WorktreeSum
 export const NormalRows: Story = {
   render: () => (
     <InteractiveSidebar
-      projects={[project({ path: "/dev/trevor" })]}
+      projects={[project({ path: "/dev/belay" })]}
       sessions={[
-        summary({ sessionId: "s1", title: "ordinary session one", projectPath: "/dev/trevor" }),
-        summary({ sessionId: "s2", title: "ordinary session two", projectPath: "/dev/trevor" }),
+        summary({ sessionId: "s1", title: "ordinary session one", projectPath: "/dev/belay" }),
+        summary({ sessionId: "s2", title: "ordinary session two", projectPath: "/dev/belay" }),
       ]}
     />
   ),
@@ -320,21 +320,21 @@ export const NormalRows: Story = {
 export const WorktreeRow: Story = {
   render: () => (
     <InteractiveSidebar
-      projects={[project({ path: "/dev/trevor" })]}
+      projects={[project({ path: "/dev/belay" })]}
       sessions={[
         summary({
           sessionId: "wt-s1",
           title: "implement worktree badge",
-          projectPath: "/dev/trevor",
-          workspace: "/Users/kevin/dev/.worktrees/trevor/feat-badge",
+          projectPath: "/dev/belay",
+          workspace: "/Users/kevin/dev/.worktrees/belay/feat-badge",
         }),
-        summary({ sessionId: "plain", title: "main checkout session", projectPath: "/dev/trevor" }),
+        summary({ sessionId: "plain", title: "main checkout session", projectPath: "/dev/belay" }),
       ]}
       worktrees={[
         wt({
           sessionId: "wt-s1",
           branch: "feat/badge",
-          path: "~/.worktrees/trevor/feat-badge",
+          path: "~/.worktrees/belay/feat-badge",
           dirty: true,
           ahead: 2,
         }),
@@ -342,7 +342,7 @@ export const WorktreeRow: Story = {
           sessionId: "plain",
           baseline: true,
           branch: "main",
-          path: "/dev/trevor",
+          path: "/dev/belay",
         }),
       ]}
     />
@@ -353,20 +353,20 @@ export const WorktreeRow: Story = {
 export const LongTitleWorktree: Story = {
   render: () => (
     <InteractiveSidebar
-      projects={[project({ path: "/dev/trevor" })]}
+      projects={[project({ path: "/dev/belay" })]}
       sessions={[
         summary({
           sessionId: "wt-long",
           title:
             "an extremely long session title that must truncate cleanly before the right action slot while still leaving room for the worktree badge",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
         }),
       ]}
       worktrees={[
         wt({
           sessionId: "wt-long",
           branch: "feat/long-title",
-          path: "~/.worktrees/trevor/feat-long-title-that-also-abbreviates",
+          path: "~/.worktrees/belay/feat-long-title-that-also-abbreviates",
           behind: 1,
         }),
       ]}
@@ -378,12 +378,12 @@ export const LongTitleWorktree: Story = {
 export const BaselineNoBadge: Story = {
   render: () => (
     <InteractiveSidebar
-      projects={[project({ path: "/dev/trevor" })]}
+      projects={[project({ path: "/dev/belay" })]}
       sessions={[
         summary({
           sessionId: "main-checkout",
           title: "main checkout (baseline)",
-          projectPath: "/dev/trevor",
+          projectPath: "/dev/belay",
         }),
       ]}
       worktrees={[
@@ -391,7 +391,7 @@ export const BaselineNoBadge: Story = {
           sessionId: "main-checkout",
           baseline: true,
           branch: "main",
-          path: "/dev/trevor",
+          path: "/dev/belay",
         }),
       ]}
     />

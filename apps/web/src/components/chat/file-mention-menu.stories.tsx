@@ -1,5 +1,5 @@
+import type { FileMatch } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { FileMatch } from "@trevor/session";
 import { FileMentionMenu } from "./file-mention-menu";
 import { storyFrame } from "./story-frame";
 

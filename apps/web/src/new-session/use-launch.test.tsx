@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { act, renderHook } from "@testing-library/react";
 import {
   type ConnectSessionOptions,
   PRODUCER_IDS,
@@ -8,8 +7,9 @@ import {
   SUPERVISOR_SESSION_ID,
   events as sessionEvents,
   type TrevorEventInput,
-} from "@trevor/session";
-import { recordingTransport, storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { recordingTransport, storedEvent } from "@belay/test-kit";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, test, vi } from "vitest";
 import { TAIL_FLUSH_MS, useSessionWithTransport } from "@/session/use-session";
 import { useLaunch } from "./use-launch";
@@ -90,10 +90,10 @@ test("launch can request an exact existing session id for session-view restart",
   const { rec, result } = renderLaunch();
   await act(async () => {});
 
-  act(() => result.current.launch("~/dev/trevor", { sessionId: "stale-session" }));
+  act(() => result.current.launch("~/dev/belay", { sessionId: "stale-session" }));
   const req = launchesOf(rec.publishedBy(SUPERVISOR_SESSION_ID)).at(-1);
   assert.ok(req, "publishes a launch request");
-  assert.equal(req.payload.root, "~/dev/trevor", "still carries the resolved root");
+  assert.equal(req.payload.root, "~/dev/belay", "still carries the resolved root");
   assert.equal(
     req.payload.sessionId,
     "stale-session",
@@ -106,7 +106,7 @@ test("a reused host navigates immediately without a host.online wait", async () 
   const { rec, result, onNavigate } = renderLaunch();
   await act(async () => {});
 
-  act(() => result.current.launch("~/dev/trevor"));
+  act(() => result.current.launch("~/dev/belay"));
   act(() => {
     deliverControl(
       rec.connects,
@@ -341,7 +341,7 @@ test("a launched host whose session already had a host.online navigates (a stale
     ) as SessionEvent,
   ]);
 
-  act(() => result.current.launch("~/dev/trevor"));
+  act(() => result.current.launch("~/dev/belay"));
   act(() => {
     deliverControl(
       rec.connects,

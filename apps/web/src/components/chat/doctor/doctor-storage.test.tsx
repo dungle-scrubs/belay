@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { DoctorArea } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { DoctorArea } from "@trevor/session";
 import { test } from "vitest";
 import { DoctorAreaRow } from "./doctor-area-row";
 import { storageLegacyImportable, storageOk, storageRootInvalid } from "./doctor-fixtures";
@@ -14,16 +14,16 @@ test("a not-writable root renders an inline error finding with its repair action
   const { container } = render(<DoctorAreaRow area={storageRootInvalid} />);
   const text = container.textContent ?? "";
   assert.match(text, /state not writable/);
-  assert.match(text, /Trevor cannot write this root/);
+  assert.match(text, /Belay cannot write this root/);
   assert.match(text, /Check permissions on/);
-  assert.match(text, /\.local\/state\/trevor/);
+  assert.match(text, /\.local\/state\/belay/);
 });
 
 test("importable legacy data renders an inline warning with the migration nudge", () => {
   const { container } = render(<DoctorAreaRow area={storageLegacyImportable} />);
   const text = container.textContent ?? "";
-  assert.match(text, /Importable ~\/\.trevor data is present/);
-  assert.match(text, /Import ~\/\.trevor data via migration/);
+  assert.match(text, /Importable ~\/\.belay data is present/);
+  assert.match(text, /Import ~\/\.belay data via migration/);
 });
 
 test("a healthy storage area rests as one line and reveals every root fact on expand", () => {
@@ -39,7 +39,7 @@ test("a healthy storage area rests as one line and reveals every root fact on ex
 });
 
 test("a very long root path renders without throwing", () => {
-  const longPath = `~/.local/state/trevor/${"segment-".repeat(40)}end`;
+  const longPath = `~/.local/state/belay/${"segment-".repeat(40)}end`;
   const area: DoctorArea = {
     id: "storage",
     label: "Storage / Roots",
@@ -51,7 +51,7 @@ test("a very long root path renders without throwing", () => {
         id: "storage.state",
         status: "error",
         title: "state not writable",
-        message: "Trevor cannot write this root.",
+        message: "Belay cannot write this root.",
         source: longPath,
       },
     ],

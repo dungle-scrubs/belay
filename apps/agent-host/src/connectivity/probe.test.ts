@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { InternetSnapshot } from "@trevor/session";
+import type { InternetSnapshot } from "@belay/session";
 import { test } from "vitest";
 import { InternetMonitor, type ProbeIo, type ProbeTargets, probeInternet } from "./probe";
 

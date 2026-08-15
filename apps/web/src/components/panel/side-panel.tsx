@@ -1,4 +1,4 @@
-import type { GitStatus, UsageBreakdown } from "@trevor/session";
+import type { GitStatus, UsageBreakdown } from "@belay/session";
 import { type ReactNode, useMemo, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fmtTokens } from "@/derive";

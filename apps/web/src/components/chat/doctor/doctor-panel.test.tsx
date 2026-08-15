@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import type { DoctorFinding, DoctorSnapshot } from "@belay/session";
+import { doctorArea, doctorSnapshot } from "@belay/test-kit";
 import { fireEvent, render } from "@testing-library/react";
-import type { DoctorFinding, DoctorSnapshot } from "@trevor/session";
-import { doctorArea, doctorSnapshot } from "@trevor/test-kit";
 import { afterEach, beforeEach, test } from "vitest";
 import { DoctorPanel } from "./doctor-panel";
 
@@ -13,7 +13,7 @@ import { DoctorPanel } from "./doctor-panel";
 
 const SNAPSHOT: DoctorSnapshot = doctorSnapshot({
   checkedAt: "12s ago",
-  host: { workspace: "~/dev/trevor" },
+  host: { workspace: "~/dev/belay" },
   areas: [
     doctorArea("core", "ok", {
       label: "Core",
@@ -157,6 +157,6 @@ test("copy report writes the sanitized text report to the clipboard", () => {
   fireEvent.click(getByRole("button", { name: /copy report/i }));
   assert.equal(written.length, 1);
   const report = written[0] ?? "";
-  assert.ok(report.includes("Trevor /doctor"), "header line present");
+  assert.ok(report.includes("Belay /doctor"), "header line present");
   assert.ok(report.includes("GPT-5.5 missing API key"), "a finding is in the report");
 });

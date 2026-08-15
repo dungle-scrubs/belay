@@ -9,7 +9,7 @@ let stateHome: string;
 
 beforeEach(() => {
   vi.resetModules();
-  stateHome = mkdtempSync(join(tmpdir(), "trevor-state-"));
+  stateHome = mkdtempSync(join(tmpdir(), "belay-state-"));
   process.env.XDG_STATE_HOME = stateHome;
 });
 
@@ -37,7 +37,7 @@ test("turn stop debug metrics append under XDG state", async () => {
     },
   });
 
-  assert.equal(turnStopMetricsPath(), join(stateHome, "trevor", "turn-stops.jsonl"));
+  assert.equal(turnStopMetricsPath(), join(stateHome, "belay", "turn-stops.jsonl"));
   const rows = readFileSync(turnStopMetricsPath(), "utf8").trim().split("\n");
   assert.equal(rows.length, 1);
   assert.deepEqual(JSON.parse(rows[0] ?? "{}"), {

@@ -5,7 +5,7 @@ import {
   isIssue,
   overallStatus,
   summarizeSnapshot,
-} from "@trevor/session";
+} from "@belay/session";
 import { CircleCheck } from "lucide-react";
 import { useState } from "react";
 import { copyText } from "@/lib/clipboard";

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { TaskSnapshot, TaskStatus } from "@trevor/session";
+import type { TaskSnapshot, TaskStatus } from "@belay/session";
 import { test } from "vitest";
 import { buildTaskDisplay, orderTasks, type TaskDisplayRow } from "./tasks-display";
 

@@ -1,4 +1,4 @@
-import * as sdk from "@trevor/sdk";
+import * as sdk from "@belay/sdk";
 import { describe, expect, it } from "vitest";
 import * as lifecycle from "./lifecycle";
 

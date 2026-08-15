@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { dirname } from "node:path";
-import type { SandboxEnvironment } from "@trevor/session";
+import type { SandboxEnvironment } from "@belay/session";
 import { shortSha16 } from "./hash";
 
 /**

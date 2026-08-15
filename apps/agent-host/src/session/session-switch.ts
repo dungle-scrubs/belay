@@ -2,23 +2,23 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  events,
+  freshSessionId,
+  type SessionTransport,
+  type TrevorEventInput,
+} from "@belay/session";
 import type { CompactionCommandsApi } from "@host/agent/compaction-commands";
 import type { BackgroundChildInfo } from "@host/agent/delegate";
 import type { TurnMachine } from "@host/agent/turn-machine";
 import type { TurnScheduler } from "@host/agent/turn-scheduler";
-import { TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
+import { BELAY_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { commandReplier } from "@host/commands/command-replier";
 import { supervisor } from "@host/processes/processes";
 import { contextRegistry } from "@host/project-context/registry";
 import { log, warn } from "@host/transport/log";
 import { msg } from "@host/transport/messages";
 import type { EmitEvent } from "@host/transport/services";
-import {
-  events,
-  freshSessionId,
-  type SessionTransport,
-  type TrevorEventInput,
-} from "@trevor/session";
 import { resolveCdTarget } from "./workspace-switch";
 
 /**
@@ -121,7 +121,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     const missing = launchPaths.find((path) => !existsSync(path));
     if (missing) {
       throw new Error(
-        `this host's checkout is no longer on disk (${missing} missing) - restart it (e.g. \`trevor open ${SESSION_ID}\`) before switching`,
+        `this host's checkout is no longer on disk (${missing} missing) - restart it (e.g. \`belay open ${SESSION_ID}\`) before switching`,
       );
     }
     // Capture the replacement's boot output to the target session's host log rather than discarding it
@@ -130,8 +130,8 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
     // makes the failure diagnosable. Best-effort: fall back to discarding output if the log can't open.
     let out: number | "ignore" = "ignore";
     try {
-      mkdirSync(join(TREVOR_STATE_HOME, "logs"), { recursive: true });
-      out = openSync(join(TREVOR_STATE_HOME, "logs", `host-${opts.sessionId}.log`), "a");
+      mkdirSync(join(BELAY_STATE_HOME, "logs"), { recursive: true });
+      out = openSync(join(BELAY_STATE_HOME, "logs", `host-${opts.sessionId}.log`), "a");
     } catch {
       // keep "ignore"
     }

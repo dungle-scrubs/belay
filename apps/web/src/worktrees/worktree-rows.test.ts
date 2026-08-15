@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { WorktreeSummary } from "@trevor/session";
+import type { WorktreeSummary } from "@belay/session";
 import { test } from "vitest";
 import {
   buildWorktreeRows,
@@ -9,8 +9,8 @@ import {
 
 const wt = (over: Partial<WorktreeSummary>): WorktreeSummary => ({
   id: "wt",
-  baseRepo: "/dev/trevor",
-  baseRepoName: "trevor",
+  baseRepo: "/dev/belay",
+  baseRepoName: "belay",
   branch: "feat/x",
   path: "~/.worktrees/h/feat-x-wt",
   sessionId: "s-wt",
@@ -36,7 +36,7 @@ test("baseline row is labeled and grouped by base repo", () => {
     ctx(),
   );
   assert.equal(rows[0]?.label, "main (baseline)");
-  assert.equal(rows[0]?.group, "trevor");
+  assert.equal(rows[0]?.group, "belay");
   assert.equal(rows[1]?.label, "feat/x");
 });
 
@@ -89,10 +89,10 @@ test("while busy, every non-current row is disabled (switch-blocked)", () => {
 
 test("rows from different base repos carry distinct group headings", () => {
   const rows = buildWorktreeRows(
-    [wt({ id: "a", baseRepoName: "trevor" }), wt({ id: "b", baseRepoName: "opchain" })],
+    [wt({ id: "a", baseRepoName: "belay" }), wt({ id: "b", baseRepoName: "opchain" })],
     ctx(),
   );
-  assert.equal(rows[0]?.group, "trevor");
+  assert.equal(rows[0]?.group, "belay");
   assert.equal(rows[1]?.group, "opchain");
 });
 

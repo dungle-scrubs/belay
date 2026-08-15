@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@belay/session";
 import { MAX_LSP_DOCUMENT_SYMBOLS } from "@host/lsp/caps";
 import type { LspClient } from "@host/lsp/client";
 import { degraded, type LspOutcome, type LspServerStatus, ok } from "@host/lsp/contract";
 import type { LspManager } from "@host/lsp/manager";
-import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { Effect } from "effect";
 import { afterAll, test } from "vitest";
 import { buildLspDocumentSymbolsTool, type LspDocumentSymbolsArgs } from "./lsp-document-symbols";
@@ -19,7 +19,7 @@ import { buildLspDocumentSymbolsTool, type LspDocumentSymbolsArgs } from "./lsp-
  * in test/lsp/tools-hover-symbols.test.ts.
  */
 
-const root = mkdtempSync(join(tmpdir(), "trevor-lsp-docsym-unit-"));
+const root = mkdtempSync(join(tmpdir(), "belay-lsp-docsym-unit-"));
 writeFileSync(join(root, "outline.ts"), "export class Widget {}\n");
 afterAll(() => rmSync(root, { recursive: true, force: true }));
 

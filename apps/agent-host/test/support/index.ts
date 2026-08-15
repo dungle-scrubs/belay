@@ -1,4 +1,4 @@
-// Host test-support, re-exported for the e2e workspace via the @trevor/agent-host/testing
+// Host test-support, re-exported for the e2e workspace via the @belay/agent-host/testing
 // export. Keeps the fake provider and turn driver in one place for both host integration
 // tests (which import this folder relatively) and cross-service e2e (which imports the package).
 
@@ -38,7 +38,7 @@ export { createMcpRuntime, type McpRuntime } from "@host/mcp/runtime";
 // command through the supervisor (promote -> tracked pN -> kill) the way the bash tool / shell lane do.
 export { ProcessRegistry } from "@host/processes/process-registry";
 // The project-context system (plan 26 M8): the pure eager render + the session ContextRegistry (eager +
-// lazy AGENTS.md and .trevor/rules) + the /init proposal builder + the pointer sentinel, so
+// lazy AGENTS.md and .belay/rules) + the /init proposal builder + the pointer sentinel, so
 // cross-service e2e can exercise real context ordering, lazy loading, /init drafting, and
 // already-converted-pointer fixtures over a hermetic temp workspace.
 export { collectEagerSources, renderContext } from "@host/project-context/agents-md";
@@ -61,7 +61,7 @@ export { ToolExecutionError, ToolInputError } from "@host/tools/errors";
 export { buildMcpTool, type McpArgs } from "@host/tools/mcp";
 export { runPromotable } from "@host/tools/promote-runner";
 // The eval/automation harness (plan 28 M10): boots stores + SDK client + a scriptable fake-provider host
-// into a `run() -> structured record` loop, so an eval or automation drives Trevor through the same
+// into a `run() -> structured record` loop, so an eval or automation drives Belay through the same
 // headless SDK layer a script would, with the live lane gated by an explicit skip reason.
 export {
   attachFakeHost,

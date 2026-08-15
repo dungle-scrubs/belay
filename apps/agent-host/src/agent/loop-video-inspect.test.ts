@@ -7,7 +7,7 @@
  * The ffmpeg extraction itself is covered by tools/video-inspect/processor.test.ts - here the tool
  * result is injected through the runTool seam, so the loop behavior is hermetic.
  */
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { Effect, Stream } from "effect";
 import { expect, test } from "vitest";
 import type { ChatMessage, Provider, ProviderEvent } from "../providers";

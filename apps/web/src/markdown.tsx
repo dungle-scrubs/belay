@@ -74,12 +74,12 @@ function dedentCode(text: string): string {
 }
 
 renderer.table = (token: Tokens.Table) =>
-  `<div class="trevor-md-table-scroll">${renderTable(token)}</div>`;
+  `<div class="belay-md-table-scroll">${renderTable(token)}</div>`;
 
 // The lucide `Copy` glyph, inlined so the code-block copy button (rendered as a sanitized HTML string,
 // not React) uses the same icon set as the rest of the app. DOMPurify keeps svg/rect/path by default.
 const COPY_ICON =
-  '<svg class="trevor-md-code-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
+  '<svg class="belay-md-code-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>';
 
 // Fenced-block language-route precedence (plan 36 M5): (1) Mermaid is split out to its diagram
 // component in `markdownParts` before it ever reaches this renderer; (2) an explicit, recognized
@@ -112,7 +112,7 @@ renderer.code = ({ text, lang, escaped, raw }: Tokens.Code) => {
   ].filter(Boolean);
   const className = classes.length > 0 ? ` class="${classes.join(" ")}"` : "";
 
-  return `<div class="trevor-md-codeblock"><button type="button" class="trevor-md-code-copy" data-trevor-copy-code="${copyText}" aria-label="Copy code block" title="Copy code block">${COPY_ICON}</button><pre><code${className}>${codeHtml}</code></pre></div>\n`;
+  return `<div class="belay-md-codeblock"><button type="button" class="belay-md-code-copy" data-belay-copy-code="${copyText}" aria-label="Copy code block" title="Copy code block">${COPY_ICON}</button><pre><code${className}>${codeHtml}</code></pre></div>\n`;
 };
 
 type MarkdownPart =
@@ -187,7 +187,7 @@ export function Markdown({
     () => markdownParts(deferredText, mermaid),
     [mermaid, deferredText, highlightReady],
   );
-  const className = muted ? "trevor-md trevor-md--muted" : "trevor-md";
+  const className = muted ? "belay-md belay-md--muted" : "belay-md";
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -197,11 +197,11 @@ export function Markdown({
     }
     const copyCodeBlock = (event: MouseEvent) => {
       const target = event.target instanceof Element ? event.target : null;
-      const button = target?.closest<HTMLButtonElement>("[data-trevor-copy-code]");
+      const button = target?.closest<HTMLButtonElement>("[data-belay-copy-code]");
       if (!button || !container.contains(button)) {
         return;
       }
-      const encoded = button.dataset.trevorCopyCode;
+      const encoded = button.dataset.belayCopyCode;
       if (!encoded) {
         return;
       }
@@ -224,7 +224,7 @@ export function Markdown({
           <div
             // biome-ignore lint/suspicious/noArrayIndexKey: markdown token order is stable for a given text render.
             key={index}
-            className="trevor-md__html"
+            className="belay-md__html"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: html is DOMPurify-sanitized before insertion.
             dangerouslySetInnerHTML={{ __html: part.html }}
           />

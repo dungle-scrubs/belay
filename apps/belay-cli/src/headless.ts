@@ -1,9 +1,9 @@
-import type { PromptInput, TrevorClient } from "@trevor/sdk";
-import { type ArtifactRef, formatDoctorReport } from "@trevor/session";
+import type { PromptInput, TrevorClient } from "@belay/sdk";
+import { type ArtifactRef, formatDoctorReport } from "@belay/session";
 
 /**
- * The headless `trevor` commands (plan 28 M8): scriptable, host-agnostic verbs built ENTIRELY on the
- * `@trevor/sdk` workflows - prompt/stream/cancel a turn, read a transcript, run capabilities/doctor, and
+ * The headless `belay` commands (plan 28 M8): scriptable, host-agnostic verbs built ENTIRELY on the
+ * `@belay/sdk` workflows - prompt/stream/cancel a turn, read a transcript, run capabilities/doctor, and
  * put/get artifacts. Every command supports a machine `--json` mode (pure JSON to stdout, no spinners or
  * human noise) and a human mode. They are pure over an injected `TrevorClient`, so they unit-test against
  * a recording transport without a running store; `main.ts` supplies the real SDK client + service URLs.
@@ -34,7 +34,7 @@ export interface PromptCommandOptions {
 }
 
 /**
- * `trevor prompt <session> <text>`: submits a prompt into the session and streams the correlated turn to
+ * `belay prompt <session> <text>`: submits a prompt into the session and streams the correlated turn to
  * completion. Human mode returns the assistant's final answer (streaming deltas to `onDelta` as they
  * arrive); JSON mode returns the structured turn record `{ runId, text, cancelled, timedOut }`.
  */
@@ -74,27 +74,27 @@ export async function runPrompt(
   }
   if (result.timedOut) {
     return {
-      stdout: `(no completion within the timeout; run \`trevor transcript ${options.sessionId}\`)`,
+      stdout: `(no completion within the timeout; run \`belay transcript ${options.sessionId}\`)`,
     };
   }
   const suffix = result.cancelled ? "\n(cancelled)" : "";
   return { stdout: `${result.text}${suffix}` };
 }
 
-/** `trevor cancel <session> <runId>`: publishes the D-094 `user.cancel` control event (not a signal). */
+/** `belay cancel <session> <runId>`: publishes the D-094 `user.cancel` control event (not a signal). */
 export async function runCancel(
   client: TrevorClient,
   sessionId: string,
   runId: string,
 ): Promise<HeadlessResult> {
   if (!runId) {
-    return { stdout: "usage: trevor cancel <session> <runId>" };
+    return { stdout: "usage: belay cancel <session> <runId>" };
   }
   await client.cancel(sessionId, runId);
   return { stdout: `Requested cancel of run ${runId} in ${sessionId}.` };
 }
 
-/** `trevor transcript <session>`: prints the projected transcript, JSON or one line per entry. */
+/** `belay transcript <session>`: prints the projected transcript, JSON or one line per entry. */
 export async function runTranscript(
   client: TrevorClient,
   sessionId: string,
@@ -114,7 +114,7 @@ export async function runTranscript(
   return { stdout: lines.join("\n") };
 }
 
-/** `trevor doctor <session>`: prints the host's `/doctor` snapshot as JSON or the human report. */
+/** `belay doctor <session>`: prints the host's `/doctor` snapshot as JSON or the human report. */
 export async function runDoctor(
   client: TrevorClient,
   sessionId: string,
@@ -128,7 +128,7 @@ export async function runDoctor(
   return { stdout: json ? jsonOut(snapshot) : formatDoctorReport(snapshot) };
 }
 
-/** `trevor capabilities <session>`: prints the host's capability manifest export (JSON or text). */
+/** `belay capabilities <session>`: prints the host's capability manifest export (JSON or text). */
 export async function runCapabilities(
   client: TrevorClient,
   sessionId: string,
@@ -142,7 +142,7 @@ export async function runCapabilities(
   return { stdout: result.format === "json" ? jsonOut(result.manifest) : result.text };
 }
 
-/** `trevor artifact put <file>`: uploads bytes and prints the content-addressed ref. */
+/** `belay artifact put <file>`: uploads bytes and prints the content-addressed ref. */
 export async function runArtifactPut(
   client: TrevorClient,
   bytes: Uint8Array,
@@ -158,7 +158,7 @@ export async function runArtifactPut(
   return { stdout: `${ref.hash}  ${ref.size} bytes  ${ref.mimeType}` };
 }
 
-/** `trevor artifact get <hash>`: downloads the raw bytes (returned to the caller to write out). */
+/** `belay artifact get <hash>`: downloads the raw bytes (returned to the caller to write out). */
 export async function runArtifactGet(client: TrevorClient, hash: string): Promise<Uint8Array> {
   return client.downloadArtifact(hash);
 }

@@ -5,8 +5,8 @@ import {
   type ProducerId,
   type SessionEvent,
   type TrevorEventInput,
-} from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import type { Provider, ProviderEvent } from "../providers";

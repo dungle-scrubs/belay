@@ -6,7 +6,7 @@ import {
   type Provider,
   type ProviderEvent,
   publishTurn,
-} from "@trevor/agent-host/testing";
+} from "@belay/agent-host/testing";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 

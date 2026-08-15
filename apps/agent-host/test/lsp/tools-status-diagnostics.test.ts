@@ -17,7 +17,7 @@ import { lspFixtureAdapter } from "./fixture-config";
  * strings the turn continues past. Pure rendering lives in the co-located unit tests.
  */
 
-const root = mkdtempSync(join(tmpdir(), "trevor-lsp-tools-"));
+const root = mkdtempSync(join(tmpdir(), "belay-lsp-tools-"));
 writeFileSync(join(root, "clean.ts"), "const fine = 1;\n");
 writeFileSync(join(root, "problems.ts"), "const a = 1; // oops here\nfine\nanother oops\n");
 writeFileSync(join(root, "silent.ts"), "oops but the server stays quiet\n");
@@ -65,7 +65,7 @@ describe("lsp_status against the fixture server", () => {
     const before = await status(lsp);
     expect(before).toContain(root);
     expect(before).toContain("configured");
-    expect(before).toContain("trevor-lsp-fixture");
+    expect(before).toContain("belay-lsp-fixture");
 
     await diagnostics(lsp, { file: "problems.ts" });
     const after = await status(lsp);

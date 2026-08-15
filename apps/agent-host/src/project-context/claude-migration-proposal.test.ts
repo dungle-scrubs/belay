@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { validateContract } from "@trevor/session";
+import { validateContract } from "@belay/session";
 import { test } from "vitest";
 import type { ClaudeMigrationItem } from "./claude-migration";
 import {

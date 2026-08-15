@@ -2,21 +2,21 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { RunningServer } from "@belay/server-kit";
+import { decodeTrevorEvent, events, streamTransport } from "@belay/session";
+import { createWorkflowDriver, waitFor } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { makeCommandFileDispatch } from "@host/commands/command-file-dispatch";
 import { type CommandFileRoot, loadCommandFilesFrom } from "@host/commands/command-loader";
 import { buildCommandRegistry } from "@host/commands/commands";
 import { resolveInterpolationConfig } from "@host/commands/interpolation";
 import { createProgrammaticCommandDispatcher } from "@host/commands/programmatic-command";
-import type { RunningServer } from "@trevor/server-kit";
-import { decodeTrevorEvent, events, streamTransport } from "@trevor/session";
-import { createWorkflowDriver, waitFor } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**
  * S-E2E for the file-loaded-command SUBMIT branch (plan 44.5, Gate 2->3). Assembles the EXACT wiring
  * main.ts uses - `buildCommandRegistry(files)` + `makeCommandFileDispatch` + the programmatic dispatcher
- * with main.ts's fallback - over a REAL session-store, then dispatches `/fix 123` for a `.trevor/commands/
+ * with main.ts's fallback - over a REAL session-store, then dispatches `/fix 123` for a `.belay/commands/
  * fix.md` and asserts the expanded body lands on the durable log as a `user.message` prompt (not a
  * command.result). Deterministic: no model, no host process, just the dispatch + store round-trip.
  */
@@ -35,11 +35,11 @@ afterAll(async () => {
   }
 });
 
-/** A temp `.trevor/commands` root holding one command file, loaded into the plan-40 CommandFile shape. */
+/** A temp `.belay/commands` root holding one command file, loaded into the plan-40 CommandFile shape. */
 function loadedRoot(id: string, body: string): CommandFileRoot {
-  const base = mkdtempSync(join(tmpdir(), "trevor-cmd-e2e-"));
+  const base = mkdtempSync(join(tmpdir(), "belay-cmd-e2e-"));
   temps.push(base);
-  const dir = join(base, ".trevor", "commands");
+  const dir = join(base, ".belay", "commands");
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, `${id}.md`), body);
   return { kind: "project", dir };

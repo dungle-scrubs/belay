@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/test-kit",
+  "name": "@belay/test-kit",
   "private": true,
   "type": "module",
   "exports": {
@@ -13,11 +13,11 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/blob-store": "workspace:*",
-    "@trevor/sdk": "workspace:*",
-    "@trevor/server-kit": "workspace:*",
-    "@trevor/session": "workspace:*",
-    "@trevor/session-store": "workspace:*"
+    "@belay/blob-store": "workspace:*",
+    "@belay/sdk": "workspace:*",
+    "@belay/server-kit": "workspace:*",
+    "@belay/session": "workspace:*",
+    "@belay/session-store": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

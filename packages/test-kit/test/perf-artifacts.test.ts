@@ -11,13 +11,13 @@ import {
 test("virtualization performance artifacts default to the local state directory", () => {
   assert.ok(
     DEFAULT_VIRTUALIZATION_PERFORMANCE_ARTIFACT_ROOT.endsWith(
-      ".local/state/trevor/virtualization-performance/artifacts",
+      ".local/state/belay/virtualization-performance/artifacts",
     ),
   );
 });
 
 test("writes local artifacts only when a virtualization performance budget fails", async () => {
-  const rootDir = await mkdtemp(join(tmpdir(), "trevor-virtualization-artifacts-"));
+  const rootDir = await mkdtemp(join(tmpdir(), "belay-virtualization-artifacts-"));
   const passing = await writeVirtualizationPerformanceArtifacts(
     {
       budgets: {

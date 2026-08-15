@@ -3,7 +3,7 @@ import { isAuthFailure, isContextOverflow, isRetryable } from "./error-classifie
 // The secret redactor now lives in the shared telemetry contract (plan 13); re-export it here so the
 // provider callsites (provider-diagnostic, lmstudio-client, failure-record-schema, pi-ai) keep importing
 // it from the taxonomy module. The shared version is a strict superset (it also redacts `dsn:` values).
-export { redactSecrets } from "@trevor/session/telemetry";
+export { redactSecrets } from "@belay/session/telemetry";
 
 /**
  * The normalized provider-failure taxonomy (D-076 M1). One vocabulary across every provider shape -

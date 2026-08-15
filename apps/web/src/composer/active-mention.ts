@@ -7,7 +7,7 @@
  * for filesystem search (the host owns that).
  */
 
-import { isMentionBoundaryBefore } from "@trevor/session";
+import { isMentionBoundaryBefore } from "@belay/session";
 
 /** An active `@`-mention token: the `[start, end)` span of `@<query>` and the query body after `@`. */
 export interface ActiveMention {

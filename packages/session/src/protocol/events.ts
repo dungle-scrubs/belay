@@ -13,10 +13,10 @@ import type { DecodedEvent } from "./decode";
 export type { UsageBreakdown };
 
 /**
- * The trevor session protocol: the `user.message`, `assistant.*`, `tool.*`, and
+ * The belay session protocol: the `user.message`, `assistant.*`, `tool.*`, and
  * `host.*` events that ride on Tether's generic event log. Tether (wire.ts)
  * owns only the envelope - `type` is a free string and `payload` an arbitrary
- * object - so the trevor-specific event names and payload shapes live HERE, once,
+ * object - so the belay-specific event names and payload shapes live HERE, once,
  * shared by both emitters (host + web) and consumers.
  *
  * Two sides:
@@ -147,7 +147,7 @@ export interface TurnStop {
 
 // The wire `UsageBreakdown` type and its category schema live in ./breakdown (the
 // single source host accumulation, this decoder, and the web treemap all derive from);
-// re-exported above so existing `@trevor/session` importers are unaffected.
+// re-exported above so existing `@belay/session` importers are unaffected.
 
 /** A selectable provider's display label, model id, and thinking options. */
 export interface ProviderModel {
@@ -230,7 +230,7 @@ export function gitRefLabel(status: GitStatus): string | null {
 }
 
 /**
- * A Trevor-managed worktree as the host announces it (D-091), so the browser's worktree switcher
+ * A Belay-managed worktree as the host announces it (D-091), so the browser's worktree switcher
  * renders without reading local state. `baseRepo` is the canonical repo identity (grouping key);
  * `baseRepoName` its display name. `baseline` marks the base-repo checkout row (not a managed
  * worktree); `current` the host's active worktree; `missing` a stale entry whose path is gone.
@@ -484,7 +484,7 @@ export interface SupervisorProject {
 // --- emit side: typed constructors (single source of names + payload shapes) ---
 
 /**
- * Constructors for every trevor event. Each returns `{ type, payload }`; the
+ * Constructors for every belay event. Each returns `{ type, payload }`; the
  * caller attaches its own producerId at publish time (host vs web). Optional
  * fields (usage/error/reasoning) are omitted when absent so the wire matches the
  * hand-built payloads these replaced.
@@ -592,7 +592,7 @@ export const events = {
   /**
    * A provider usage-limit signal (plan 44.4): the session is `approaching` or has `reached` a provider
    * rate/usage window (Claude's `anthropic-ratelimit-unified-*` headers, a terminal Codex 429). One
-   * provider-agnostic payload with a Trevor-native `status`; `resetsAt` (unix epoch SECONDS) and
+   * provider-agnostic payload with a Belay-native `status`; `resetsAt` (unix epoch SECONDS) and
    * `utilization` (0..1 fraction used) ride only when the provider exposed them, spread-omitted otherwise
    * like `modelSwitched`'s optionals. Detection only (D-004) - the transcript marks it; nothing acts on it.
    */
@@ -1683,3 +1683,6 @@ export const INVENTORY_EVENT_TYPES = {
   sessionProject: "session.project",
   sessionWorktree: "session.worktree",
 } as const satisfies Readonly<Record<string, DecodedEvent["type"]>>;
+
+/** @deprecated Use TrevorEventInput */
+export type BelayEventInput = TrevorEventInput;

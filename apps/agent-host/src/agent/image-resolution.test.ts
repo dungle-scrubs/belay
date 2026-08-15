@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { ArtifactRef } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
 import { afterEach, test } from "vitest";
 import { createHistoryImageResolver } from "./image-resolution";
 

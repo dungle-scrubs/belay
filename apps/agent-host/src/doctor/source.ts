@@ -1,4 +1,4 @@
-import type { DoctorSnapshot } from "@trevor/session";
+import type { DoctorSnapshot } from "@belay/session";
 
 /**
  * The registration seam for "build the current /doctor snapshot" (D-073 M6).

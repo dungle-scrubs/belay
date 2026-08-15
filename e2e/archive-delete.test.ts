@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
-import type { RunningServer } from "@trevor/server-kit";
+import type { RunningServer } from "@belay/server-kit";
 import {
   archivedSessions,
   events,
   PRODUCER_IDS,
   type SessionSummary,
   streamTransport,
-} from "@trevor/session";
-import { testIdentity } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
+} from "@belay/session";
+import { testIdentity } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**
@@ -118,10 +118,10 @@ test("the destructive gate protects an archived session with a live host", async
   await seedArchived(t, "hosted");
 
   // A live host socket on the session makes its presence read "live", which protects the purge
-  // (testIdentity's "trevor" runtimeKind is what counts as a host).
+  // (testIdentity's "belay" runtimeKind is what counts as a host).
   const host = t.connectSession({
     sessionId: "hosted",
-    identity: testIdentity("h1", "trevor"),
+    identity: testIdentity("h1", "belay"),
     onEvent: () => {},
   });
   const deadline = Date.now() + 2000;

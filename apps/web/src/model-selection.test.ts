@@ -5,7 +5,7 @@ import {
   modelRefKey,
   type ProviderModel,
   selectModel,
-} from "@trevor/session";
+} from "@belay/session";
 import { test } from "vitest";
 import {
   activeModelLabel,
@@ -58,12 +58,9 @@ test("activeModelLabel falls back to the selection label for an unregistered pro
 });
 
 test("sessionScopedKey isolates sessions and shares within one; null defers to a throwaway key", () => {
-  assert.notEqual(
-    sessionScopedKey("trevor.provider", "A"),
-    sessionScopedKey("trevor.provider", "B"),
-  );
-  assert.equal(sessionScopedKey("trevor.provider", "A"), sessionScopedKey("trevor.provider", "A"));
-  assert.equal(sessionScopedKey("trevor.provider", null), "trevor.provider:pending");
+  assert.notEqual(sessionScopedKey("belay.provider", "A"), sessionScopedKey("belay.provider", "B"));
+  assert.equal(sessionScopedKey("belay.provider", "A"), sessionScopedKey("belay.provider", "A"));
+  assert.equal(sessionScopedKey("belay.provider", null), "belay.provider:pending");
 });
 
 /**

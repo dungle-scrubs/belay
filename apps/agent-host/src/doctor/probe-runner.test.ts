@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { DoctorFinding } from "@trevor/session";
+import type { DoctorFinding } from "@belay/session";
 import { test } from "vitest";
 import { type DoctorProbe, type ProbeBudget, runDoctorProbes } from "./probe-runner";
 

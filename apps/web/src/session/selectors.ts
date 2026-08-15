@@ -1,4 +1,4 @@
-import type { HostPresence } from "@trevor/session";
+import type { HostPresence } from "@belay/session";
 import {
   activeWorkingRowFrom,
   type HostStatus,
@@ -44,7 +44,7 @@ export function selectTabTitle(
   const fromSession =
     target === defaultSessionId ? null : target.replace(/-[0-9a-f]{8}$/, "") || target;
   const label = workspaceBasename(host.workspace) ?? fromSession;
-  return label ? `${label} · Trevor` : "Trevor";
+  return label ? `${label} · Belay` : "Belay";
 }
 
 export function selectTurnStatusHeader(

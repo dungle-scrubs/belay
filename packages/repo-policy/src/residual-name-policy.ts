@@ -9,9 +9,9 @@ export interface ResidualNameViolation {
 const OLD_VERSION_SUFFIX = "V2";
 const RESIDUAL_PATTERN = new RegExp(
   [
-    `~\\/\\.trevor${OLD_VERSION_SUFFIX}`,
-    `Trevor ${OLD_VERSION_SUFFIX}`,
-    `trevor${OLD_VERSION_SUFFIX}`,
+    `~\\/\\.belay${OLD_VERSION_SUFFIX}`,
+    `Belay ${OLD_VERSION_SUFFIX}`,
+    `belay${OLD_VERSION_SUFFIX}`,
   ].join("|"),
   "g",
 );
@@ -61,11 +61,11 @@ export const formatResidualNameViolations = (
   violations: readonly ResidualNameViolation[],
 ): string => {
   if (violations.length === 0) {
-    return "Residual name policy OK: docs and Claude skills use the Trevor name.";
+    return "Residual name policy OK: docs and Claude skills use the Belay name.";
   }
 
   const lines = [
-    "Residual name policy failed: docs and Claude skills must not use old Trevor rename markers.",
+    "Residual name policy failed: docs and Claude skills must not use old Belay rename markers.",
     "",
     ...violations.map(
       ({ line, match, path }) => `- ${path}:${line} contains ${JSON.stringify(match)}`,

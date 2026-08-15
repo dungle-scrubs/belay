@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible bug
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting. Include a minimal repro so we can fix it.
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: e.g. main @ abc123, or release tag
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [web, agent-host, session-store, blob-store, cli, docs, other]
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Minimal steps, expected vs actual
+      placeholder: |
+        1. pnpm dev
+        2. ...
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / screenshots
+      description: Paste relevant logs (redact secrets)
+      render: shell

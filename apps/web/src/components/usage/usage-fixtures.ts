@@ -4,7 +4,7 @@ import {
   type SessionEvent,
   sessionUsage,
   type Usage,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * Shared usage-summary fixtures: small durable-log builders run through the REAL `sessionUsage`

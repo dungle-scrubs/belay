@@ -42,7 +42,7 @@ describe("execution outcomes end to end (D-007)", () => {
 
   test("a missing executable becomes a non-blocking command_failed diagnostic", async () => {
     const execution = await runHook(
-      fixtureHook("argv", [], { command: "/nonexistent/trevor-hook-binary" }),
+      fixtureHook("argv", [], { command: "/nonexistent/belay-hook-binary" }),
       {},
       { cwd },
     );

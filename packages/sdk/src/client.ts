@@ -13,7 +13,7 @@ import {
   streamTransport,
   type TrevorEventInput,
   toPublishInput,
-} from "@trevor/session";
+} from "@belay/session";
 import { type ArtifactSource, downloadArtifact, headArtifact, uploadArtifact } from "./artifacts";
 import {
   type CommandResult,
@@ -46,14 +46,14 @@ import {
 import { projectTranscript, type Transcript } from "./transcript";
 
 /**
- * `@trevor/sdk` - the ergonomic, browser-safe workflow layer ABOVE `@trevor/session` (plan 28). It binds
+ * `@belay/sdk` - the ergonomic, browser-safe workflow layer ABOVE `@belay/session` (plan 28). It binds
  * one client to a session backend by URL (the local session-store or a Tether service - identical wire,
- * so the choice is just the URL, D-004), and exposes the useful headless Trevor workflows: read the
+ * so the choice is just the URL, D-004), and exposes the useful headless Belay workflows: read the
  * inventory/transcript, prompt + stream + cancel a turn, switch the model mid-turn, upload/download
  * artifacts, read capabilities/doctor, and run session lifecycle. It talks to backends through the
- * `@trevor/session` protocol only - it never shells out to the CLI (D-002) and never recreates the web
+ * `@belay/session` protocol only - it never shells out to the CLI (D-002) and never recreates the web
  * UI. Local process orchestration (starting services, spawning hosts, opening the browser, OS signals)
- * stays in `apps/trevor-cli`, not here (D-003).
+ * stays in `apps/belay-cli`, not here (D-003).
  */
 
 export interface TrevorClientConfig {
@@ -251,7 +251,7 @@ export class TrevorClient {
     return runCommand(this, sessionId, command, args, options);
   }
 
-  /** Reads the host's capability manifest export (via `/trevor-export`) as typed JSON or human text. */
+  /** Reads the host's capability manifest export (via `/belay-export`) as typed JSON or human text. */
   exportCapabilities(
     sessionId: string,
     request?: {

@@ -5,8 +5,8 @@ import {
   type ProviderQuestionContract,
   type SessionEvent,
   type TrevorEventInput,
-} from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { Effect, Exit, Fiber } from "effect";
 import { test } from "vitest";
 import {

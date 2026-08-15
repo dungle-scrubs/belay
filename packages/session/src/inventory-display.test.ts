@@ -9,14 +9,14 @@ import { byRecency, sessionsForProject } from "./inventory-display";
  * into the sidebar/resume list. Pins the composite the web sidebar and the SDK selector both delegate to.
  */
 
-// A local summary fixture: the session package must not import @trevor/test-kit (it depends on session,
+// A local summary fixture: the session package must not import @belay/test-kit (it depends on session,
 // so that would cycle into the core), so the shared sessionSummary factory is off-limits here.
 function sessionSummary(over: Partial<SessionSummary> & { sessionId: string }): SessionSummary {
   return {
     title: "t",
     cwd: null,
     workspace: null,
-    project: "trevor",
+    project: "belay",
     projectPath: null,
     branch: null,
     git: null,
@@ -44,15 +44,15 @@ const tangent = {
 
 test("sessionsForProject scopes to the project, excludes archived + deleted + tangents, newest first", () => {
   const list = [
-    sessionSummary({ sessionId: "a", project: "trevor", updatedAt: "2026-06-01T00:00:00.000Z" }),
-    sessionSummary({ sessionId: "b", project: "trevor", updatedAt: "2026-06-02T00:00:00.000Z" }),
-    sessionSummary({ sessionId: "filed", project: "trevor", archived: true }),
-    sessionSummary({ sessionId: "gone", project: "trevor", deleted: true }),
-    sessionSummary({ sessionId: "side", project: "trevor", tangentOf: tangent }),
+    sessionSummary({ sessionId: "a", project: "belay", updatedAt: "2026-06-01T00:00:00.000Z" }),
+    sessionSummary({ sessionId: "b", project: "belay", updatedAt: "2026-06-02T00:00:00.000Z" }),
+    sessionSummary({ sessionId: "filed", project: "belay", archived: true }),
+    sessionSummary({ sessionId: "gone", project: "belay", deleted: true }),
+    sessionSummary({ sessionId: "side", project: "belay", tangentOf: tangent }),
     sessionSummary({ sessionId: "other", project: "elsewhere" }),
   ];
   assert.deepEqual(
-    sessionsForProject(list, "trevor").map((s) => s.sessionId),
+    sessionsForProject(list, "belay").map((s) => s.sessionId),
     ["b", "a"],
     "archived/deleted/tangent/other-project all excluded; recency desc",
   );
@@ -60,19 +60,19 @@ test("sessionsForProject scopes to the project, excludes archived + deleted + ta
 
 test("sessionsForProject with archived:true lists the archived (non-deleted) sessions instead", () => {
   const list = [
-    sessionSummary({ sessionId: "a", project: "trevor" }),
-    sessionSummary({ sessionId: "filed", project: "trevor", archived: true }),
-    sessionSummary({ sessionId: "filed-gone", project: "trevor", archived: true, deleted: true }),
+    sessionSummary({ sessionId: "a", project: "belay" }),
+    sessionSummary({ sessionId: "filed", project: "belay", archived: true }),
+    sessionSummary({ sessionId: "filed-gone", project: "belay", archived: true, deleted: true }),
   ];
   assert.deepEqual(
-    sessionsForProject(list, "trevor", { archived: true }).map((s) => s.sessionId),
+    sessionsForProject(list, "belay", { archived: true }).map((s) => s.sessionId),
     ["filed"],
   );
 });
 
 test("sessionsForProject with a null project lists across every project", () => {
   const list = [
-    sessionSummary({ sessionId: "a", project: "trevor" }),
+    sessionSummary({ sessionId: "a", project: "belay" }),
     sessionSummary({ sessionId: "b", project: "elsewhere" }),
   ];
   assert.deepEqual(

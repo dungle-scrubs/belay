@@ -9,7 +9,7 @@
  * the one place to later add abort-reasons or metrics.
  *
  * Zero-dependency and isomorphic (AbortController/setTimeout are globals in the browser and Node >=
- * 22), exposed via the `@trevor/session/async` subpath so node-only callers import just this.
+ * 22), exposed via the `@belay/session/async` subpath so node-only callers import just this.
  */
 export function raceTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
   const controller = new AbortController();

@@ -1,4 +1,4 @@
-import { sessionSummary } from "@trevor/test-kit";
+import { sessionSummary } from "@belay/test-kit";
 import { describe, expect, test } from "vitest";
 import { BUILT_IN_COMMANDS } from "./built-in-commands";
 import { isNewSessionCommand, NEW_SESSION_COMMAND } from "./new-session/new-session-command";
@@ -28,24 +28,24 @@ function project(over: Partial<ProjectSidebarRecord> & { path: string }): Projec
 describe("regression: the sidebar lists ALL projects, not just the current one", () => {
   test("sessions across several projects each get their own group", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" }), project({ path: "/dev/opchain" })],
+      [project({ path: "/dev/belay" }), project({ path: "/dev/opchain" })],
       [
-        sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" }),
+        sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" }),
         sessionSummary({ sessionId: "s2", projectPath: "/dev/opchain" }),
       ],
     );
     const keys = groups.map((g) => g.key).sort();
-    expect(keys).toEqual(["/dev/opchain", "/dev/trevor"]);
+    expect(keys).toEqual(["/dev/opchain", "/dev/belay"]);
   });
 
   test("a project with no active sessions still appears (archive-only project is listed)", () => {
     const groups = buildProjectSidebar(
-      [project({ path: "/dev/trevor" }), project({ path: "/dev/ghost" })],
-      [sessionSummary({ sessionId: "s1", projectPath: "/dev/trevor" })],
+      [project({ path: "/dev/belay" }), project({ path: "/dev/ghost" })],
+      [sessionSummary({ sessionId: "s1", projectPath: "/dev/belay" })],
     );
     const keys = groups.map((g) => g.key).sort();
     expect(keys).toContain("/dev/ghost");
-    expect(keys).toContain("/dev/trevor");
+    expect(keys).toContain("/dev/belay");
   });
 
   test("the current session's project does not crowd out other projects", () => {

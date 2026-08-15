@@ -128,7 +128,7 @@ describe("runHook - spawn hygiene (D-004)", () => {
 
   test("a missing executable resolves as a spawn error, never a rejection", async () => {
     const execution = await runHook(
-      fixtureHook("argv", [], { command: "/nonexistent/trevor-hook-binary" }),
+      fixtureHook("argv", [], { command: "/nonexistent/belay-hook-binary" }),
       {},
       { cwd },
     );

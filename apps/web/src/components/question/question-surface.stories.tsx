@@ -1,5 +1,5 @@
+import type { ProviderQuestionAnswer } from "@belay/session";
 import type { Decorator, Meta, StoryObj } from "@storybook/react-vite";
-import type { ProviderQuestionAnswer } from "@trevor/session";
 import { useState } from "react";
 import * as fx from "./fixtures";
 import { QuestionSurface } from "./question-surface";

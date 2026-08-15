@@ -1,5 +1,5 @@
-import type { CapabilityManifest, ManifestScope } from "@trevor/session";
-import { MANIFEST_VERSION } from "@trevor/session";
+import type { CapabilityManifest, ManifestScope } from "@belay/session";
+import { MANIFEST_VERSION } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import { buildTrevorExportCommand, parseExportArgs } from "./export-command";
 import { registerManifestSource } from "./source";
@@ -62,7 +62,7 @@ describe("parseExportArgs (M6)", () => {
   });
 });
 
-describe("/trevor-export command dispatch (M6)", () => {
+describe("/belay-export command dispatch (M6)", () => {
   it("reports the manifest as unavailable when no live source is registered", async () => {
     // This runs before any registration in this file, so the source is unset.
     const command = buildTrevorExportCommand();

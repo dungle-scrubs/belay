@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { DoctorFinding } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { DoctorFinding } from "@trevor/session";
 import { test } from "vitest";
 import { DoctorAreaRow } from "./doctor-area-row";
 import {
@@ -85,7 +85,7 @@ test("a legacy HOOK.md warns with migration guidance and an abbreviated path", (
   const text = container.textContent ?? "";
   assert.match(text, /HOOK\.md/);
   assert.match(text, /never execute in V2/i);
-  assert.ok(text.includes("~/dev/app/.trevor/hooks/fmt/HOOK.md"), "abbreviated path shown");
+  assert.ok(text.includes("~/dev/app/.belay/hooks/fmt/HOOK.md"), "abbreviated path shown");
   assert.ok(text.includes("Migrate each handler to a hooks.json entry"));
 });
 

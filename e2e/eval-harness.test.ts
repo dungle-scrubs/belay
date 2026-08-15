@@ -6,12 +6,12 @@ import {
   fakeProvider,
   hangingProvider,
   liveLaneStatus,
-} from "@trevor/agent-host/testing";
-import { type BootedWorkflowStack, bootWorkflowStack } from "@trevor/test-kit/boot";
+} from "@belay/agent-host/testing";
+import { type BootedWorkflowStack, bootWorkflowStack } from "@belay/test-kit/boot";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
- * Plan 28 M10: the eval/automation harness drives Trevor end-to-end through the `@trevor/sdk` layer and
+ * Plan 28 M10: the eval/automation harness drives Belay end-to-end through the `@belay/sdk` layer and
  * returns a structured record to score. The deterministic `fake` lane attaches a fake-provider host, so
  * these assertions are hermetic; the `live` lane is gated by an explicit skip reason.
  */

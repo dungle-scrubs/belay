@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { SessionSummary } from "@belay/session";
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { SessionSummary } from "@trevor/session";
 import { test, vi } from "vitest";
 import { RowChooserModal } from "@/components/command-modal";
 import { RESUME_CHOOSER, type ResumeContext } from "./resume-rows";
@@ -10,10 +10,10 @@ const NOW = Date.parse("2026-06-26T12:00:00.000Z");
 const summary = (over: Partial<SessionSummary>): SessionSummary => ({
   sessionId: "s",
   title: "a session",
-  cwd: "~/dev/trevor",
-  workspace: "~/dev/trevor",
-  project: "trevor",
-  projectPath: "~/dev/trevor",
+  cwd: "~/dev/belay",
+  workspace: "~/dev/belay",
+  project: "belay",
+  projectPath: "~/dev/belay",
   branch: "main",
   git: null,
   createdAt: "2026-06-25T12:00:00.000Z",
@@ -48,7 +48,7 @@ function renderModal(
   const onOpenChange = vi.fn();
   const context: ResumeContext = {
     currentSessionId: "cur",
-    currentProject: "trevor",
+    currentProject: "belay",
     busy: false,
     nowMs: NOW,
   };
@@ -91,7 +91,7 @@ test("the current session row is disabled and never resumes", () => {
 
 test("while busy, switching to another session is blocked", () => {
   const { onResume } = renderModal({
-    context: { currentSessionId: "cur", currentProject: "trevor", busy: true, nowMs: NOW },
+    context: { currentSessionId: "cur", currentProject: "belay", busy: true, nowMs: NOW },
   });
   fireEvent.click(screen.getByText("other session"));
   assert.equal(onResume.mock.calls.length, 0);

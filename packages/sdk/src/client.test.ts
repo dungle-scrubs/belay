@@ -1,5 +1,5 @@
-import { events, PRODUCER_IDS } from "@trevor/session";
-import { recordingTransport, sessionSummary, storedEvent } from "@trevor/test-kit";
+import { events, PRODUCER_IDS } from "@belay/session";
+import { recordingTransport, sessionSummary, storedEvent } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
 import { createTrevorClient } from "./client";
 import { SdkError } from "./errors";

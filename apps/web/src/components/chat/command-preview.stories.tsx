@@ -1,5 +1,5 @@
+import type { CommandSpec } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { CommandSpec } from "@trevor/session";
 import { useState } from "react";
 import { commandArgPreview } from "@/derive";
 import { CommandPreview } from "./command-preview";

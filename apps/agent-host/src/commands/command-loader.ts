@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { basename, resolve } from "node:path";
 import { collectMarkdownFiles, parseFrontmatter, trimStr } from "@host/boot/manifest-discovery";
-import { TREVOR_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
+import { BELAY_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { msg } from "@host/transport/messages";
 import type { CommandFile, CommandFileRootKind } from "./command-file";
 
 /**
- * The `.trevor/commands/*.md` disk loader (plan 44.5, M3). It turns a markdown command file into the
+ * The `.belay/commands/*.md` disk loader (plan 44.5, M3). It turns a markdown command file into the
  * plan-40 {@link CommandFile} primitive - `id` (`/<basename>`), `rootKind` (trust provenance), and the
  * frontmatter-stripped `body` - across an ORDERED list of trusted roots, project-local first. A project
  * command overrides a same-named user command (D-006). Loading is fail-soft: an unreadable or
@@ -16,12 +16,12 @@ import type { CommandFile, CommandFileRootKind } from "./command-file";
  * The scan reuses `boot/manifest-discovery.ts` for both the recursive `.md` walk
  * (`collectMarkdownFiles`, shared with `project-context/rules.ts`) and the frontmatter strip, rather
  * than inventing a bespoke walker. The loaded bodies are handed to the plan-40 `expandCommandFile`
- * (interpolation) and then the `@trevor/session` `expandArgs` (substitution) at dispatch - this module
+ * (interpolation) and then the `@belay/session` `expandArgs` (substitution) at dispatch - this module
  * does neither; it only reads disk + assigns trust.
  *
  * Responsible for: discovering + reading command files across the project/user roots, id + trust-root
  * assignment, project-over-user precedence, and fail-soft diagnostics.
- * Not for: interpolation (command-file.ts), argument substitution (@trevor/session/command-args), or
+ * Not for: interpolation (command-file.ts), argument substitution (@belay/session/command-args), or
  * registering/dispatching the command (commands.ts / main.ts).
  */
 
@@ -57,15 +57,15 @@ export interface CommandFileLoad {
   readonly diagnostics: readonly CommandLoadDiagnostic[];
 }
 
-/** The project-local command root: `<workspace>/.trevor/commands`, the same workspace authority the
- *  file tools and `.trevor/rules` use. */
-export const PROJECT_COMMANDS_DIR = resolve(WORKSPACE_ROOT, ".trevor", "commands");
+/** The project-local command root: `<workspace>/.belay/commands`, the same workspace authority the
+ *  file tools and `.belay/rules` use. */
+export const PROJECT_COMMANDS_DIR = resolve(WORKSPACE_ROOT, ".belay", "commands");
 
-/** The user-global command root: `<TREVOR_HOME>/commands`, beside the other config-home files. */
-export const USER_COMMANDS_DIR = resolve(TREVOR_HOME, "commands");
+/** The user-global command root: `<BELAY_HOME>/commands`, beside the other config-home files. */
+export const USER_COMMANDS_DIR = resolve(BELAY_HOME, "commands");
 
 /**
- * The ordered command-file roots, highest precedence FIRST: the project-local `.trevor/commands`, then
+ * The ordered command-file roots, highest precedence FIRST: the project-local `.belay/commands`, then
  * the user config-home `commands`. Deduplicated by resolved dir, so a root is never searched twice.
  */
 export function commandFileRoots(): CommandFileRoot[] {

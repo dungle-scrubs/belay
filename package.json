@@ -1,15 +1,26 @@
 {
-  "name": "trevor",
+  "name": "belay",
   "private": true,
+  "version": "0.0.0",
   "type": "module",
+  "description": "Local-first agent workspace - React web UI + Effect agent host over a durable SQLite log",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dungle-scrubs/belay.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dungle-scrubs/belay/issues"
+  },
+  "homepage": "https://github.com/dungle-scrubs/belay#readme",
   "packageManager": "pnpm@11.5.2",
   "engines": {
     "node": ">=22"
   },
   "scripts": {
-    "dev": "concurrently -k -n store,blob,host,web -c blue,magenta,green,cyan \"pnpm --filter @trevor/session-store dev\" \"pnpm --filter @trevor/blob-store dev\" \"pnpm --filter @trevor/agent-host dev\" \"pnpm --filter @trevor/web dev\"",
-    "dev:web": "pnpm --filter @trevor/web dev",
-    "trevor": "pnpm --filter @trevor/cli start",
+    "dev": "concurrently -k -n store,blob,host,web -c blue,magenta,green,cyan \"pnpm --filter @belay/session-store dev\" \"pnpm --filter @belay/blob-store dev\" \"pnpm --filter @belay/agent-host dev\" \"pnpm --filter @belay/web dev\"",
+    "dev:web": "pnpm --filter @belay/web dev",
+    "belay": "pnpm --filter @belay/cli start",
     "build": "pnpm -r build",
     "check:filenames": "tsx packages/repo-policy/src/cli.ts",
     "lint": "biome check . && pnpm check:filenames",
@@ -20,23 +31,23 @@
     "test:web": "vitest run --project web",
     "test:e2e": "vitest run --project e2e",
     "test:e2e:browser": "tsx tests/browser/run-browser-e2e.ts",
-    "test-storybook": "pnpm --filter @trevor/web test-storybook",
+    "test-storybook": "pnpm --filter @belay/web test-storybook",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "typecheck": "pnpm -r typecheck",
     "prepare": "lefthook install || true"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.0",
-    "@effect/vitest": "^0.29.0",
+    "@biomejs/biome": "^2.5.8",
+    "@effect/vitest": "^0.30.0",
     "@playwright/test": "1.50.0",
     "@typescript/native-preview": "7.0.0-dev.20260621.1",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^9.2.1",
-    "lefthook": "^2.1.9",
-    "tsx": "^4.22.4",
+    "lefthook": "^2.1.10",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.3",
     "typescript-language-server": "^5.3.0",
-    "vitest": "^4.1.9"
+    "vitest": "^4.1.10"
   }
 }

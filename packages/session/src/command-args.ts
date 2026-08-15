@@ -1,7 +1,7 @@
 /**
  * Custom-slash-command ARGUMENT SUBSTITUTION (plan 44.5): a pure, dependency-free tokenizer +
- * substituter for `.trevor/commands/*.md` bodies that carry `$0`/`$1`/`$ARGUMENTS` placeholders.
- * Born in `@trevor/session` so the two authorities share ONE engine (the `command-family.ts:10` hoist
+ * substituter for `.belay/commands/*.md` bodies that carry `$0`/`$1`/`$ARGUMENTS` placeholders.
+ * Born in `@belay/session` so the two authorities share ONE engine (the `command-family.ts:10` hoist
  * doctrine, following the `loop-parser.ts` precedent): the HOST expands a command body authoritatively
  * at dispatch, and the WEB previews the same expansion on every keystroke - never two subtly-different
  * substitution rules.

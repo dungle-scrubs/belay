@@ -1,11 +1,11 @@
 import type { AddressInfo } from "node:net";
-import { type SessionIdentity, type SessionSummary, streamTransport } from "@trevor/session";
+import { type SessionIdentity, type SessionSummary, streamTransport } from "@belay/session";
 import { buildSessionStore, type SessionStoreOptions } from "../src/server";
 
 /**
  * Shared harness for the session-store smoke tests: boot a store on an ephemeral port over a throwaway
  * db, build participant identities, and read/await the inventory. Local to the store package (not
- * `@trevor/test-kit`) so it can `import "../src/server"` without the test-kit/boot -> store cycle the
+ * `@belay/test-kit`) so it can `import "../src/server"` without the test-kit/boot -> store cycle the
  * boot entry warns about.
  */
 
@@ -24,7 +24,7 @@ export async function startStore(dbPath = ":memory:", options: SessionStoreOptio
   };
 }
 
-/** A participant identity; a "trevor" runtimeKind counts as a host, anything else is a plain viewer. */
+/** A participant identity; a "belay" runtimeKind counts as a host, anything else is a plain viewer. */
 export const identity = (
   instanceId: string,
   runtimeKind: string,

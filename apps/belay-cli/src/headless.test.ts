@@ -1,6 +1,6 @@
-import { createTrevorClient } from "@trevor/sdk";
-import { events, PRODUCER_IDS } from "@trevor/session";
-import { doctorSnapshot, recordingTransport, storedEvent, storedLog } from "@trevor/test-kit";
+import { createTrevorClient } from "@belay/sdk";
+import { events, PRODUCER_IDS } from "@belay/session";
+import { doctorSnapshot, recordingTransport, storedEvent, storedLog } from "@belay/test-kit";
 import { describe, expect, it, vi } from "vitest";
 import {
   runArtifactPut,
@@ -172,7 +172,7 @@ describe("runDoctor (M8)", () => {
 });
 
 describe("runCapabilities (M8)", () => {
-  it("prints the structured manifest in --json mode (from /trevor-export)", async () => {
+  it("prints the structured manifest in --json mode (from /belay-export)", async () => {
     const { client, rec } = makeClient();
     rec.seed("s1", []);
     const manifest = { version: 1, scope: "full", sections: [] };
@@ -181,7 +181,7 @@ describe("runCapabilities (M8)", () => {
       rec,
       "s1",
       (t) => t === "user.command",
-      events.commandResult({ command: "/trevor-export", text: JSON.stringify(manifest), ok: true }),
+      events.commandResult({ command: "/belay-export", text: JSON.stringify(manifest), ok: true }),
     );
     expect(JSON.parse((await pending).stdout)).toEqual(manifest);
   });

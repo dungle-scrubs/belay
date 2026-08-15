@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { PastePayload } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { PastePayload } from "@trevor/session";
 import { test, vi } from "vitest";
 import { PasteTokenOverlay } from "./paste-token-overlay";
 

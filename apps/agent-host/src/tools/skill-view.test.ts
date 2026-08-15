@@ -21,11 +21,11 @@ afterEach(() => {
 });
 
 function roots(): { project: SkillRoot; global: SkillRoot } {
-  const base = mkdtempSync(join(tmpdir(), "trevor-skillview-"));
+  const base = mkdtempSync(join(tmpdir(), "belay-skillview-"));
   temps.push(base);
   return {
-    project: { kind: "project", dir: join(base, "project", ".trevor", "skills") },
-    global: { kind: "global", dir: join(base, "global", ".trevor", "skills") },
+    project: { kind: "project", dir: join(base, "project", ".belay", "skills") },
+    global: { kind: "global", dir: join(base, "global", ".belay", "skills") },
   };
 }
 

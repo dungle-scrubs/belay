@@ -23,7 +23,7 @@ import {
   type TaskSnapshot,
   taskSnapshotReplaces,
   type WorktreeSummary,
-} from "@trevor/session";
+} from "@belay/session";
 import type { PanelJob } from "@/support-panel/support-panel";
 import { type TurnActionEvidence, turnActionLabel } from "./action-label";
 
@@ -782,7 +782,7 @@ export interface CommandArgPreview {
  * The live substitution preview for the composer draft, or null when it does not apply (plan 44.5 M6).
  * It fires only PAST the first space (`/fix ‹args›`) - so it is complementary to the slash menu, which
  * closes on that space - and only for a command whose spec carries a `body` (a file-loaded custom
- * command; built-ins announce none). It runs the SHARED `@trevor/session` `expandArgs` over the body,
+ * command; built-ins announce none). It runs the SHARED `@belay/session` `expandArgs` over the body,
  * trimming the args exactly as the host's `parseCommand` will, so the preview matches what the host
  * will actually submit for the same input.
  */

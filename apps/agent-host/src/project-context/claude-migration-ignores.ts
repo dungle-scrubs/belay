@@ -4,15 +4,15 @@
  * Not for: pointer idempotence (that lives in the file itself, claude-migration.ts) or the one-off
  * "ignore once" action (which records nothing).
  *
- * State home: a single `claude-migration-ignores.json` under TREVOR_STATE_HOME (the storage taxonomy's
+ * State home: a single `claude-migration-ignores.json` under BELAY_STATE_HOME (the storage taxonomy's
  * `state` category, registered in STORAGE_INVENTORY), keyed by absolute project root -> the
  * workspace-relative CLAUDE.md paths to skip. Backed by the shared JSON config scaffold
  * (boot/config.ts): reads never create the file and a corrupt store degrades to empty with a warning;
  * writes ride the shared atomic temp-write + rename and are skipped when the merged set is unchanged.
  */
 import { resolve } from "node:path";
+import { storagePathByName } from "@belay/session/node-paths";
 import { loadJsonConfig, writeJsonConfig } from "@host/boot/config";
-import { storagePathByName } from "@trevor/session/node-paths";
 
 type IgnoreStore = Readonly<Record<string, readonly string[]>>;
 

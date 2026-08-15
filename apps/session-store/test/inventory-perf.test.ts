@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { streamTransport } from "@trevor/session";
+import { streamTransport } from "@belay/session";
 import { afterEach, beforeEach, test } from "vitest";
 import { identity as id, inventoryById, startStore, waitForLiveHost } from "./support";
 
@@ -40,18 +40,18 @@ test("GET /sessions reflects a just-created session and a just-appended event ne
   await transport.publishEvent("s1", {
     type: "host.online",
     producerId: "host",
-    payload: { instanceId: "h1", cwd: "~/dev/trevor", workspace: "~/dev/trevor" },
+    payload: { instanceId: "h1", cwd: "~/dev/belay", workspace: "~/dev/belay" },
   });
   byId = await inventoryById(store.url);
   assert.equal(byId.get("s1")?.title, "build the read model");
-  assert.equal(byId.get("s1")?.cwd, "~/dev/trevor");
-  assert.equal(byId.get("s1")?.project, "trevor");
+  assert.equal(byId.get("s1")?.cwd, "~/dev/belay");
+  assert.equal(byId.get("s1")?.project, "belay");
   assert.equal(byId.get("s1")?.eventCount, 2);
 
   // Live presence is folded in from the socket map, not the durable log.
   const host = transport.connectSession({
     sessionId: "s1",
-    identity: id("h1", "trevor"),
+    identity: id("h1", "belay"),
     onEvent: () => {},
   });
   await waitForLiveHost(store.url, "s1");

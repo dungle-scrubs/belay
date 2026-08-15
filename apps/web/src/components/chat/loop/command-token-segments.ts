@@ -1,4 +1,4 @@
-import type { CommandToken } from "@trevor/session";
+import type { CommandToken } from "@belay/session";
 import { segmentBySpans } from "@/lib/segment-by-spans";
 
 export const COMMAND_TOKEN_KIND_CLASS: Record<CommandToken["kind"], string> = {

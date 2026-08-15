@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { TrevorEventInput } from "@belay/session";
 import { publishTurn } from "@host/agent/turn";
-import type { TrevorEventInput } from "@trevor/session";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
 import { createSwitchCell } from "../src/agent/switch-cell";

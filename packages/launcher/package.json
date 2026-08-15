@@ -1,5 +1,5 @@
 {
-  "name": "@trevor/launcher",
+  "name": "@belay/launcher",
   "private": true,
   "type": "module",
   "exports": {
@@ -10,11 +10,11 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@trevor/server-kit": "workspace:*",
-    "@trevor/session": "workspace:*"
+    "@belay/server-kit": "workspace:*",
+    "@belay/session": "workspace:*"
   },
   "devDependencies": {
-    "@trevor/test-kit": "workspace:*",
+    "@belay/test-kit": "workspace:*",
     "@types/node": "^26.0.0",
     "typescript": "^6.0.3"
   }

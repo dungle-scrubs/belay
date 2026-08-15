@@ -1,11 +1,11 @@
 /**
  * The blob-store CLIENT/SERVER contract as a zero-dependency leaf (mirroring the `ports` / `node-paths`
  * subpaths): the hash format, the wire result shape, and the `/blobs` route vocabulary. Both the
- * @trevor/session blob client AND the standalone @trevor/blob-store server import this ONE module, so
+ * @belay/session blob client AND the standalone @belay/blob-store server import this ONE module, so
  * the hash regex, the result type, and the route strings stop being a hand-synced triple kept aligned
  * by comment.
  *
- * Exposed via the `@trevor/session/blob-contract` subpath so the dependency-light blob-store imports it
+ * Exposed via the `@belay/session/blob-contract` subpath so the dependency-light blob-store imports it
  * without pulling in the rest of the protocol package - the same exception already granted to ports.ts.
  */
 

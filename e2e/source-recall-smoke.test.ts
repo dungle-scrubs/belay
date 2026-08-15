@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { Tool } from "@host/tools";
-import { normalizeSourceRecallConfig } from "@host/tools/source-recall/config";
-import { createSourceRecallRegistry } from "@host/tools/source-recall/registry";
-import { buildSourceRecallTools } from "@host/tools/source-recall/tools";
 import {
   decodeSourceRecallIndexStatus,
   decodeSourceRecallRefreshResult,
   decodeSourceRecallResult,
-} from "@trevor/session";
+} from "@belay/session";
+import type { Tool } from "@host/tools";
+import { normalizeSourceRecallConfig } from "@host/tools/source-recall/config";
+import { createSourceRecallRegistry } from "@host/tools/source-recall/registry";
+import { buildSourceRecallTools } from "@host/tools/source-recall/tools";
 import { Effect } from "effect";
 import { afterAll, beforeAll, test } from "vitest";
 

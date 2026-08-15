@@ -1,16 +1,17 @@
 import assert from "node:assert/strict";
+import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@belay/session";
 import { createLspManager, type LspManager } from "@host/lsp/manager";
 import { createMcpRuntime } from "@host/mcp/runtime";
 import { supervisor } from "@host/processes/processes";
 import { buildSkillTool } from "@host/skills/skills";
 import { buildTaskTools } from "@host/tools/tasks/tasks";
-import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { test } from "vitest";
 import { buildToolScriptTool } from "../tool-script/tool";
 import { archiveReadTool, archiveUnpackTool } from "./archive/tool";
 import { askUserTool } from "./ask-user";
 import { astGrepTool } from "./ast-grep";
 import { buildBashTool } from "./bash";
+import { belayExpertTool } from "./belay-expert";
 import { clipboardWriteTool } from "./clipboard";
 import { docsTool } from "./docs/docs";
 import { doctorTool } from "./doctor";
@@ -35,7 +36,6 @@ import { skillsListTool } from "./skills-list";
 import { EMPTY_SOURCE_RECALL_CONFIG } from "./source-recall/config";
 import { createSourceRecallRegistry } from "./source-recall/registry";
 import { buildSourceRecallTools } from "./source-recall/tools";
-import { trevorExpertTool } from "./trevor-expert";
 import type { Tool } from "./types";
 import { videoInspectTool } from "./video-inspect/tool";
 import { webFetchTool } from "./web-fetch/web-fetch";
@@ -61,7 +61,7 @@ const [sourceRecallTool, sourceIndexStatusTool, sourceIndexRefreshTool] = buildS
 
 /**
  * Pins the `readOnly` partition that drives concurrent dispatch (D-050 / M1). `READ_ONLY_TOOLS`
- * is the cross-surface vocabulary from `@trevor/session` (D-031); these guard both directions:
+ * is the cross-surface vocabulary from `@belay/session` (D-031); these guard both directions:
  * a tool that declares `readOnly: true` joins the set, and a tool that leaves the flag unset
  * stays a serial barrier and is absent from it.
  */
@@ -141,7 +141,7 @@ test("lsp_* tool descriptions stay short - doctrine belongs to the prompt, not s
 });
 
 /**
- * Drift guard (D-031): the shared tool-vocabulary table in `@trevor/session` must match the
+ * Drift guard (D-031): the shared tool-vocabulary table in `@belay/session` must match the
  * host's REAL tool definitions exactly - every tool the host can expose, and each tool's
  * `readOnly` nature. The conditional tools (`ast_grep`, registered only when its binary
  * resolves; `skill`, only when the library is non-empty) are listed explicitly so the
@@ -174,7 +174,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
     skillViewTool,
     astGrepTool,
     doctorTool,
-    trevorExpertTool,
+    belayExpertTool,
     // migrate_claude_md (plan 26): a required-response serial barrier; its name/readOnly nature is
     // config-independent (it reads cwd + the runtime singleton at call time).
     migrateClaudeTool,
@@ -213,7 +213,7 @@ test("the shared tool table matches the host's actual tool defs (names + readOnl
   assert.deepEqual(
     fromHost,
     fromTable,
-    "the @trevor/session tool table drifted from the host tool defs - update packages/session/src/tools.ts",
+    "the @belay/session tool table drifted from the host tool defs - update packages/session/src/tools.ts",
   );
 });
 

@@ -5,6 +5,16 @@
  * Not for: publishing the turn as session events - publishTurn (turn.ts) - or hook dispatch
  * semantics - @host/hooks/runtime.
  */
+
+import {
+  constrainReasoning,
+  type ModelRef,
+  type ProviderDiagnostic,
+  type ProviderPartialCounts,
+  sameModel,
+  type TurnStop,
+} from "@belay/session";
+import { NOOP_SINK, SPAN_NAMES, type TelemetrySink } from "@belay/session/telemetry";
 import type { HookEvent } from "@host/hooks/config";
 import type {
   HookCallerKind,
@@ -14,15 +24,6 @@ import type {
   StopPayload,
 } from "@host/hooks/runtime";
 import { debug } from "@host/transport/log";
-import {
-  constrainReasoning,
-  type ModelRef,
-  type ProviderDiagnostic,
-  type ProviderPartialCounts,
-  sameModel,
-  type TurnStop,
-} from "@trevor/session";
-import { NOOP_SINK, SPAN_NAMES, type TelemetrySink } from "@trevor/session/telemetry";
 import { Duration, Effect, Option, Stream } from "effect";
 import type {
   ChatMessage,
@@ -293,7 +294,7 @@ export function runAgent(
     // A delegation tool-call is routed to the injected runner (it has the provider + transport the
     // generic executor lacks); everything else goes to the executor, gated by the allow-list. `callId`
     // is forwarded so a tool that needs the active tool-call id (ask_user) can correlate its UI events.
-    // Each execution is wrapped in a `trevor.tool` span (tool name + status only, never args/output).
+    // Each execution is wrapped in a `belay.tool` span (tool name + status only, never args/output).
     const execute = (): Effect.Effect<string> => {
       if (delegate?.names.has(name)) {
         return Effect.promise(() => delegate.run(name, args));

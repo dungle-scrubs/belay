@@ -1,4 +1,4 @@
-import type { CommandSpec } from "@trevor/session";
+import type { CommandSpec } from "@belay/session";
 
 /**
  * The debug-command surface (D-094 M4): a runtime-gated set of dev-only host slash commands hidden
@@ -8,7 +8,7 @@ import type { CommandSpec } from "@trevor/session";
  * lease, and transport); this module owns only the vocabulary + the confirm predicate.
  *
  * Lifecycle commands here are STOP/ARCHIVE/UNARCHIVE only. KILL is deliberately absent: a wedged host
- * cannot process its own kill, so force-termination stays external (the CLI's `trevor kill`).
+ * cannot process its own kill, so force-termination stays external (the CLI's `belay kill`).
  *
  * Responsible for: the debug-gated command vocabulary and the `/stop` confirm predicate.
  * Not for: the command handlers - main.ts wires those to the live scheduler/lease/transport.

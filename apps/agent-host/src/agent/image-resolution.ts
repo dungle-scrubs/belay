@@ -3,9 +3,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { createArtifactRuntime } from "@belay/session";
 import { HOST_BLOB_STORE_URL } from "@host/artifacts/runtime";
 import type { ChatImage, ChatMessage } from "@host/providers/index";
-import { createArtifactRuntime } from "@trevor/session";
 
 const execAsync = promisify(exec);
 

@@ -18,7 +18,7 @@ edge, replay dispatch, the command lane, and turn dispatch together.
   coercions, storage-root paths, session ensure-with-retry, and skill/command manifest
   frontmatter parsing.
 - `connectivity/` - internet reachability probing surfaced to the web client.
-- `telemetry/` - Sentry wiring and span helpers over `@trevor/session/telemetry`.
+- `telemetry/` - Sentry wiring and span helpers over `@belay/session/telemetry`.
 
 ### Session control plane
 
@@ -79,7 +79,7 @@ edge, replay dispatch, the command lane, and turn dispatch together.
 - `hooks/` - the narrow host-owned command-hook runtime (plan 25): the hook config model
   (exactly two events, `PreToolUse` and `Stop`; explicit command + args arrays, no shell
   splitting) with tolerant decode and a redacted debug projection, bounded discovery across
-  the project (`.trevor/hooks.json`) and user (`<TREVOR_HOME>/hooks.json`) roots with source
+  the project (`.belay/hooks.json`) and user (`<BELAY_HOME>/hooks.json`) roots with source
   provenance, sha256 trust fingerprints over canonical config + referenced local script
   contents (`trust.ts`), and the approval store under the state root with the explicit-trust
   execution gate - no project/user hook runs before its current hash is approved

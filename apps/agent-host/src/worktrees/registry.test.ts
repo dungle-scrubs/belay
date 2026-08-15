@@ -23,16 +23,16 @@ function fakeFs(seed: Record<string, string> = {}): WorktreeFs & { files: Map<st
   };
 }
 
-const HOME = "/home/.trevor";
+const HOME = "/home/.belay";
 
 const record = (over: Partial<WorktreeRecord> = {}): WorktreeRecord => ({
   id: "abc12345",
-  baseRepo: "/dev/trevor",
-  baseRepoName: "trevor",
-  worktreePath: "/home/.trevor/.worktrees/hash/feat-x-abc12345",
+  baseRepo: "/dev/belay",
+  baseRepoName: "belay",
+  worktreePath: "/home/.belay/.worktrees/hash/feat-x-abc12345",
   branch: "feat/x",
   baseCommit: "deadbeef",
-  sessionId: "trevor-aaaa1111",
+  sessionId: "belay-aaaa1111",
   createdAt: "2026-06-26T00:00:00.000Z",
   updatedAt: "2026-06-26T00:00:00.000Z",
   status: "active",
@@ -45,17 +45,17 @@ test("branchSlug makes a filesystem-safe slug", () => {
 });
 
 test("repoWorktreesDir groups by a hash of the canonical repo, not the full path", () => {
-  const dir = repoWorktreesDir(HOME, "/dev/trevor");
+  const dir = repoWorktreesDir(HOME, "/dev/belay");
   assert.ok(dir.startsWith(`${HOME}/.worktrees/`));
   // The full repo path never appears in the grouping directory name.
-  assert.ok(!dir.includes("/dev/trevor"));
+  assert.ok(!dir.includes("/dev/belay"));
   // Stable + distinct: same repo same dir, different repo different dir.
-  assert.equal(repoWorktreesDir(HOME, "/dev/trevor"), dir);
+  assert.equal(repoWorktreesDir(HOME, "/dev/belay"), dir);
   assert.notEqual(repoWorktreesDir(HOME, "/dev/other"), dir);
 });
 
 test("worktreePathFor lays out <repo-hash>/<branch-slug>-<id>", () => {
-  const p = worktreePathFor(HOME, "/dev/trevor", "feat/x", "abc12345");
+  const p = worktreePathFor(HOME, "/dev/belay", "feat/x", "abc12345");
   assert.ok(p.endsWith("/feat-x-abc12345"));
   assert.ok(p.includes("/.worktrees/"));
 });
@@ -89,16 +89,16 @@ test("listWorktrees flags a record whose directory is gone as missing (stale)", 
 
 test("worktreesForRepo filters by canonical identity and excludes archived", () => {
   const fs = fakeFs();
-  saveWorktree(fs, HOME, record({ id: "a", baseRepo: "/dev/trevor", worktreePath: "/wt/a" }));
+  saveWorktree(fs, HOME, record({ id: "a", baseRepo: "/dev/belay", worktreePath: "/wt/a" }));
   saveWorktree(fs, HOME, record({ id: "b", baseRepo: "/dev/other", worktreePath: "/wt/b" }));
   saveWorktree(
     fs,
     HOME,
-    record({ id: "c", baseRepo: "/dev/trevor", worktreePath: "/wt/c", status: "archived" }),
+    record({ id: "c", baseRepo: "/dev/belay", worktreePath: "/wt/c", status: "archived" }),
   );
   fs.files.set("/wt/a", "");
 
-  const forRepo = worktreesForRepo(fs, HOME, "/dev/trevor");
+  const forRepo = worktreesForRepo(fs, HOME, "/dev/belay");
   assert.deepEqual(
     forRepo.map((v) => v.id),
     ["a"],

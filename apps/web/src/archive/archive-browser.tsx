@@ -1,4 +1,4 @@
-import { relativeTime } from "@trevor/session";
+import { relativeTime } from "@belay/session";
 import { AlertTriangle, ArchiveRestore, Loader2, ShieldAlert, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { BackToChat } from "@/components/panel/back-to-chat";

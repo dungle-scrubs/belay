@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type SessionEvent, streamTransport } from "@trevor/session";
+import { type SessionEvent, streamTransport } from "@belay/session";
 import { afterEach, beforeEach, test } from "vitest";
 import { WebSocket } from "ws";
 import { BREAKER_COOLDOWN_MS, QUERY_BUDGET_MS } from "../src/log";
@@ -81,12 +81,12 @@ test("a host reconnecting (two sockets, one instanceId) is one presence entry", 
   // briefly overlaps the new one. Presence must collapse them to one entry.
   const sockA = transport.connectSession({
     sessionId: "dedup",
-    identity: id("h1", "trevor", "a"),
+    identity: id("h1", "belay", "a"),
     onEvent: () => {},
   });
   const sockB = transport.connectSession({
     sessionId: "dedup",
-    identity: id("h1", "trevor", "b"),
+    identity: id("h1", "belay", "b"),
     onEvent: () => {},
   });
 
@@ -128,7 +128,7 @@ test("publishing the same input twice appends twice (no wire idempotency)", asyn
 
 test("the durable log survives a store restart and replays from disk", async () => {
   await store.close(); // swap the in-memory store for an on-disk one a restart can reopen
-  const dbPath = join(mkdtempSync(join(tmpdir(), "trevor-sessions-")), "sessions.db");
+  const dbPath = join(mkdtempSync(join(tmpdir(), "belay-sessions-")), "sessions.db");
 
   store = await startStore(dbPath);
   const before = streamTransport(store.url);
@@ -178,14 +178,14 @@ test("GET /sessions returns the inventory read model with live presence folded i
   await transport.publishEvent("with-host", {
     type: "host.online",
     producerId: "host",
-    payload: { instanceId: "h1", cwd: "~/dev/trevor", workspace: "~/dev/trevor" },
+    payload: { instanceId: "h1", cwd: "~/dev/belay", workspace: "~/dev/belay" },
   });
   await transport.ensureSession("bare");
 
   // A live host socket on "with-host" so presence reads "live".
   const host = transport.connectSession({
     sessionId: "with-host",
-    identity: id("h1", "trevor"),
+    identity: id("h1", "belay"),
     onEvent: () => {},
   });
 
@@ -195,8 +195,8 @@ test("GET /sessions returns the inventory read model with live presence folded i
 
   const withHost = byId.get("with-host");
   assert.equal(withHost?.title, "build the inventory");
-  assert.equal(withHost?.cwd, "~/dev/trevor");
-  assert.equal(withHost?.project, "trevor");
+  assert.equal(withHost?.cwd, "~/dev/belay");
+  assert.equal(withHost?.project, "belay");
   assert.equal(withHost?.host, "live");
 
   const bare = byId.get("bare");

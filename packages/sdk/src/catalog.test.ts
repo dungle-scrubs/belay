@@ -1,5 +1,5 @@
-import { type CatalogEntry, events, PRODUCER_IDS, type SourceSummary } from "@trevor/session";
-import { recordingTransport, storedLog } from "@trevor/test-kit";
+import { type CatalogEntry, events, PRODUCER_IDS, type SourceSummary } from "@belay/session";
+import { recordingTransport, storedLog } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
 import { EMPTY_CATALOG_SNAPSHOT, projectCatalog } from "./catalog";
 import { createTrevorClient } from "./client";

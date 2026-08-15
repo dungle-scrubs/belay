@@ -1,4 +1,4 @@
-import type { LoopSnapshot } from "@trevor/session";
+import type { LoopSnapshot } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import type { LoopIterationRunner } from "./runner";
 import { LoopScheduler, type SchedulerClock } from "./scheduler";

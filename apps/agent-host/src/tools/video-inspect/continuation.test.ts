@@ -3,8 +3,9 @@
  * inline base64 images (capped, MIME-filtered, fetch-failure tolerant), and attaching them to a tool
  * message - degrading to refs-only text when no resolver is wired or resolution fails.
  */
+
+import type { ArtifactRef } from "@belay/session";
 import type { ChatMessage } from "@host/providers/index";
-import type { ArtifactRef } from "@trevor/session";
 import { describe, expect, it } from "vitest";
 import {
   createVideoFrameResolver,

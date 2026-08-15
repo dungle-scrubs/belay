@@ -101,11 +101,11 @@ test("below-cwd context sits AFTER the eager project scope (most specific wins)"
   );
 });
 
-test("always-included .trevor/rules render after eager project AGENTS.md", () => {
+test("always-included .belay/rules render after eager project AGENTS.md", () => {
   const root = tree();
   write(join(root, "AGENTS.md"), "ROOT SCOPE");
   write(
-    join(root, ".trevor", "rules", "review.md"),
+    join(root, ".belay", "rules", "review.md"),
     [
       "---",
       "id: review",
@@ -118,21 +118,21 @@ test("always-included .trevor/rules render after eager project AGENTS.md", () =>
 
   const report = contextRegistry.report(root, root);
 
-  assert.deepEqual(report.scopes, ["project", "trevor-rule"]);
+  assert.deepEqual(report.scopes, ["project", "belay-rule"]);
   assert.ok(
     report.text.indexOf("ROOT SCOPE") < report.text.indexOf("RULE: run focused tests."),
     "always rules render after eager AGENTS.md",
   );
   assert.deepEqual(report.files, [
     join(root, "AGENTS.md"),
-    join(root, ".trevor", "rules", "review.md"),
+    join(root, ".belay", "rules", "review.md"),
   ]);
 });
 
-test("scoped .trevor/rules render only after a matching file is touched", () => {
+test("scoped .belay/rules render only after a matching file is touched", () => {
   const root = tree();
   write(
-    join(root, ".trevor", "rules", "web.md"),
+    join(root, ".belay", "rules", "web.md"),
     [
       "---",
       "id: web",
@@ -157,12 +157,12 @@ test("scoped .trevor/rules render only after a matching file is touched", () => 
 test("rule imports retain rule source and folder metadata in the report", () => {
   const root = tree();
   write(
-    join(root, ".trevor", "rules", "apps", "metadata.yaml"),
+    join(root, ".belay", "rules", "apps", "metadata.yaml"),
     ["title: App rules", "globs:", '  - "apps/**"'].join("\n"),
   );
-  write(join(root, ".trevor", "rules", "apps", "detail.txt"), "DETAIL: imported.");
+  write(join(root, ".belay", "rules", "apps", "detail.txt"), "DETAIL: imported.");
   write(
-    join(root, ".trevor", "rules", "apps", "main.md"),
+    join(root, ".belay", "rules", "apps", "main.md"),
     ["---", "id: app-rule", "inclusion: always", "---", "Read @detail.txt"].join("\n"),
   );
 
@@ -183,7 +183,7 @@ test("rule imports retain rule source and folder metadata in the report", () => 
         priority: 0,
         title: undefined,
       },
-      path: join(root, ".trevor", "rules", "apps", "main.md"),
+      path: join(root, ".belay", "rules", "apps", "main.md"),
     },
   ]);
 });

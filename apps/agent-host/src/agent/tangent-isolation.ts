@@ -7,7 +7,7 @@
  *
  * Not for: assembling the prompt (history-projection.ts) or deciding when a turn runs (turn-scheduler.ts).
  */
-import { hasForkOrigin, type SessionEvent } from "@trevor/session";
+import { hasForkOrigin, type SessionEvent } from "@belay/session";
 import type { ChatMessage } from "../providers";
 import { buildHistory } from "./history-projection";
 

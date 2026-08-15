@@ -5,8 +5,8 @@ import {
   type HostPresence,
   type ProviderQuestionContract,
   type SessionEvent,
-} from "@trevor/session";
-import { storedEvent } from "@trevor/test-kit";
+} from "@belay/session";
+import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import {
   activeWorkingRowFrom,
@@ -289,10 +289,10 @@ test("latestSessionSwitch returns the newest host-authored session target", () =
   assert.equal(latestSessionSwitch([]), null);
   assert.equal(
     latestSessionSwitch([
-      evt("session.switch", { sessionId: "trevor-20260626-010203z-aaaaaaaa", reason: "clear" }),
-      evt("session.switch", { sessionId: "trevor-20260626-010204z-bbbbbbbb", reason: "clear" }),
+      evt("session.switch", { sessionId: "belay-20260626-010203z-aaaaaaaa", reason: "clear" }),
+      evt("session.switch", { sessionId: "belay-20260626-010204z-bbbbbbbb", reason: "clear" }),
     ]),
-    "trevor-20260626-010204z-bbbbbbbb",
+    "belay-20260626-010204z-bbbbbbbb",
   );
 });
 

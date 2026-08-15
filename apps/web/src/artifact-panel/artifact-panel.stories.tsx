@@ -1,5 +1,5 @@
+import type { ArtifactRef } from "@belay/session";
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { ArtifactRef } from "@trevor/session";
 import { ArtifactPanel } from "./artifact-panel";
 import type { ArtifactPanelLayout } from "./artifact-panel-state";
 

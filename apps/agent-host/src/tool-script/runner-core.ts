@@ -1,4 +1,4 @@
-import type { ToolScriptFailureClass } from "@trevor/session";
+import type { ToolScriptFailureClass } from "@belay/session";
 import type { HostToRunner, RunnerContext, RunnerToHost } from "./protocol";
 
 /**
@@ -7,7 +7,7 @@ import type { HostToRunner, RunnerContext, RunnerToHost } from "./protocol";
  * `tools` bridge (every call becomes a `bridge_request` the host answers), runs the script as an async
  * function with ambient globals (`process`/`Bun`/`require`/`fetch`) shadowed `undefined`, and ends with a
  * `complete` or a typed `fail`. It imports ONLY the protocol + the session contract - never the tool
- * registry (M3 REFACTOR) - so the process that runs user code carries no ambient Trevor authority.
+ * registry (M3 REFACTOR) - so the process that runs user code carries no ambient Belay authority.
  *
  * NOTE: the in-child global shadowing is defense-in-depth, NOT the safety boundary - the OS sandbox (M4)
  * and the host bridge policy (M5) are. A synchronous infinite loop cannot be interrupted from inside JS;

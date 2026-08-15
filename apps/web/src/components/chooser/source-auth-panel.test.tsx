@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
+import type { SourceAction, SourceSummary } from "@belay/session";
 import { fireEvent, render } from "@testing-library/react";
-import type { SourceAction, SourceSummary } from "@trevor/session";
 import { test } from "vitest";
 import { authCopy, needsAuthPanel, SourceAuthPanel } from "./source-auth-panel";
 
@@ -115,7 +115,7 @@ test("a device-code sign-in for the Claude subscription renders the loginAnthrop
   // 53.1 R-2: when loginAnthropic's localhost callback port is busy, the host emits a `device-code`
   // SourceSignInState with the verification URL + acceptsCode, and the panel renders the
   // DeviceCodeFlow (the long-URL fixture keeps the 53 D-004 wrap honest).
-  const longUrl = `https://claude.ai/oauth/authorize?client_id=trevor&scope=all&state=${"y".repeat(240)}`;
+  const longUrl = `https://claude.ai/oauth/authorize?client_id=belay&scope=all&state=${"y".repeat(240)}`;
   const codes: string[] = [];
   const { getByText, getByLabelText, getByRole, container } = render(
     <SourceAuthPanel
@@ -237,7 +237,7 @@ test("a device / provider-code flow shows the link + non-key code and submits a 
 });
 
 test("a long verification URL wraps instead of overflowing the panel (53 D-004)", () => {
-  const longUrl = `https://auth.example.com/oauth/device/authorize?client_id=trevor&scope=all&state=${"x".repeat(240)}`;
+  const longUrl = `https://auth.example.com/oauth/device/authorize?client_id=belay&scope=all&state=${"x".repeat(240)}`;
   const { getByText } = render(
     <SourceAuthPanel
       source={source({

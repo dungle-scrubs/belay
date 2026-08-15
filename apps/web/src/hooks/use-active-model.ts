@@ -6,7 +6,7 @@ import {
   modelRefFromProvider,
   type ProviderModel,
   type SourceSummary,
-} from "@trevor/session";
+} from "@belay/session";
 import { useLocalStorageState } from "ahooks";
 import { useCallback, useEffect } from "react";
 import type { ModelPrefsView } from "@/derive";
@@ -55,7 +55,7 @@ export function useActiveModel({
   // the model field degenerates to the provider id and reasoning to "off" - an invalid ref that blocks
   // prompting. The recovered ref keeps the real modelId + reasoning until host.online re-folds.
   const [lastKnownModel, setLastKnownModel] = useLocalStorageState<ModelRef>(
-    sessionScopedKey("trevor.lastModel", sessionId),
+    sessionScopedKey("belay.lastModel", sessionId),
     { defaultValue: undefined },
   );
   const firstAnnouncedProvider = Object.keys(hostModels)[0];

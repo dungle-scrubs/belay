@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { fakeProvider, publishTurnVia, transportEmit } from "@trevor/agent-host/testing";
-import type { RunningServer } from "@trevor/server-kit";
-import { type SessionEvent, streamTransport } from "@trevor/session";
-import { createWorkflowDriver } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
+import { fakeProvider, publishTurnVia, transportEmit } from "@belay/agent-host/testing";
+import type { RunningServer } from "@belay/server-kit";
+import { type SessionEvent, streamTransport } from "@belay/session";
+import { createWorkflowDriver } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**

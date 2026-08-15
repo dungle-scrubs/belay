@@ -4,7 +4,7 @@ import {
   type DoctorFinding,
   type DoctorStatus,
   rollupStatus,
-} from "@trevor/session";
+} from "@belay/session";
 
 /**
  * The shared DoctorArea constructor for the /doctor area builders: rolls an area's findings into its

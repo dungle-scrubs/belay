@@ -1,4 +1,4 @@
-import type { ProviderDiagnostic } from "@trevor/session";
+import type { ProviderDiagnostic } from "@belay/session";
 
 /**
  * The host's per-provider LATEST-incident state (D-007). Where {@link ProviderFailureLog} keeps a

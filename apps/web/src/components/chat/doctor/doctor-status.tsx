@@ -1,4 +1,4 @@
-import type { DoctorStatus } from "@trevor/session";
+import type { DoctorStatus } from "@belay/session";
 import { CircleCheck, CircleDashed, CircleX, TriangleAlert } from "lucide-react";
 import type { ComponentType } from "react";
 import { cn } from "@/lib/utils";

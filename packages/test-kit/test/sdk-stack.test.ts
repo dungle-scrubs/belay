@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { bootSdkStack } from "../src/boot";
 
 /**
- * M9: test-kit can boot the real session-store + blob-store and drive them through a `@trevor/sdk`
+ * M9: test-kit can boot the real session-store + blob-store and drive them through a `@belay/sdk`
  * client - the same headless workflow layer a script or eval harness uses, over the same wire the host
  * and web speak. This exercises the ephemeral-service lifecycle test-kit owns, not any SDK workflow logic
  * (which is tested in the SDK package); a green run proves the stack boots, binds, round-trips, and tears

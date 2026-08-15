@@ -49,13 +49,13 @@ test("the browser job uploads diff/trace artifacts on failure so a regression is
 // The image tag can't be imported into YAML/bash, so every place that re-spells it is guarded here
 // against drifting from the PLAYWRIGHT_IMAGE source of truth. (container.sh holds it for all 3 baseline
 // scripts, so one assertion covers them.)
-test.each([
-  "../.github/workflows/nightly-perf.yml",
-  "../tests/browser/container.sh",
-])("%s pins the same Playwright container as PLAYWRIGHT_IMAGE (D-002)", (rel) => {
-  const contents = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-  assert.ok(
-    contents.includes(PLAYWRIGHT_IMAGE),
-    `${rel} must pin ${PLAYWRIGHT_IMAGE} (keep it in sync with tests/browser/shared.ts)`,
-  );
-});
+test.each(["../.github/workflows/nightly-perf.yml", "../tests/browser/container.sh"])(
+  "%s pins the same Playwright container as PLAYWRIGHT_IMAGE (D-002)",
+  (rel) => {
+    const contents = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
+    assert.ok(
+      contents.includes(PLAYWRIGHT_IMAGE),
+      `${rel} must pin ${PLAYWRIGHT_IMAGE} (keep it in sync with tests/browser/shared.ts)`,
+    );
+  },
+);

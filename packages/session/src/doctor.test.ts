@@ -132,7 +132,7 @@ describe("formatDoctorReport", () => {
   const snap: DoctorSnapshot = {
     state: "ready",
     checkedAt: "12s ago",
-    host: { workspace: "~/dev/trevor" },
+    host: { workspace: "~/dev/belay" },
     areas: [
       {
         id: "internet",
@@ -158,9 +158,9 @@ describe("formatDoctorReport", () => {
 
   it("renders a paste-ready report: header, summary, areas, findings, and next actions", () => {
     const report = formatDoctorReport(snap);
-    expect(report).toContain("Trevor /doctor - Degraded");
+    expect(report).toContain("Belay /doctor - Degraded");
     expect(report).toContain("12s ago · 2 areas · 0 error, 1 warning, 1 ok, 0 not checked");
-    expect(report).toContain("workspace: ~/dev/trevor");
+    expect(report).toContain("workspace: ~/dev/belay");
     expect(report).toContain("## Internet [WARN] unreachable");
     expect(report).toContain("- probe: dns+https");
     expect(report).toContain("[WARN] Public internet - last probe failed");

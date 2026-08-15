@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { events, PRODUCER_IDS, streamTransport } from "@trevor/session";
+import { events, PRODUCER_IDS, streamTransport } from "@belay/session";
 import { afterEach, beforeEach, test } from "vitest";
 import { identity, inventoryById, startStore, waitForLiveHost } from "./support";
 
@@ -76,7 +76,7 @@ test("an archived session with a live host is protected from delete", async () =
 
   const host = transport.connectSession({
     sessionId: "hosted",
-    identity: identity("h1", "trevor"),
+    identity: identity("h1", "belay"),
     onEvent: () => {},
   });
   await waitForLiveHost(store.url, "hosted");

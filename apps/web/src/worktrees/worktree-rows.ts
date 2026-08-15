@@ -1,4 +1,4 @@
-import type { SessionActivity, WorktreeSummary } from "@trevor/session";
+import type { SessionActivity, WorktreeSummary } from "@belay/session";
 import type { CommandRow, RowChooserAdapter, RowTone } from "@/components/command-modal";
 
 /** Per-session activity decoration, cross-referenced from the resume inventory when available. */

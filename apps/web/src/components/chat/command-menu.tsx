@@ -1,4 +1,4 @@
-import type { CommandSpec } from "@trevor/session";
+import type { CommandSpec } from "@belay/session";
 import { AutocompleteMenu, type AutocompleteRow } from "./autocomplete-menu";
 
 /**

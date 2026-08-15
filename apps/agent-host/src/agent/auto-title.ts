@@ -1,12 +1,12 @@
-import type { Lease } from "@host/session/lease";
-import { warn } from "@host/transport/log";
-import type { EmitEvent } from "@host/transport/services";
 import {
   decodeTrevorEvent,
   type SessionEvent,
   events as sessionEvents,
   type TrevorEventInput,
-} from "@trevor/session";
+} from "@belay/session";
+import type { Lease } from "@host/session/lease";
+import { warn } from "@host/transport/log";
+import type { EmitEvent } from "@host/transport/services";
 import { Cause, Effect } from "effect";
 import type { ChatMessage, Provider, ProviderError } from "../providers";
 import type { CompactionController } from "./compaction-controller";

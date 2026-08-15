@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
+import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@belay/session";
 import type { LspServerStatus, LspServerStatusKind } from "@host/lsp/contract";
 import type { LspManager } from "@host/lsp/manager";
-import { READ_ONLY_TOOL_NAMES, TOOL_DESCRIPTORS } from "@trevor/session";
 import { Effect } from "effect";
 import { test } from "vitest";
 import { buildLspStatusTool } from "./lsp-status";

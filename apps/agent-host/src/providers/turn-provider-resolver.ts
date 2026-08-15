@@ -3,7 +3,7 @@ import {
   decodeTrevorEvent,
   type ModelRef,
   type SessionEvent,
-} from "@trevor/session";
+} from "@belay/session";
 import {
   createModelSourceResolver,
   type ModelSourceResolver,

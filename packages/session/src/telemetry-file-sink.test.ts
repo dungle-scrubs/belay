@@ -7,14 +7,14 @@ import { METRIC_NAMES, SPAN_NAMES } from "./telemetry-contract";
 import { createFileSink, createTelemetrySink } from "./telemetry-file-sink";
 
 /**
- * The local file exporter (plan 13 M5): TREVOR_OTEL_EXPORTER=file appends bounded JSONL spans + metrics
+ * The local file exporter (plan 13 M5): BELAY_OTEL_EXPORTER=file appends bounded JSONL spans + metrics
  * under the otel dir, best-effort, with a byte cap that drops (and counts) writes past it.
  */
 
 let dir: string;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), "trevor-otel-"));
+  dir = mkdtempSync(join(tmpdir(), "belay-otel-"));
 });
 
 afterEach(() => {
@@ -72,7 +72,7 @@ test("writes past the byte cap are dropped and counted, never throwing", () => {
 
 test("createTelemetrySink honors the config: file exporter writes, everything else is NOOP", () => {
   const fileSink = createTelemetrySink("agent-host", {
-    env: { NODE_ENV: "production", TREVOR_OTEL_EXPORTER: "file" },
+    env: { NODE_ENV: "production", BELAY_OTEL_EXPORTER: "file" },
     dir,
   });
   fileSink.span({ name: SPAN_NAMES.turn, attributes: {}, status: "ok", durationMs: 1 });

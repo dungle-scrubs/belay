@@ -1,7 +1,7 @@
+import type { DoctorFinding } from "@belay/session";
 import { abbrevHome } from "@host/boot/paths";
 import type { HooksStatusSnapshot } from "@host/hooks/runtime";
 import type { HookStatsEntry } from "@host/hooks/stats";
-import type { DoctorFinding } from "@trevor/session";
 import { plural, statusHistogram } from "./format";
 import { classifyPeripheral } from "./peripheral-classifier";
 import type { PeripheralState } from "./probe-input";

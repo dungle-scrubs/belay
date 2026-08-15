@@ -1,11 +1,11 @@
-import type { Command } from "@host/commands/commands";
 import {
   classifyLoopCommand,
   LOOP_COMMAND_NAMES,
   LOOP_FAMILY,
   type LoopSnapshot,
   parseLoopCommand,
-} from "@trevor/session";
+} from "@belay/session";
+import type { Command } from "@host/commands/commands";
 import type { LoopState } from "./domain";
 import type { LoopController } from "./store";
 

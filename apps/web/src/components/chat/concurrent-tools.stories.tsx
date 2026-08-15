@@ -131,7 +131,7 @@ export const AlignsInTranscript: Story = {
   render: () => (
     <Frame>
       <div className="flex flex-col gap-1">
-        <ToolCall name="bash" args="pnpm --filter @trevor/web typecheck" status="done">
+        <ToolCall name="bash" args="pnpm --filter @belay/web typecheck" status="done">
           <span className="text-sm">(no errors)</span>
         </ToolCall>
         <ConcurrentTools tools={withStatus({ r1: "done", gl: "done" }, "running")} />

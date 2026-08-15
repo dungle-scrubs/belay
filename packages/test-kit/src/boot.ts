@@ -1,14 +1,14 @@
 import { rmSync } from "node:fs";
-import { createBlobServer } from "@trevor/blob-store/server";
-import { createTrevorClient, type TrevorClient } from "@trevor/sdk";
-import { type RunningServer, startServer } from "@trevor/server-kit";
-import { streamTransport } from "@trevor/session";
-import { createSessionStore } from "@trevor/session-store/server";
+import { createBlobServer } from "@belay/blob-store/server";
+import { createTrevorClient, type TrevorClient } from "@belay/sdk";
+import { type RunningServer, startServer } from "@belay/server-kit";
+import { streamTransport } from "@belay/session";
+import { createSessionStore } from "@belay/session-store/server";
 import { createWorkflowDriver, tempDir, type WorkflowDriver } from "./index";
 
 /**
  * The node-only half of the test harness: booting real local stores on ephemeral ports. Kept in a
- * separate entry (`@trevor/test-kit/boot`) from the browser-safe fixtures in `index.ts`, because it
+ * separate entry (`@belay/test-kit/boot`) from the browser-safe fixtures in `index.ts`, because it
  * imports the store apps (`node:http` + node:sqlite) which the web jsdom test project cannot
  * bundle. The two store *app* tests boot their own server from `../src` instead of importing this,
  * to avoid a test-only dependency cycle back through this package.
@@ -36,7 +36,7 @@ export interface BootedBlob extends RunningServer {
  * blob lifecycle the web upload and host vision-inlining depend on has one boot+teardown contract.
  */
 export async function bootBlob(): Promise<BootedBlob> {
-  const root = tempDir("trevor-blob-");
+  const root = tempDir("belay-blob-");
   const server = await startServer(createBlobServer(root, 25 * 1024 * 1024), { port: 0 });
   return {
     ...server,
@@ -48,7 +48,7 @@ export async function bootBlob(): Promise<BootedBlob> {
   };
 }
 
-/** A booted session-store + blob-store with a `@trevor/sdk` client bound to both, and one teardown. */
+/** A booted session-store + blob-store with a `@belay/sdk` client bound to both, and one teardown. */
 export interface BootedSdkStack {
   readonly store: RunningServer;
   readonly blob: BootedBlob;
@@ -59,8 +59,8 @@ export interface BootedSdkStack {
 }
 
 /**
- * Boots the real local stores and binds a `@trevor/sdk` client to them, so a test or eval harness drives
- * Trevor through the SAME headless workflow layer a script would, over the same wire the host and web use.
+ * Boots the real local stores and binds a `@belay/sdk` client to them, so a test or eval harness drives
+ * Belay through the SAME headless workflow layer a script would, over the same wire the host and web use.
  * test-kit owns only the ephemeral service lifecycle here; the workflows themselves stay in the SDK (M9
  * keeps test-kit test infrastructure, not a second SDK).
  */

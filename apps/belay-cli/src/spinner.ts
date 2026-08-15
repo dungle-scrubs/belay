@@ -1,7 +1,7 @@
 /**
  * A tiny, dependency-free terminal spinner for the launcher's live progress (D-085). It animates a
  * single line through the launch phases (resolving project → readying services → waiting for host →
- * …) so `trevor` gives immediate feedback during the several seconds of startup instead of sitting
+ * …) so `belay` gives immediate feedback during the several seconds of startup instead of sitting
  * silent. Uses the same braille frames `ora` does; on a non-TTY (piped/CI) it degrades to one printed
  * line per step so logs stay readable. Writes to stderr, leaving stdout for the final status block.
  */

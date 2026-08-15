@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a new capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / use case
+      description: What job is not being done well today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: Capability, scope, and any plan reference (.plans/<NN>-...)
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

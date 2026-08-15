@@ -1,13 +1,13 @@
 import { cpSync, existsSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { LEGACY_TREVOR_DIRNAME, resolveTrevorStateHome, type TrevorPathEnv } from "./node-paths";
+import { type BelayPathEnv, LEGACY_BELAY_DIRNAME, resolveBelayStateHome } from "./node-paths";
 
 /**
- * Legacy `~/.trevor_legacy` detection and forward-migration planning (D-009). The service-default cutover to
+ * Legacy `~/.belay_legacy` detection and forward-migration planning (D-009). The service-default cutover to
  * the STATE home already shipped, so this is NOT a default-changing path: it detects leftover
  * pre-XDG-split data and plans an explicit, idempotent, backup-safe copy forward. The planner is pure
- * over an injected existence probe; the small executor copies (never moves) so `~/.trevor_legacy` stays intact
+ * over an injected existence probe; the small executor copies (never moves) so `~/.belay_legacy` stays intact
  * as the backup and a partial copy rolls its target back.
  */
 
@@ -22,7 +22,7 @@ export type MigrationStatus =
 
 export interface MigrationAction {
   readonly artifact: MigrationArtifact;
-  /** Legacy source under `~/.trevor_legacy`. Always left intact (it is the backup). */
+  /** Legacy source under `~/.belay_legacy`. Always left intact (it is the backup). */
   readonly source: string;
   /** Forward target under the STATE home. */
   readonly target: string;
@@ -69,11 +69,11 @@ export interface MigrationProbe {
  */
 export function planLegacyMigration(
   probe: MigrationProbe,
-  env: TrevorPathEnv = process.env,
+  env: BelayPathEnv = process.env,
   home: string = homedir(),
 ): MigrationPlan {
-  const legacyRoot = join(home, LEGACY_TREVOR_DIRNAME);
-  const stateHome = resolveTrevorStateHome(env, home);
+  const legacyRoot = join(home, LEGACY_BELAY_DIRNAME);
+  const stateHome = resolveBelayStateHome(env, home);
 
   let hasLegacyData = false;
 
@@ -130,7 +130,7 @@ export function planLegacyMigration(
     hasLegacyData,
     willMigrate: actions.some((action) => action.status === "migrate"),
     rollbackNotes:
-      "Migration copies (never moves) legacy data, so ~/.trevor_legacy stays intact as the backup; rollback removes the copied target.",
+      "Migration copies (never moves) legacy data, so ~/.belay_legacy stays intact as the backup; rollback removes the copied target.",
   };
 }
 
@@ -151,7 +151,7 @@ export interface MigrationOutcome {
 /**
  * Executes a plan's `migrate` actions. Re-checks the target immediately before copying (idempotency
  * against a target that appeared since planning), and on a partial copy failure removes the partial
- * target so `~/.trevor_legacy` remains the intact source of truth.
+ * target so `~/.belay_legacy` remains the intact source of truth.
  */
 export function executeLegacyMigration(plan: MigrationPlan, fs: MigrationFs): MigrationOutcome[] {
   return plan.actions.map((action): MigrationOutcome => {
@@ -174,7 +174,7 @@ export function executeLegacyMigration(plan: MigrationPlan, fs: MigrationFs): Mi
       try {
         fs.remove(action.target);
       } catch {
-        // best-effort rollback; ~/.trevor_legacy is untouched regardless
+        // best-effort rollback; ~/.belay_legacy is untouched regardless
       }
       const detail = error instanceof Error ? error.message : String(error);
       return { artifact: action.artifact, status: "rolled-back", reason: `copy failed: ${detail}` };

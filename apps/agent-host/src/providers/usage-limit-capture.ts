@@ -2,7 +2,7 @@
  * Translates a provider's raw usage-limit SIGNALS at the pi-ai boundary into a `limit` ProviderEvent
  * (plan 44.4). Two sources, one normalized output:
  *   - M2 (Claude, success path): the `anthropic-ratelimit-unified-*` response headers pi-ai surfaces
- *     via `onResponse`, parsed by the shared `@trevor/session` normalizer.
+ *     via `onResponse`, parsed by the shared `@belay/session` normalizer.
  *   - M3 (Codex/OpenAI, error path): a rate/quota FAILURE the pi-ai stream throws, classified via the
  *     existing failure taxonomy into a detect-only "reached" (pi-ai strips the APIError to a message
  *     string, so no headers reach us - resetsAt rides only when a retry-after was present).
@@ -12,12 +12,12 @@
  *
  * Responsible for: mapping provider limit signals (Claude headers, a classified failure) -> a `limit`
  * ProviderEvent, plus the inspected-keys helper for the detect-only gap log.
- * Not for: the pure header parse (@trevor/session/usage-limit), the classification rules
+ * Not for: the pure header parse (@belay/session/usage-limit), the classification rules
  * (failure-taxonomy.ts), or publishing the event (agent/turn.ts).
  */
 
+import { parseAnthropicUnifiedHeaders, unifiedHeaderKeys } from "@belay/session";
 import { msg } from "@host/transport/messages";
-import { parseAnthropicUnifiedHeaders, unifiedHeaderKeys } from "@trevor/session";
 import { extractFailureEvidence } from "./failure-evidence";
 import { classifyProviderFailure } from "./failure-taxonomy";
 import type { ProviderEvent } from "./types";

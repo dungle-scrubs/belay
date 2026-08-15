@@ -7,7 +7,7 @@ import {
   type ManifestMetaValue,
   type ManifestSectionId,
   type SectionProvider,
-} from "@trevor/session";
+} from "@belay/session";
 import type { CatalogSnapshot } from "../providers/catalog";
 import { scopeItemCap } from "./scope";
 import { elide, isFresh, sectionBody, unavailableBody } from "./section-helpers";

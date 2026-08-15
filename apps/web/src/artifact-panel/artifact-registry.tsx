@@ -1,5 +1,5 @@
-import type { ArtifactRef } from "@trevor/session";
-import { isLucidArtifact } from "@trevor/session";
+import type { ArtifactRef } from "@belay/session";
+import { isLucidArtifact } from "@belay/session";
 import { AlertTriangle, FileText, Image, Monitor, PenLine, ScrollText } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
 import { artifactSrc } from "@/blob";

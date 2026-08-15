@@ -6,8 +6,8 @@ import {
   publishTurnVia,
   type TangentAdoptionDeps,
   transportEmit,
-} from "@trevor/agent-host/testing";
-import type { RunningServer } from "@trevor/server-kit";
+} from "@belay/agent-host/testing";
+import type { RunningServer } from "@belay/server-kit";
 import {
   decodeTrevorEvent,
   freshSessionId,
@@ -20,12 +20,12 @@ import {
   streamTransport,
   tangentsOf,
   UNKNOWN_INTERNET,
-} from "@trevor/session";
-import { NOOP_SINK } from "@trevor/session/telemetry";
-import { createProviderTraceWriter } from "@trevor/session/telemetry-provider-trace";
-import { testIdentity } from "@trevor/session/testing";
-import { createWorkflowDriver } from "@trevor/test-kit";
-import { bootStore } from "@trevor/test-kit/boot";
+} from "@belay/session";
+import { NOOP_SINK } from "@belay/session/telemetry";
+import { createProviderTraceWriter } from "@belay/session/telemetry-provider-trace";
+import { testIdentity } from "@belay/session/testing";
+import { createWorkflowDriver } from "@belay/test-kit";
+import { bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, test } from "vitest";
 
 /**
