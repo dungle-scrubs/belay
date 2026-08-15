@@ -15,8 +15,8 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@ast-grep/cli": "0.44.0",
-    "@earendil-works/pi-ai": "0.80.6",
+    "@ast-grep/cli": "0.45.1",
+    "@earendil-works/pi-ai": "0.84.1",
     "@sentry/node": "^10.70.0",
     "@belay/session": "workspace:*",
     "@vscode/ripgrep": "1.18.0",

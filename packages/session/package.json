@@ -23,11 +23,11 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "effect": "^3.21.4",
+    "effect": "^3.22.1",
     "jsonc-parser": "^3.3.1"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.2.0",
     "typescript": "^6.0.3"
   }
 }
