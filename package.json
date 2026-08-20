@@ -41,7 +41,7 @@
     "@biomejs/biome": "^2.5.8",
     "@effect/vitest": "^0.30.0",
     "@playwright/test": "1.50.0",
-    "@typescript/native-preview": "7.0.0-dev.20260621.1",
+    "@typescript/native-preview": "7.0.0-dev.20260707.2",
     "@vitest/coverage-v8": "^4.1.10",
     "concurrently": "^9.2.1",
     "lefthook": "^2.1.10",
