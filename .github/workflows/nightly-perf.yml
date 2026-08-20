@@ -24,7 +24,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build web app
-        run: pnpm --filter @trevor/web build
+        run: pnpm --filter @belay/web build
       - name: Produce virtualization perf metrics
         env:
           RUN_PERF: "1"

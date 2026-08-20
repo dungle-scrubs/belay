@@ -20,12 +20,12 @@ docker run --rm --ipc=host \
   -v "$REPO_ROOT":/src:ro \
   -v "$SNAP_DIR":/out \
   "$IMAGE" bash -lc "$CONTAINER_PREP"'
-    pnpm --filter @trevor/web build-storybook
+    pnpm --filter @belay/web build-storybook
     # Full regen: clear the existing baselines so every story is "missing" and gets written fresh.
     # (jest-image-snapshot writes a MISSING baseline but only FAILS on a changed one without -u, so a
     # clean slate is the simplest, unambiguous way to overwrite at a new viewport/threshold.)
     rm -rf /app/apps/web/__snapshots__/*
-    CI= pnpm --filter @trevor/web test-storybook
+    CI= pnpm --filter @belay/web test-storybook
     rm -rf /out/* || true
     cp -a /app/apps/web/__snapshots__/. /out/ 2>/dev/null || true
   '
