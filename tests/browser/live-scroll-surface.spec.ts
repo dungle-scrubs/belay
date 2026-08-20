@@ -3,12 +3,14 @@ import {
   announceBrowserJob,
   browserJobSnapshot,
   browserJobTail,
+  findChildTangentId,
   growRunningAgentChild,
   growTangentSession,
   seedExchanges,
   seedInlineAgentParent,
+  seedQuotedAnswer,
   seedRunningAgentChild,
-  seedTangentSession,
+  startTangentOutput,
   storeTransport,
 } from "./lane-b-fixtures";
 
@@ -77,17 +79,6 @@ async function openRunningJobDetail(page: Page, label: string): Promise<string> 
   await expect(detailScroller(page)).toContainText(`${label} output line 69`);
   await expect.poll(() => bottomDistance(detailScroller(page))).toBeLessThan(PIN_TOLERANCE_PX);
   return sessionId;
-}
-
-async function ensureRightPanelOpen(page: Page): Promise<void> {
-  const tangentsButton = page.getByRole("button", { name: "Tangents from this session" });
-  if (await tangentsButton.isVisible()) {
-    return;
-  }
-  const openPanel = page.getByRole("button", { name: "Open panel" });
-  if (await openPanel.isVisible()) {
-    await openPanel.click();
-  }
 }
 
 async function expectUnpinnedGrowthPreservesAnchor(input: {
@@ -206,28 +197,39 @@ test("shared live scroll surface preserves a reading anchor while tangent output
 }, testInfo) => {
   const transport = storeTransport();
   const parentSessionId = `tangent-parent-${test.info().workerIndex}-${Date.now()}`;
-  const tangentSessionId = `tangent-child-${test.info().workerIndex}-${Date.now()}`;
-  const runId = `tangent-run-${tangentSessionId}`;
   const quote = "selected scroll anchor for tangent";
   await seedExchanges(transport, parentSessionId, 8);
-  await seedTangentSession(transport, {
-    parentSessionId,
-    tangentSessionId,
-    runId,
-    quote,
-    lineLabel: "tangent-unpinned",
-    lines: 70,
-  });
+  await seedQuotedAnswer(transport, parentSessionId, quote);
 
   await page.goto(`/?session=${parentSessionId}`);
   await expect(page.locator("[data-transcript-virtual-list]")).toHaveAttribute(
     "data-transcript-ready",
     "true",
   );
-  await ensureRightPanelOpen(page);
-  await page.getByRole("button", { name: "Tangents from this session" }).click();
-  await page.getByText(quote).click();
+  // Open the tangent through the CURRENT entry point: select the quoted answer text, then the
+  // selection toolbar's Tangent action (the side-panel tangents button and its discovery list were
+  // removed when the panel controls relocated to the palette/rail/composer).
+  await page.locator("[data-transcript-virtual-list]").getByText(quote).selectText();
+  // The toolbar captures on mouseup or keyup; a bare Shift press takes the keyup path and keeps
+  // the programmatic selection alive.
+  await page.keyboard.press("Shift");
+  const tangentButton = page.locator(".aui-selection-toolbar-tangent");
+  await expect(tangentButton).toBeEnabled();
+  await tangentButton.click();
   await expect(page.getByText("TANGENT", { exact: true })).toBeVisible();
+
+  // The takeover created its own session; learn its id from the inventory, then stream output
+  // into it so the growth happens live under the open shell.
+  let tangentSessionId = await findChildTangentId(transport, parentSessionId);
+  for (let attempt = 0; attempt < 50 && !tangentSessionId; attempt += 1) {
+    await page.waitForTimeout(100);
+    tangentSessionId = await findChildTangentId(transport, parentSessionId);
+  }
+  expect(tangentSessionId).toBeTruthy();
+  const createdSessionId = tangentSessionId as string;
+  const runId = `tangent-run-${createdSessionId}`;
+
+  await startTangentOutput(transport, createdSessionId, runId, "tangent-unpinned", 70);
   const scroller = tangentScroller(page);
   await expect(scroller).toContainText("tangent-unpinned output line 69");
   await expect.poll(() => bottomDistance(scroller)).toBeLessThan(PIN_TOLERANCE_PX);
@@ -240,7 +242,7 @@ test("shared live scroll surface preserves a reading anchor while tangent output
     afterText: "tangent-unpinned output line 94",
     attachmentName: "tangent-unpinned-scroll-metrics.json",
     anchorDescription: "tangent line",
-    grow: () => growTangentSession(transport, tangentSessionId, runId, "tangent-unpinned", 70, 95),
+    grow: () => growTangentSession(transport, createdSessionId, runId, "tangent-unpinned", 70, 95),
   });
 });
 

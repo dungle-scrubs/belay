@@ -16,6 +16,6 @@ test("offline session keeps transcript readable and shows bottom resume recovery
 
   const row = page.locator("[data-resume-host-row]");
   await expect(row).toContainText("No launch root is available");
-  await expect(row).toContainText("Last active");
+  await expect(row).toContainText("Last activity");
   await expect(page.getByRole("textbox", { name: "Resume host to continue" })).toBeDisabled();
 });
