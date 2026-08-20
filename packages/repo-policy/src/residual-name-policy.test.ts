@@ -11,26 +11,22 @@ describe("residual name policy", () => {
   const oldProject = `belay${oldSuffix}`;
   const oldHome = `~/.belay${oldSuffix}`;
 
-  it("scans docs, downstream plan docs, and Claude skills", () => {
+  it("scans docs and Claude skills", () => {
     expect(isResidualNamePolicyPath("AGENTS.md")).toBe(true);
     expect(isResidualNamePolicyPath("CLAUDE.md")).toBe(true);
     expect(isResidualNamePolicyPath("docs/telemetry.md")).toBe(true);
-    expect(
-      isResidualNamePolicyPath(".plans/49-open-source-launch-readiness/implementation.md"),
-    ).toBe(true);
+    expect(isResidualNamePolicyPath("apps/web/README.md")).toBe(true);
     expect(isResidualNamePolicyPath(".claude/skills/implement-plan/SKILL.md")).toBe(true);
   });
 
-  it("does not scan source files or the active rename plan narrative", () => {
+  it("does not scan source files", () => {
     expect(isResidualNamePolicyPath("apps/web/src/app.tsx")).toBe(false);
-    expect(isResidualNamePolicyPath(".plans/56-rename-to-belay/implementation.md")).toBe(false);
   });
 
   it("flags old project names in scanned files with line numbers", () => {
     const files = {
       "AGENTS.md": `${oldTitle}\n${oldHome}\n`,
       ".claude/skills/implement-plan/SKILL.md": `repo /Users/kevin/dev/${oldProject}\n`,
-      ".plans/56-rename-to-belay/implementation.md": `${oldTitle} is historical here\n`,
     } as const;
 
     expect(
