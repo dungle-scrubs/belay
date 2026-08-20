@@ -12,7 +12,7 @@ import {
  * process so the e2e smoke proves cross-process contention, stale takeover, and handover for real
  * (real pids, real `process.kill(pid, 0)` liveness, real lock files), not just in-memory fakes.
  *
- * Invoked as: `tsx cwd-lock-actor.ts <mode> <cwd> <sessionId> <hostId>` with TREVOR_STATE_HOME in the
+ * Invoked as: `tsx cwd-lock-actor.ts <mode> <cwd> <sessionId> <hostId>` with BELAY_STATE_HOME in the
  * env (so the lock lands under the smoke's temp state home). It prints ONE JSON line with its pid and
  * the acquire result, so the parent can assert the outcome.
  *

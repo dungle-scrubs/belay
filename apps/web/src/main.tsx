@@ -13,7 +13,7 @@ import { bootstrapTelemetry } from "./telemetry";
 // Resolve the browser telemetry config once at startup (plan 13): disabled/local by default, so this
 // installs a NOOP sink and emits nothing without explicit opt-in.
 bootstrapTelemetry();
-// Browser Sentry error sink (plan 13 M10): initializes ONLY when VITE_TREVOR_SENTRY_DSN is set (never in
+// Browser Sentry error sink (plan 13 M10): initializes ONLY when VITE_BELAY_SENTRY_DSN is set (never in
 // test/CI), errors-only, every event scrubbed. A no-op without a DSN.
 bootstrapBrowserSentry({
   init: (options) => Sentry.init(options as Parameters<typeof Sentry.init>[0]),

@@ -30,7 +30,7 @@ We will credit reporters in `CHANGELOG.md` unless you ask to stay anonymous.
 
 `pnpm audit` after patch updates reports **23 advisories** (down from 40 on 2026-08-14) — mostly transitive via `apps/web` (`@storybook/test-runner > jest > glob > brace-expansion`) and `apps/agent-host > @earendil-works/pi-ai > @modelcontextprotocol/sdk > hono/undici`:
 
-- `playwright <1.55.1` (GHSA-7mvr-c777-76hp, high) — **intentionally pinned** at `1.50.0` via `pnpm-workspace.yaml` overrides + `mcr.microsoft.com/playwright:v1.50.0-noble` for screenshot parity (plan 09.2 D-002). Bumping requires coordinated container + lockfile + baseline refresh. Accepted until browser lane upgrade; mitigation: CI runs browsers only inside the pinned container.
+- `playwright <1.55.1` (GHSA-7mvr-c777-76hp, high) — resolved: the browser lane now pins `1.62.1` everywhere (pnpm override + `mcr.microsoft.com/playwright:v1.62.1-noble` container, guarded by `e2e/browser-ci-config.test.ts`). Screenshot baselines must be refreshed inside that same container (plan 09.2 D-002).
 - `brace-expansion <1.1.18 / <2.1.4 / <5.0.9`, `js-yaml <3.15.1`, `nanoid <3.3.18 / <5.1.16`, `undici <7.29.0`, `postcss <8.5.18`, `shell-quote <1.8.5`, `uuid <11.1.1` — transitive via Storybook/Jest and `pi-ai` SDK. Direct `mermaid`+`dompurify` patched (`mermaid ^11.16.1`, `dompurify ^3.4.13`); remaining require upstream `@storybook/test-runner` and `@earendil-works/pi-ai` releases. Tracked; patch when upstream ships compatible major.
 
 Run before release:

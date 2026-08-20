@@ -119,7 +119,7 @@ test("M4: a mid-turn switch to a smaller-window model re-tiers the next step's p
     !capture[1]?.includes(FULL_TIER_MARKER),
     "step 2 re-tiered to the leaner prompt after switching to the 8k model",
   );
-  assert.ok(capture[1]?.includes("You are Trevor"), "the leaner post-switch prompt is well-formed");
+  assert.ok(capture[1]?.includes("You are Belay"), "the leaner post-switch prompt is well-formed");
 
   const switched = events.find((e) => e.type === "model.switched");
   assert.equal(switched?.payload.outcome, "applied", "the mid-turn model switch applied");

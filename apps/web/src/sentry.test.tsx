@@ -7,7 +7,7 @@ import {
 } from "./sentry";
 
 /**
- * Browser Sentry bootstrap gating (plan 13 M10): disabled without VITE_TREVOR_SENTRY_DSN and under
+ * Browser Sentry bootstrap gating (plan 13 M10): disabled without VITE_BELAY_SENTRY_DSN and under
  * test/CI, and when enabled it is errors-only (no tracing/replay/profiling) with the scrubbing beforeSend.
  */
 
@@ -36,7 +36,7 @@ test("browser Sentry is NOT initialized without a DSN", () => {
 test("browser Sentry is NOT initialized under test/CI even with a DSN", () => {
   const { api, inits } = recordingApi();
   assert.equal(
-    bootstrapBrowserSentry(api, { NODE_ENV: "test", VITE_TREVOR_SENTRY_DSN: "https://w@x/3" }),
+    bootstrapBrowserSentry(api, { NODE_ENV: "test", VITE_BELAY_SENTRY_DSN: "https://w@x/3" }),
     false,
   );
   assert.equal(inits.length, 0);
@@ -45,7 +45,7 @@ test("browser Sentry is NOT initialized under test/CI even with a DSN", () => {
 test("with a DSN, browser Sentry is errors-only with the scrubbing beforeSend + wires captureRenderCrash", () => {
   const { api, inits, captured } = recordingApi();
   assert.equal(
-    bootstrapBrowserSentry(api, { MODE: "production", VITE_TREVOR_SENTRY_DSN: "https://w@x/3" }),
+    bootstrapBrowserSentry(api, { MODE: "production", VITE_BELAY_SENTRY_DSN: "https://w@x/3" }),
     true,
   );
   const [opts] = inits;

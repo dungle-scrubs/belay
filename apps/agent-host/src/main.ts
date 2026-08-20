@@ -135,7 +135,7 @@ const SESSION_STORE_URL = process.env.SESSION_STORE_URL ?? serviceUrl("store");
 // Tether speaks the same SessionTransport contract as the local store, so backend selection is just
 // which URL the stream transport points at (no separate adapter until Tether needs real divergence).
 const transport = streamTransport(TETHER_URL ?? SESSION_STORE_URL);
-// The host telemetry sink (plan 13 M5): NOOP unless TREVOR_OTEL_EXPORTER=file selects the local file
+// The host telemetry sink (plan 13 M5): NOOP unless BELAY_OTEL_EXPORTER=file selects the local file
 // exporter. Threaded into every turn (publishTurn) so turn/tool spans are emitted when enabled.
 const hostTelemetry = createTelemetrySink("agent-host");
 // Wire the host telemetry sink into tool_script's observability span (plan 16 M8).

@@ -92,7 +92,7 @@ export interface SessionStoreOptions {
 /** Builds the session-store and returns its parts (server + log + read model), for wiring and for tests
  *  that assert on the durable query counter / projection state. `createSessionStore` is the server-only view. */
 export function buildSessionStore(dbPath: string, options: SessionStoreOptions = {}): SessionStore {
-  // Telemetry is off (NOOP) unless TREVOR_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
+  // Telemetry is off (NOOP) unless BELAY_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
   const log = new SessionLog(dbPath, createTelemetrySink("session-store"), options.now);
   const hub = new SessionHub();
 

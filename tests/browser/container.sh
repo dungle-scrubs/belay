@@ -5,7 +5,7 @@
 # shellcheck disable=SC2034
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # shellcheck disable=SC2034
-IMAGE="mcr.microsoft.com/playwright:v1.50.0-noble"
+IMAGE="mcr.microsoft.com/playwright:v1.62.1-noble"
 
 # Run INSIDE the container before each script's body (concatenate as `bash -lc "$CONTAINER_PREP"'<body>'`):
 # copy the repo (minus node_modules/.git/build output) into a writable tree, init a throwaway git

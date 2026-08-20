@@ -19,7 +19,7 @@ import {
  * lease files), not just in-memory fakes.
  *
  * Invoked as: `tsx admission-actor.ts <mode> <key> <ownerId> <hostId> [capacity] [priority]` with
- * TREVOR_STATE_HOME in the env (so the lease lands under the smoke's temp state home). It prints ONE OR
+ * BELAY_STATE_HOME in the env (so the lease lands under the smoke's temp state home). It prints ONE OR
  * TWO machine-readable JSON lines (phase: initial | final); everything else goes to stderr.
  *
  *   - `acquire-once`: acquire, print the outcome, exit immediately WITHOUT releasing (probe a queued/

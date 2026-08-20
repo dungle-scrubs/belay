@@ -59,15 +59,15 @@ importers:
       '@ast-grep/cli':
         specifier: 0.44.0
         version: 0.44.0
+      '@belay/session':
+        specifier: workspace:*
+        version: link:../../packages/session
       '@earendil-works/pi-ai':
         specifier: 0.80.6
         version: 0.80.6(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.3)(zod@4.4.3)
       '@sentry/node':
         specifier: ^10.70.0
         version: 10.70.0(@opentelemetry/core@2.10.0(@opentelemetry/api@1.9.1))
-      '@belay/session':
-        specifier: workspace:*
-        version: link:../../packages/session
       '@vscode/ripgrep':
         specifier: 1.18.0
         version: 1.18.0
@@ -93,6 +93,31 @@ importers:
       tsx:
         specifier: ^4.23.12
         version: 4.23.12
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  apps/belay-cli:
+    dependencies:
+      '@belay/launcher':
+        specifier: workspace:*
+        version: link:../../packages/launcher
+      '@belay/sdk':
+        specifier: workspace:*
+        version: link:../../packages/sdk
+      '@belay/session':
+        specifier: workspace:*
+        version: link:../../packages/session
+    devDependencies:
+      '@belay/test-kit':
+        specifier: workspace:*
+        version: link:../../packages/test-kit
+      '@types/node':
+        specifier: ^26.0.0
+        version: 26.0.0
+      tsx:
+        specifier: ^4.22.4
+        version: 4.22.4
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
@@ -172,36 +197,14 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
-  apps/belay-cli:
-    dependencies:
-      '@belay/launcher':
-        specifier: workspace:*
-        version: link:../../packages/launcher
-      '@belay/sdk':
-        specifier: workspace:*
-        version: link:../../packages/sdk
-      '@belay/session':
-        specifier: workspace:*
-        version: link:../../packages/session
-    devDependencies:
-      '@belay/test-kit':
-        specifier: workspace:*
-        version: link:../../packages/test-kit
-      '@types/node':
-        specifier: ^26.0.0
-        version: 26.0.0
-      tsx:
-        specifier: ^4.22.4
-        version: 4.22.4
-      typescript:
-        specifier: ^6.0.3
-        version: 6.0.3
-
   apps/web:
     dependencies:
       '@assistant-ui/react':
         specifier: 0.14.23
         version: 0.14.23(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7))
+      '@belay/session':
+        specifier: workspace:*
+        version: link:../../packages/session
       '@fontsource-variable/jetbrains-mono':
         specifier: ^5.2.8
         version: 5.2.8
@@ -214,9 +217,6 @@ importers:
       '@tanstack/react-virtual':
         specifier: 3.14.4
         version: 3.14.4(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@belay/session':
-        specifier: workspace:*
-        version: link:../../packages/session
       ahooks:
         specifier: ^3.9.7
         version: 3.9.7(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -272,6 +272,9 @@ importers:
       '@assistant-ui/react-markdown':
         specifier: 0.14.4
         version: 0.14.4(@assistant-ui/react@0.14.23(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(use-sync-external-store@1.6.0(react@19.2.7)))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@belay/test-kit':
+        specifier: workspace:*
+        version: link:../../packages/test-kit
       '@storybook/addon-a11y':
         specifier: 10.4.6
         version: 10.4.6(storybook@10.4.6(@testing-library/dom@10.4.1)(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))
@@ -293,9 +296,6 @@ importers:
       '@testing-library/react':
         specifier: ^16.3.2
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@belay/test-kit':
-        specifier: workspace:*
-        version: link:../../packages/test-kit
       '@types/jest-image-snapshot':
         specifier: 6.4.1
         version: 6.4.1
@@ -369,8 +369,8 @@ importers:
         specifier: workspace:*
         version: link:../apps/web
       effect:
-        specifier: ^3.21.4
-        version: 3.21.4
+        specifier: ^3.22.1
+        version: 3.22.1
     devDependencies:
       '@types/node':
         specifier: ^26.0.0
@@ -442,8 +442,8 @@ importers:
   packages/session:
     dependencies:
       effect:
-        specifier: ^3.21.4
-        version: 3.21.4
+        specifier: ^3.22.1
+        version: 3.22.1
       jsonc-parser:
         specifier: ^3.3.1
         version: 3.3.1
@@ -482,15 +482,15 @@ importers:
 
   tests/browser:
     dependencies:
-      '@playwright/test':
-        specifier: 1.62.1
-        version: 1.62.1
       '@belay/session':
         specifier: workspace:*
         version: link:../../packages/session
       '@belay/test-kit':
         specifier: workspace:*
         version: link:../../packages/test-kit
+      '@playwright/test':
+        specifier: 1.62.1
+        version: 1.62.1
     devDependencies:
       '@types/node':
         specifier: ^26.0.0
@@ -4439,9 +4439,6 @@ packages:
 
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
-
-  effect@3.21.4:
-    resolution: {integrity: sha512-B89v/xSgPbl1J2Ai2u18jxq3odpFauU1rC6/eSs4FeNHi72kwKdJp12VGigvRV2lK+kRnx+OOz41XV8guZd4gQ==}
 
   effect@3.22.1:
     resolution: {integrity: sha512-TNoXushmPOBAjJlthF5d2QwnX2xBPEtcNJr5XKNKbRLbDvBcOYkXlYDfvGfSA0zriwLFuCll5MDtNMAdZL17PQ==}
@@ -10942,11 +10939,6 @@ snapshots:
 
   ee-first@1.1.1:
     optional: true
-
-  effect@3.21.4:
-    dependencies:
-      '@standard-schema/spec': 1.1.0
-      fast-check: 3.23.2
 
   effect@3.22.1:
     dependencies:

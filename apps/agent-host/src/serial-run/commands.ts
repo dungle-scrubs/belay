@@ -1,4 +1,4 @@
-import { TREVOR_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
+import { BELAY_STATE_HOME, WORKSPACE_ROOT } from "@host/boot/paths";
 import { commandReplier } from "@host/commands/command-replier";
 import { type DirectHandoffDeps, runDirectHandoff } from "@host/handoff/handoff-flow";
 import type { SessionSwitchApi } from "@host/session/session-switch";
@@ -56,7 +56,7 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
         args,
         nodeSerialRunStartDeps({
           workspace: WORKSPACE_ROOT,
-          stateHome: TREVOR_STATE_HOME,
+          stateHome: BELAY_STATE_HOME,
           newRunId: () => crypto.randomUUID(),
           now: () => new Date().toISOString(),
           handoff: (prompt) =>
@@ -81,7 +81,7 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
     return nodeSerialControllerCaps({
       manager: worktrees,
       cwd: process.cwd(),
-      stateHome: TREVOR_STATE_HOME,
+      stateHome: BELAY_STATE_HOME,
       now: () => new Date().toISOString(),
     });
   }
@@ -94,7 +94,7 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
   async function runSerialNext(runId: string): Promise<void> {
     const reply = replyFor("/serial-next");
     const id = runId.trim();
-    const run = nodeLoadSerialRun(TREVOR_STATE_HOME, id);
+    const run = nodeLoadSerialRun(BELAY_STATE_HOME, id);
     if (!run) {
       await reply.fail(`unknown serial run: ${id}`);
       return;
@@ -120,7 +120,7 @@ export function makeSerialRunCommands(deps: SerialRunCommandsDeps) {
       await reply.fail("usage: /serial-dispose <runId> [fail <reason>]");
       return;
     }
-    const run = nodeLoadSerialRun(TREVOR_STATE_HOME, id);
+    const run = nodeLoadSerialRun(BELAY_STATE_HOME, id);
     if (!run) {
       await reply.fail(`unknown serial run: ${id}`);
       return;

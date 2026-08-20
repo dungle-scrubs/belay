@@ -35,7 +35,7 @@ describe("regression: the sidebar lists ALL projects, not just the current one",
       ],
     );
     const keys = groups.map((g) => g.key).sort();
-    expect(keys).toEqual(["/dev/opchain", "/dev/belay"]);
+    expect(keys).toEqual(["/dev/belay", "/dev/opchain"]);
   });
 
   test("a project with no active sessions still appears (archive-only project is listed)", () => {

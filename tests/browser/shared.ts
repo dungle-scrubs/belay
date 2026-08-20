@@ -12,7 +12,7 @@
  * would fail every story on CI (D-002). The tag's Playwright version is pinned to match the
  * `@playwright/test` / `playwright-core` override in pnpm-workspace.yaml.
  */
-export const PLAYWRIGHT_IMAGE = "mcr.microsoft.com/playwright:v1.50.0-noble";
+export const PLAYWRIGHT_IMAGE = "mcr.microsoft.com/playwright:v1.62.1-noble";
 
 /** The single fixed viewport both lanes render at, so geometry-dependent screenshots and the Lane B
  *  scroll math are deterministic across machines. */

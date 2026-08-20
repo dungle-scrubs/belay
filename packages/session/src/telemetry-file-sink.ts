@@ -11,7 +11,7 @@ import {
 import { createCappedJsonlWriter } from "./telemetry-jsonl";
 
 /**
- * The local FILE telemetry exporter (plan 13 M5). When `TREVOR_OTEL_EXPORTER=file`, a service installs
+ * The local FILE telemetry exporter (plan 13 M5). When `BELAY_OTEL_EXPORTER=file`, a service installs
  * this sink and its spans + metrics are appended as one JSON object per line to
  * `BELAY_STATE_HOME/otel/<service>.jsonl`. This is the free, no-network baseline (escape hatch: local
  * JSONL first, an OTel SDK exporter later) - so a trace is inspectable with `tail -f` and no collector.
@@ -68,7 +68,7 @@ export function createFileSink(opts: FileSinkOptions): FileSink {
 
 /**
  * Builds the telemetry sink a Node service installs at startup, per {@link resolveTelemetryConfig}: a
- * {@link createFileSink} when `TREVOR_OTEL_EXPORTER=file`, otherwise the {@link NOOP_SINK} (the disabled
+ * {@link createFileSink} when `BELAY_OTEL_EXPORTER=file`, otherwise the {@link NOOP_SINK} (the disabled
  * default, and the placeholder for the not-yet-wired `otlp` exporter - M8). The one place a service turns
  * its config into a concrete sink, so instrumentation stays exporter-agnostic.
  */

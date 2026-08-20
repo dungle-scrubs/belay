@@ -5,7 +5,7 @@
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { TREVOR_STATE_HOME } from "@host/boot/paths";
+import { BELAY_STATE_HOME } from "@host/boot/paths";
 import { nodeGitRunner } from "./git-status";
 import { WorktreeManager } from "./manager";
 import type { WorktreeFs } from "./registry";
@@ -32,7 +32,7 @@ export const nodeWorktreeFs: WorktreeFs = {
 export function nodeWorktreeManager(abbrev: (path: string) => string): WorktreeManager {
   return new WorktreeManager({
     fs: nodeWorktreeFs,
-    home: TREVOR_STATE_HOME,
+    home: BELAY_STATE_HOME,
     gitRunnerFor: (cwd) => nodeGitRunner(cwd),
     abbrev,
     realpath: realpathSafe,
