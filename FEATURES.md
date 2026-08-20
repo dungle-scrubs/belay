@@ -5,10 +5,7 @@ This is the **implemented-feature ledger** for Belay: a map of behavior that
 references so a future agent can update it without rediscovering the whole system.
 
 It is **descriptive, not aspirational**. It records what exists now and excludes
-dropped work, unstarted backlog, and roadmap items. Planned work and the architecture /
-roadmap source of truth live under [`.plans/`](.plans/) (the canonical Belay
-umbrella plan plus the numbered feature plans); per the root [`AGENTS.md`](AGENTS.md)
-planning rule, the canonical plan wins when documents disagree. An entry becomes true
+dropped work, unstarted backlog, and roadmap items. An entry becomes true
 here only when the behavior is in code or tests.
 
 ## How to update this ledger
@@ -157,4 +154,4 @@ confirmed while writing this ledger; verify against code/tests before relying on
 
 - Codex provider (`apps/agent-host/src/providers/codex.ts`) — wiring/runtime status.
 - `web_search` and `open-editor` tools — end-to-end availability in the live UI.
-- `/loop` command surface — host wiring vs Storybook-only state (see `.plans/` notes).
+- `/loop` command surface — host wiring vs Storybook-only state.

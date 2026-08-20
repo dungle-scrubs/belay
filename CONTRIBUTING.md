@@ -34,7 +34,7 @@ Breaking changes: `feat!: ...` or `BREAKING CHANGE:` footer.
 
 ## Project conventions
 
-- **Branch per plan:** implementation lives on `feat/<plan-name>` off `main`; plan docs (`.plans/<NN>-name/`) stay on `main`. Do not implement directly on `main`.
+- **Branch per change:** implementation lives on `feat/<name>` off `main`. Do not implement directly on `main`.
 - **Filenames:** kebab-case for source/test/script files. Check with `pnpm check:filenames` (`packages/repo-policy`).
 - **Storage taxonomy:** see `AGENTS.md` — user config under `BELAY_HOME` (`~/.belay`), runtime state under `BELAY_STATE_HOME` (`~/.local/state/belay` via `@belay/session/node-paths`), temp under `tmpdir()`.
 - **Testing:** `unit` (co-located `*.test.ts`), `integration` (`test/` per package), `web` (jsdom), `e2e` (top-level `e2e/`). One runner `vitest run` via projects. See `AGENTS.md#Testing`.

@@ -90,13 +90,12 @@ packages/
   launcher/ server-kit/ sdk/ test-kit/ repo-policy/
 e2e/               # hermetic + live-model lanes (vitest)
 tests/browser/     # Playwright real-browser suite (virtualization, transcript)
-.plans/            # numbered plan-db (backlog, not shipped)
 docs/              # capability manifest, ADRs
 ```
 
 ## Development
 
-- **Branch per plan:** implementation on `feat/<plan-name>` off `main`; plan docs (`.plans/<NN>-name/`) stay on `main`. See `AGENTS.md`.
+- **Branch per change:** implementation on `feat/<name>` off `main`; see `AGENTS.md`.
 - **Filenames:** kebab-case, enforced by `pnpm check:filenames`.
 - **Storage taxonomy:** `BELAY_HOME` / `BELAY_STATE_HOME` / `tmpdir()` — no new dot-dirs without updating `@belay/session/node-paths`.
 - **Testing:** unit (co-located), integration (`test/` per package), web (jsdom), e2e (top-level `e2e/` + `tests/browser`). Single runner: `vitest run` with projects.

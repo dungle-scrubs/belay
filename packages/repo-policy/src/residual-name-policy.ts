@@ -24,10 +24,7 @@ const isMarkdownDoc = (path: string): boolean =>
     path === "FEATURES.md" ||
     path === "SECURITY_RISKS.md" ||
     path.startsWith("docs/") ||
-    path.startsWith("apps/") ||
-    path.startsWith(".plans/46-worktree-fleet/") ||
-    path.startsWith(".plans/48-desktop-shell-tauri/") ||
-    path.startsWith(".plans/49-open-source-launch-readiness/"));
+    path.startsWith("apps/"));
 
 const isClaudeSkill = (path: string): boolean =>
   path.startsWith(".claude/skills/") && path.endsWith("/SKILL.md");
