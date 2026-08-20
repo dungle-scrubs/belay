@@ -12,7 +12,7 @@
 # assistant-ui registry, so run it locally when considering a bump. A non-empty diff
 # for a component means upstream moved; reconcile by hand and update the ledger.
 #
-# Usage: pnpm --filter @trevor/web check:assistant-ui-drift
+# Usage: pnpm --filter @belay/web check:assistant-ui-drift
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

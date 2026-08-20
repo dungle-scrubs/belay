@@ -16,7 +16,7 @@ source "$(dirname "${BASH_SOURCE[0]}")/container.sh"
 docker run --rm --ipc=host \
   -v "$REPO_ROOT":/src:ro \
   "$IMAGE" bash -lc "$CONTAINER_PREP"'
-    pnpm --filter @trevor/web build-storybook
+    pnpm --filter @belay/web build-storybook
     # CI=true -> jest-image-snapshot fails on a drift OR a missing baseline (never writes).
-    CI=true pnpm --filter @trevor/web test-storybook
+    CI=true pnpm --filter @belay/web test-storybook
   '

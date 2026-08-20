@@ -58,12 +58,12 @@ jobs:
         run: pnpm exec playwright install chromium
       # Lane A: build the static Storybook, then screenshot-diff every story against committed baselines.
       - name: Build Storybook
-        run: pnpm --filter @trevor/web build-storybook
+        run: pnpm --filter @belay/web build-storybook
       - name: Lane A - Storybook visual regression
         run: pnpm test-storybook
       # Lane B: build the web app, then drive its transcript pin/stick/no-yank/jump behavior on real layout.
       - name: Build web app
-        run: pnpm --filter @trevor/web build
+        run: pnpm --filter @belay/web build
       - name: Lane B - app transcript-scroll e2e
         run: pnpm test:e2e:browser
       # On any lane failure, upload the expected/actual/diff PNGs + Playwright traces so the regression is
