@@ -1,11 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { TREVOR_STATE_HOME } from "@host/boot/paths";
+import { BELAY_STATE_HOME } from "@host/boot/paths";
 import type { LoopState } from "./domain";
 
 /**
  * Durable `/loop` PERSISTENCE (plan 17, M6): the last-known state of every DURABLE loop, kept in one JSON
- * map under the approved runtime state root ({@link TREVOR_STATE_HOME}, the same home sessions/blobs use).
+ * map under the approved runtime state root ({@link BELAY_STATE_HOME}, the same home sessions/blobs use).
  * A durable loop survives a host restart with its status, counters, and next-run time intact; a `session`
  * loop is never written here. This is the ONLY loop file IO - the store stays transient and calls `save`
  * on each durable change, then rehydrates from `load` at startup, keeping the two clearly separated (D-072).
@@ -31,7 +31,7 @@ export interface LoopPersistence {
  * restore.
  */
 export function createLoopPersistence(
-  filePath: string = join(TREVOR_STATE_HOME, "loops.json"),
+  filePath: string = join(BELAY_STATE_HOME, "loops.json"),
 ): LoopPersistence {
   const readAll = (): Record<string, PersistedLoop> => {
     if (!existsSync(filePath)) {

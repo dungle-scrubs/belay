@@ -68,8 +68,8 @@ test("a tangent send publishes the seeded first prompt into the TANGENT, never t
   const prompt = published.find((e) => e.type === "user.message");
   assert.ok(prompt, "a user.message was published to the tangent");
   // The FIRST prompt folds the seed snapshot in.
-  assert.equal((prompt?.payload as { text?: string }).text, `> ${QUOTE}\n\nwhy sha256?`);
-  assert.equal((prompt?.payload as { provider?: string }).provider, "lmstudio");
+  assert.equal((prompt?.payload as { text?: string })?.text, `> ${QUOTE}\n\nwhy sha256?`);
+  assert.equal((prompt?.payload as { provider?: string })?.provider, "lmstudio");
   // Isolation: nothing was published into the parent session.
   assert.deepEqual(rec.publishedBy("parent"), [], "the parent transcript is never written to");
 });

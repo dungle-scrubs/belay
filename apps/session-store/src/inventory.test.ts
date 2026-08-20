@@ -74,8 +74,8 @@ test("recordAppend folds each event into the row, matching a fresh projectRow sc
   const row = projection.get("s1");
   assert.equal(row?.eventCount, inputs.length);
   assert.equal(row?.updatedAt, "2026-06-24T00:12:00.000Z"); // the last event's timestamp (minute = index)
-  assert.equal((row?.firstUser?.payload as { text?: string }).text, "first"); // set once
-  assert.equal((row?.hostOnline?.payload as { cwd?: string }).cwd, "~/new"); // latest wins
+  assert.equal((row?.firstUser?.payload as { text?: string })?.text, "first"); // set once
+  assert.equal((row?.hostOnline?.payload as { cwd?: string })?.cwd, "~/new"); // latest wins
   assert.deepEqual(
     row?.lifecycle.map((e) => e.type),
     ["assistant.started", "assistant.completed", "user.command"],

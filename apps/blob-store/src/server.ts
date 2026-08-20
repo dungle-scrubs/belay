@@ -18,7 +18,7 @@ import { heicToJpeg, isHeicMime, looksLikeHeic } from "./transcode";
  *   GET  /health           -> { ok: true }   (served by createService)
  */
 export function createBlobServer(root: string, maxBytes: number): Server {
-  // Telemetry is off (NOOP) unless TREVOR_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
+  // Telemetry is off (NOOP) unless BELAY_OTEL_EXPORTER=file selects the local exporter (plan 13 M5).
   const store = new BlobStore(root, createTelemetrySink("blob-store"));
   // The `/blobs/<hash>` matcher (anchors already stripped for mid-pattern embedding) comes from the
   // shared contract, so the route can't drift from the client's path builder.

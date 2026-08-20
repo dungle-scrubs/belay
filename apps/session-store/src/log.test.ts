@@ -144,9 +144,9 @@ test("inventory() gathers per-session aggregates + the title/host/lifecycle sour
   assert.equal(s1?.sessionId, "s1");
   assert.equal(s1?.eventCount, 4);
   assert.equal(s1?.updatedAt, "2026-06-24T00:03:00.000Z");
-  assert.equal((s1?.firstUser?.payload as { text?: string }).text, "hello");
+  assert.equal((s1?.firstUser?.payload as { text?: string })?.text, "hello");
   // latest host.online wins
-  assert.equal((s1?.hostOnline?.payload as { cwd?: string }).cwd, "~/new");
+  assert.equal((s1?.hostOnline?.payload as { cwd?: string })?.cwd, "~/new");
   assert.equal(s1?.lifecycle.length, 1);
   assert.equal(s1?.lifecycle[0]?.type, "assistant.started");
 

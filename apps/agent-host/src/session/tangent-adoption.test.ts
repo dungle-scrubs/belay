@@ -346,7 +346,7 @@ test("a user.cancel hard-cancels the tangent's in-flight run (a cancelled comple
     true,
     "the tangent run was cancelled by the user (ESC)",
   );
-  assert.equal((completed?.payload as { runId?: string }).runId, "r1");
+  assert.equal((completed?.payload as { runId?: string })?.runId, "r1");
 
   adoption.teardownAll();
 });

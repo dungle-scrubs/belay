@@ -138,9 +138,9 @@ test("direct handoff injects the target prompt via the control producer, and the
     CONTROL,
     "prompt rides the control producer, not the host's own id",
   );
-  assert.equal((prompt?.payload as { text?: string }).text, "continue the parser work");
+  assert.equal((prompt?.payload as { text?: string })?.text, "continue the parser work");
   // The source model carries over onto the target prompt.
-  assert.deepEqual((prompt?.payload as { model?: unknown }).model, {
+  assert.deepEqual((prompt?.payload as { model?: unknown })?.model, {
     sourceId: "zai",
     modelId: "glm-5.2",
     reasoning: "xhigh",
@@ -155,13 +155,13 @@ test("direct handoff injects the target prompt via the control producer, and the
   assert.ok(source.some((e) => e.type === "handoff.requested"));
   assert.ok(source.some((e) => e.type === "handoff.accepted"));
   const sw = source.find((e) => e.type === "session.switch");
-  assert.equal((sw?.payload as { sessionId?: string }).sessionId, "tgt");
+  assert.equal((sw?.payload as { sessionId?: string })?.sessionId, "tgt");
 
   // The faithful end: replay the target log through the real scheduler. The injected prompt IS started.
   const started = replayAndSchedule(target);
   assert.equal(started.length, 1, "the target host schedules exactly the injected prompt");
   assert.equal(started[0]?.type, "user.message");
-  assert.equal((started[0]?.payload as { text?: string }).text, "continue the parser work");
+  assert.equal((started[0]?.payload as { text?: string })?.text, "continue the parser work");
 });
 
 test("generated handoff: an APPROVED draft runs in the target via the shared finalized execution (02.10)", async () => {
@@ -187,14 +187,14 @@ test("generated handoff: an APPROVED draft runs in the target via the shared fin
   const prompt = target.find((e) => e.type === "user.message");
   assert.equal(prompt?.producerId, CONTROL, "the approved prompt rides the control producer");
   assert.equal(
-    (prompt?.payload as { text?: string }).text,
+    (prompt?.payload as { text?: string })?.text,
     "Approved: finish the emitter, then wire the CLI.",
   );
   // The faithful end: the target host schedules exactly the approved prompt.
   const started = replayAndSchedule(target);
   assert.equal(started.length, 1, "the target host runs the approved prompt");
   assert.equal(
-    (started[0]?.payload as { text?: string }).text,
+    (started[0]?.payload as { text?: string })?.text,
     "Approved: finish the emitter, then wire the CLI.",
   );
 });

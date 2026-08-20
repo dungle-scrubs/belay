@@ -61,7 +61,7 @@ async function put(body: string): Promise<void> {
 
 test("the file exporter writes bounded blob-store telemetry through a real HTTP round-trip", async () => {
   stateHome = tempDir("belay-telem-e2e-");
-  setEnv({ BELAY_STATE_HOME: stateHome, TREVOR_OTEL_EXPORTER: "file" });
+  setEnv({ BELAY_STATE_HOME: stateHome, BELAY_OTEL_EXPORTER: "file" });
   blob = await bootBlob();
   await put("secret telemetry e2e blob body");
 
@@ -86,7 +86,7 @@ test("with telemetry disabled (the default), a booted service writes no otel art
   stateHome = tempDir("belay-telem-e2e-");
   setEnv({
     BELAY_STATE_HOME: stateHome,
-    TREVOR_OTEL_EXPORTER: undefined,
+    BELAY_OTEL_EXPORTER: undefined,
     TREVOR_SENTRY_DSN: undefined,
   });
   blob = await bootBlob();

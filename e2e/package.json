@@ -15,7 +15,7 @@
     "@belay/session-store": "workspace:*",
     "@belay/test-kit": "workspace:*",
     "@belay/web": "workspace:*",
-    "effect": "^3.21.4"
+    "effect": "^3.22.1"
   },
   "devDependencies": {
     "@types/node": "^26.0.0",

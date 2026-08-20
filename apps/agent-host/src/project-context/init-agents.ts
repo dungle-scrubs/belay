@@ -115,8 +115,8 @@ export function buildAgentsDraft(evidence: InitEvidence): string {
       ? `- Existing scoped instructions: ${evidence.existingAgents.map((file) => `\`${file}\``).join(", ")}`
       : "- Existing scoped instructions: none detected.",
     evidence.rules.length > 0
-      ? `- Trevor rules: ${evidence.rules.map((file) => `\`${file}\``).join(", ")}`
-      : "- Trevor rules: none detected.",
+      ? `- Belay rules: ${evidence.rules.map((file) => `\`${file}\``).join(", ")}`
+      : "- Belay rules: none detected.",
     "",
     "## Commands",
   ];

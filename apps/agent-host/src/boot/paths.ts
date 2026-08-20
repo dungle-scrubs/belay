@@ -7,7 +7,6 @@ import {
   type RootCategoryId,
   resolveRootPolicy,
   rootCategory,
-  BELAY_STATE_HOME as TREVOR_STATE_HOME,
 } from "@belay/session/node-paths";
 
 // `@belay/session/node-paths` OWNS root resolution (the env overrides, the default directory names,
@@ -16,7 +15,6 @@ import {
 export {
   BELAY_HOME,
   BELAY_STATE_HOME,
-  BELAY_STATE_HOME as TREVOR_STATE_HOME,
   type RootCategory,
   type RootCategoryId,
   resolveRootPolicy,

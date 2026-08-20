@@ -3,7 +3,7 @@ import { type SanitizableSentryEvent, scrubSentryEvent } from "@belay/session/te
 
 /**
  * Browser Sentry ERROR-sink bootstrap (plan 13 M10). Mirrors the host's Node sink: opt-in + errors-only.
- * It initializes ONLY when `VITE_TREVOR_SENTRY_DSN` is configured (and `resolveTelemetryConfig` forces it
+ * It initializes ONLY when `VITE_BELAY_SENTRY_DSN` is configured (and `resolveTelemetryConfig` forces it
  * null under test/CI), with tracing / session-replay / profiling / logs all OFF, and every event scrubbed
  * by the shared {@link scrubSentryEvent} `beforeSend` - so a browser event never carries a prompt,
  * transcript body, artifact bytes, or a raw URL. The `@sentry/react` module is injected so this gating is
@@ -13,7 +13,7 @@ import { type SanitizableSentryEvent, scrubSentryEvent } from "@belay/session/te
 export interface BrowserSentryInitOptions {
   readonly dsn: string;
   readonly environment: string;
-  /** The release tag (`VITE_TREVOR_RELEASE` / `SENTRY_RELEASE`) when configured, for issue grouping (M11). */
+  /** The release tag (`VITE_BELAY_RELEASE` / `SENTRY_RELEASE`) when configured, for issue grouping (M11). */
   readonly release?: string;
   readonly tracesSampleRate: 0;
   readonly replaysSessionSampleRate: 0;
@@ -44,7 +44,7 @@ export function bootstrapBrowserSentry(
     captureFn = null;
     return false;
   }
-  const release = env.VITE_TREVOR_RELEASE ?? env.SENTRY_RELEASE;
+  const release = env.VITE_BELAY_RELEASE ?? env.SENTRY_RELEASE;
   api.init({
     dsn: config.webSentryDsn,
     environment: env.MODE ?? env.NODE_ENV ?? "production",
