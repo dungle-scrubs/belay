@@ -11,7 +11,7 @@
     "@belay/test-kit": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.2.0",
     "typescript": "^6.0.3"
   }
 }
