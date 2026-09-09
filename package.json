@@ -43,7 +43,7 @@
     "@playwright/test": "1.50.0",
     "@typescript/native-preview": "7.0.0-dev.20260621.1",
     "@vitest/coverage-v8": "^4.1.10",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.5",
     "lefthook": "^2.1.10",
     "tsx": "^4.23.12",
     "typescript": "^6.0.3",
