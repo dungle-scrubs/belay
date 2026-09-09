@@ -91,19 +91,19 @@ const ID_FORMS: ReadonlyArray<{ readonly sent: string; readonly resolvesTo: stri
   { sent: " 2 ", resolvesTo: "task_2" }, // stray surrounding whitespace
 ];
 
-test.each(ID_FORMS)("task_update tolerates id form $sent -> $resolvesTo", async ({
-  sent,
-  resolvesTo,
-}) => {
-  const { registry, emitted } = wireStream();
-  const [create, update] = buildTaskTools(registry);
-  await Effect.runPromise(create.execute({ subject: "a" })); // task_1
-  await Effect.runPromise(create.execute({ subject: "b" })); // task_2
+test.each(ID_FORMS)(
+  "task_update tolerates id form $sent -> $resolvesTo",
+  async ({ sent, resolvesTo }) => {
+    const { registry, emitted } = wireStream();
+    const [create, update] = buildTaskTools(registry);
+    await Effect.runPromise(create.execute({ subject: "a" })); // task_1
+    await Effect.runPromise(create.execute({ subject: "b" })); // task_2
 
-  await Effect.runPromise(update.execute({ updates: [{ taskId: sent, status: "completed" }] }));
+    await Effect.runPromise(update.execute({ updates: [{ taskId: sent, status: "completed" }] }));
 
-  assert.equal(statusOf(freshestTasks(emitted), resolvesTo), "completed");
-});
+    assert.equal(statusOf(freshestTasks(emitted), resolvesTo), "completed");
+  },
+);
 
 test("a genuinely unknown id is reported as a per-entry failure and emits nothing (never over-matches)", async () => {
   const { registry, emitted } = wireStream();

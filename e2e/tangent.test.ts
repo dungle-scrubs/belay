@@ -129,7 +129,7 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
   // The tangent ran its OWN turn: lineage marker + the seeded prompt + an assistant reply.
   assert.ok(tangentLog.some((e) => e.type === "session.tangentOf"));
   const prompt = tangentLog.find((e) => e.type === "user.message");
-  assert.equal((prompt?.payload as { text?: string }).text, firstPrompt);
+  assert.equal((prompt?.payload as { text?: string })?.text, firstPrompt);
   const completed = tangentLog.find((e) => e.type === "assistant.completed");
   assert.ok(String(completed?.payload.text ?? "").includes("idempotent"));
 

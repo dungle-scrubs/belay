@@ -14,7 +14,8 @@
     <path d="M16 10a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 14.286V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
   <path d="M20 9a2 2 0 0 1 2 2v10.286a.71.71 0 0 1-1.212.502l-2.202-2.202A2 2 0 0 0 17.172 19H10a2 2 0 0 1-2-2v-1" />     Lucide inner SVG nodes (paths/circles), stroke inherited
 -->
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="belay-mark-title">
+  <title id="belay-mark-title">Belay</title>
   <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="#4F46E5"/>
   <g transform="translate(234 234) scale(23.167)"
      fill="none" stroke="#FFFFFF" stroke-width="2"
