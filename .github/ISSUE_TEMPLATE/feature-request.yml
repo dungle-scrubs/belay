@@ -1,0 +1,23 @@
+name: Feature request
+description: Suggest a capability or change to Belay
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve
+      description: Describe the situation you hit, not the solution you have in mind. What were you trying to do when the current behavior got in the way?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like to happen
+      description: Your proposed behavior, if you have one in mind.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Workarounds you tried, and why they were not enough.

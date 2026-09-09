@@ -1,60 +1,107 @@
 # Contributing to Belay
 
-Thanks for considering a contribution.
+Thanks for your interest in Belay. This guide covers the setup, the checks that
+must pass, and the commit conventions the release automation depends on.
 
-## Quick start
+## Prerequisites
+
+- **Node.js 22 or newer.** CI runs Node 24, because `node:sqlite` (used by the
+  session store's log) is stable there. Match it locally if you can.
+- **pnpm 11.5.2**, pinned via the `packageManager` field. Run `corepack enable`
+  and pnpm will select the right version automatically.
+
+## Setup
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm lint        # Biome + filename policy
-pnpm -r typecheck
-pnpm test:unit
-pnpm test:integration  # real SQLite + ephemeral ports
-pnpm test:web
-pnpm test:e2e          # hermetic (fake provider)
-pnpm test:e2e:browser  # real browser, needs Playwright browsers
+pnpm install
 ```
 
-Pre-commit hooks run via `lefthook` (Biome, typecheck, filename policy, unit). Install with `lefthook install` (runs automatically via `prepare`).
+This also installs the [lefthook](https://github.com/evilmartians/lefthook)
+pre-commit hooks via the `prepare` script.
 
-## Commit style
+## Running the app
 
-We use Conventional Commits. This enables `release-please` automation:
+```bash
+pnpm dev        # session store, blob store, agent host, and web UI together
+pnpm dev:web    # web UI only
+pnpm belay      # the CLI
+```
 
-- `feat:` — new capability
-- `fix:` — bug fix
-- `docs:` — docs only
-- `chore:` — tooling, deps
-- `refactor:` — no user-visible change
-- `test:` — tests only
+## Checks
 
-Include scope when helpful: `feat(web): ...`, `fix(agent-host): ...`.
+Every one of these runs in CI, so run them before opening a pull request.
 
-Breaking changes: `feat!: ...` or `BREAKING CHANGE:` footer.
+```bash
+pnpm lint             # Biome, plus the repo filename and residual-name policies
+pnpm format           # Biome autofix
+pnpm -r typecheck     # TypeScript across every workspace package
+pnpm test             # the full Vitest suite
+```
 
-## Project conventions
+The suite is split into lanes you can run individually:
 
-- **Branch per change:** implementation lives on `feat/<name>` off `main`. Do not implement directly on `main`.
-- **Filenames:** kebab-case for source/test/script files. Check with `pnpm check:filenames` (`packages/repo-policy`).
-- **Storage taxonomy:** see `AGENTS.md` — user config under `BELAY_HOME` (`~/.belay`), runtime state under `BELAY_STATE_HOME` (`~/.local/state/belay` via `@belay/session/node-paths`), temp under `tmpdir()`.
-- **Testing:** `unit` (co-located `*.test.ts`), `integration` (`test/` per package), `web` (jsdom), `e2e` (top-level `e2e/`). One runner `vitest run` via projects. See `AGENTS.md#Testing`.
-- **Web UI:** prefer optimistic updates (see `apps/web/src/sidebar/use-project-sidebar.ts`).
+| Command | Covers |
+|---------|--------|
+| `pnpm test:unit` | Pure unit tests |
+| `pnpm test:integration` | Cross-module integration |
+| `pnpm test:web` | `apps/web` component tests (jsdom) |
+| `pnpm test:e2e` | Hermetic end-to-end |
+| `pnpm test:e2e:browser` | Real-browser transcript behavior |
+| `pnpm test-storybook` | Storybook visual regression |
+
+The browser lanes are **local-only and never run in CI**. They execute inside the
+pinned `mcr.microsoft.com/playwright:v1.62.1-noble` container via
+`tests/browser/check-storybook-baselines.sh`, which requires Docker.
+
+That image is multi-arch, so it resolves to arm64 on Apple Silicon and amd64 on
+an x86 machine, and font rasterization differs between the two. Committed
+baselines are therefore only comparable on the architecture that produced them -
+which is why the lane does not run on a cloud runner. Regenerate baselines with
+`tests/browser/update-storybook-baselines.sh` and review the diff before
+committing.
+
+## Repository policies
+
+`pnpm lint` enforces two project-specific rules beyond Biome:
+
+- **Filenames are kebab-case.** All repo-owned files.
+- **No residual pre-rename naming.** Docs and Claude skill files must use the
+  Belay name. Genuine history (`trevor_legacy` paths, prose about the retired
+  project) is allowed; new uses of the old name are not.
+
+## Commit messages
+
+Belay uses [Conventional Commits](https://www.conventionalcommits.org/). The
+release automation reads these prefixes to decide version bumps and to build the
+changelog, so the prefix matters:
+
+| Prefix | Changelog section | Version effect (pre-1.0) |
+|--------|-------------------|--------------------------|
+| `feat:` | Added | patch |
+| `fix:` | Fixed | patch |
+| `perf:`, `refactor:`, `deps:`, `docs:`, `chore:`, `ci:`, `test:` | Changed | patch |
+| any type with `!` or a `BREAKING CHANGE:` footer | - | minor |
+
+While Belay is pre-1.0, breaking changes bump the minor version and features
+bump the patch version, keeping version churn low during rapid development.
+
+Scope the subject where it helps, and keep it lowercase with no trailing period:
+
+```
+feat(web): add transcript jump-to-latest affordance
+fix(agent-host): stop dropping host-injected control prompts
+```
 
 ## Pull requests
 
-1. Branch from `main`, keep changes focused.
-2. Ensure `pnpm lint && pnpm -r typecheck && pnpm test` passes locally.
-3. Describe behavior + anchor to implementation (`apps/...`, `packages/...`) and plan if applicable.
-4. For browser-visible fixes (scroll, virtualization, snapshots), include browser verification or Playwright trace.
+Branch off `main`, keep one logical change per branch, and make sure `pnpm lint`,
+`pnpm -r typecheck`, and `pnpm test` all pass. Fill in the pull request template
+so reviewers know what changed and how it was verified.
 
-## Reporting issues
+## Releases
 
-Use the issue templates in `.github/ISSUE_TEMPLATE/` — bug report or feature request.
-
-## Security
-
-Do not file public issues for vulnerabilities. See `SECURITY.md`.
-
-## License
-
-By contributing you agree your contribution is licensed under the `MIT` License (`LICENSE`).
+Releases are automated with
+[release-please](https://github.com/googleapis/release-please). Merging to `main`
+opens or updates a release pull request that accumulates the changelog; merging
+that pull request tags the version and publishes the GitHub release. Do not edit
+`CHANGELOG.md` version sections by hand.

@@ -1,21 +1,17 @@
-<!--- Provide a concise summary of the change -->
+## What changed
 
-## What
+<!-- What this does and why. If it fixes an issue, link it: "Fixes #123". -->
 
-## Why
+## How it was verified
 
-## How (implementation anchor)
-
-## Testing
+<!-- The commands you ran and what they showed. If something is untested, say so
+     here rather than leaving it implied. -->
 
 - [ ] `pnpm lint`
 - [ ] `pnpm -r typecheck`
-- [ ] `pnpm test:unit`
-- [ ] `pnpm test:integration` / `pnpm test:web` / `pnpm test:e2e` as relevant
-- [ ] Browser verification if scroll/virtualization/snapshot affected
+- [ ] `pnpm test`
 
-## Checklist
+## Notes for reviewers
 
-- [ ] Conventional Commits prefix (`feat:`, `fix:`, `chore:`, etc.)
-- [ ] `FEATURES.md` updated if user-visible behavior changed
-- [ ] No secrets in diff (`trufflehog git file://. --only-verified`)
+<!-- Anything that would be hard to infer from the diff: a decision you weighed,
+     a deliberate omission, a follow-up you left for later. Delete if empty. -->

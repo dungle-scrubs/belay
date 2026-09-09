@@ -1,50 +1,54 @@
 # Security Policy
 
-## Supported Versions
+## Reporting a vulnerability
 
-| Version | Supported          |
-| ------- | ------------------ |
-| main    | :white_check_mark: |
+Please do not open a public issue for a security vulnerability.
 
-We track `main` only. Pin to a commit SHA for production use until versioned releases land.
+Report it privately through GitHub's
+[private vulnerability reporting](https://github.com/dungle-scrubs/belay/security/advisories/new).
+This creates a draft advisory visible only to the maintainers.
 
-## Reporting a Vulnerability
+Include what you have: the affected component, what an attacker can do, and the
+steps or proof-of-concept needed to reproduce it. A short report you can write
+today is more useful than a thorough one you never send.
 
-Please do not open a public issue. Instead:
+You can expect an acknowledgement within a week. If a report is confirmed, the
+fix and the advisory are published together.
 
-1. Email `kevinfrilot@icloud.com` with subject `SECURITY: belay`.
-2. Include a minimal reproduction, impact, and affected commit/branch.
-3. Allow up to 7 days for an initial response, 30 days for a fix window.
+## Supported versions
 
-We will credit reporters in `CHANGELOG.md` unless you ask to stay anonymous.
+Belay is pre-1.0 and under active development. Only the latest release on `main`
+receives security fixes.
 
-## Secret Handling
+## Known limitations - read before reporting
 
-- Verified secrets scanning runs via TruffleHog:
-  - Local: `lefthook` `pre-push` runs `trufflehog git file://. --only-verified --no-update --fail`
-  - CI suggestion: add `trufflesecurity/trufflehog` action on PR if you fork
-- Current scan (2026-08-14, TruffleHog 3.93.8): `verified_secrets: 0` (`71551041` bytes, `21994` chunks)
-- No `.env` files are committed; `.gitignore` excludes `.env*` (allowlist `.env.example` only)
+Belay is currently a **trusted local developer tool**. It is not hardened
+against a hostile browser, a malicious extension, a malicious local webpage, or
+another user on a shared machine.
 
-## Known Dependency Risk (2026-08-14)
+[`SECURITY_RISKS.md`](./SECURITY_RISKS.md) enumerates the weaknesses that are
+already known and accepted under that assumption - unauthenticated local
+services, permissive CORS, a forgeable client-supplied `producerId`, and a
+shell lane guarded by a deny-list rather than a sandbox. These are tracked, not
+secrets, and a report restating one of them tells us nothing new. What is
+valuable is a concrete escalation beyond the trusted-local threat model, or a
+weakness that document does not already cover.
 
-`pnpm audit` after patch updates reports **23 advisories** (down from 40 on 2026-08-14) — mostly transitive via `apps/web` (`@storybook/test-runner > jest > glob > brace-expansion`) and `apps/agent-host > @earendil-works/pi-ai > @modelcontextprotocol/sdk > hono/undici`:
+## Scope
 
-- `playwright <1.55.1` (GHSA-7mvr-c777-76hp, high) — resolved: the browser lane now pins `1.62.1` everywhere (pnpm override + `mcr.microsoft.com/playwright:v1.62.1-noble` container, guarded by `e2e/browser-ci-config.test.ts`). Screenshot baselines must be refreshed inside that same container (plan 09.2 D-002).
-- `brace-expansion <1.1.18 / <2.1.4 / <5.0.9`, `js-yaml <3.15.1`, `nanoid <3.3.18 / <5.1.16`, `undici <7.29.0`, `postcss <8.5.18`, `shell-quote <1.8.5`, `uuid <11.1.1` — transitive via Storybook/Jest and `pi-ai` SDK. Direct `mermaid`+`dompurify` patched (`mermaid ^11.16.1`, `dompurify ^3.4.13`); remaining require upstream `@storybook/test-runner` and `@earendil-works/pi-ai` releases. Tracked; patch when upstream ships compatible major.
+Belay runs AI agents against a local workspace with real filesystem, shell, and
+network reach. An agent executing a tool the operator approved is the product
+working as designed, not a vulnerability.
 
-Run before release:
+Findings that are in scope include:
 
-```bash
-pnpm install
-pnpm audit
-pnpm outdated
-trufflehog git file://. --only-verified --no-update --fail
-```
-
-## Hardening Checklist for Forks
-
-- Enable GitHub: Settings -> Code security and analysis -> Dependabot alerts, Secret scanning, Push protection
-- Enable branch protection on `main` (require PR, dismiss stale reviews)
-- Set Actions permissions to least-privilege (`read` default already; restrict `allowed_actions` to `selected` if you use private actions)
-- Keep `TREVOR_HOME` / `TREVOR_STATE_HOME` out of backups/sync
+- Sandbox escapes: a tool script reaching outside its declared read and write
+  roots.
+- Approval bypasses: an action taking effect without the operator confirmation
+  it requires.
+- Confused-deputy issues: untrusted content in a transcript, tool result, or
+  MCP response steering the agent into privileged actions on its own.
+- Secret disclosure: credentials leaking into logs, telemetry, blobs, or the
+  session transcript.
+- Authentication or isolation flaws in the session store, blob store, or the
+  Tether transport between participants.

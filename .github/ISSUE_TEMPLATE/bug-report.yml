@@ -1,0 +1,64 @@
+name: Bug report
+description: Something in Belay behaves differently than it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, check [`SECURITY_RISKS.md`](../blob/main/SECURITY_RISKS.md)
+        if this is security-related - do not report vulnerabilities here, use
+        [private reporting](../security/advisories/new) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you observed, and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: The smallest sequence that reliably triggers it.
+      placeholder: |
+        1. Start `pnpm dev`
+        2. Open a session in ...
+        3. ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Where the problem shows up. Pick the closest match.
+      options:
+        - Web UI (apps/web)
+        - Agent host (apps/agent-host)
+        - CLI (apps/belay-cli)
+        - Session store (apps/session-store)
+        - Blob store (apps/blob-store)
+        - Supervisor (apps/supervisor)
+        - SDK (packages/sdk)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS and version, Node version (`node -v`), pnpm version, and the Belay commit or version.
+      placeholder: |
+        macOS 15.5, Node 24.3.0, pnpm 11.5.2, belay @ 127225a0
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or output
+      description: Relevant output. Redact anything sensitive - API keys, absolute paths you would rather not share, transcript contents.
+      render: shell

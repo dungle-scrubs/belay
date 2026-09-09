@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "description": "Local-first agent workspace - React web UI + Effect agent host over a durable SQLite log",
+  "description": "A browser UI and an agent host that communicate only through a durable session log.",
   "license": "MIT",
   "repository": {
     "type": "git",
