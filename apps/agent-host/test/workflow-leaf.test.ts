@@ -65,7 +65,7 @@ describe("runAgentLeaf", () => {
       .publishedBy("child")
       .filter((event) => event.type === "user.message");
     expect(userMessages).toHaveLength(1);
-    expect((userMessages[0]?.payload as { text: string }).text).toBe("do the thing");
+    expect((userMessages[0]?.payload as { text: string })?.text).toBe("do the thing");
   });
 
   test("opts.schema returns a validated object", async () => {
@@ -88,6 +88,6 @@ describe("runAgentLeaf", () => {
     await Effect.runPromise(runAgentLeaf(host, { ...baseRequest, provider: answering("ok") }));
     const links = recording.publishedBy("parent").filter((event) => event.type === "delegated.to");
     expect(links.length).toBeGreaterThanOrEqual(2);
-    expect((links.at(-1)?.payload as { status: string }).status).toBe("done");
+    expect((links.at(-1)?.payload as { status: string })?.status).toBe("done");
   });
 });

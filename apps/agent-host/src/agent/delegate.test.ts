@@ -108,7 +108,7 @@ test("a delegation creates an isolated child session seeded with only the task",
   const childLog = t.publishedBy("child-0");
   const first = childLog[0];
   assert.equal(first?.type, "user.message", "the child's first event is the seeded task");
-  assert.equal((first?.payload as { text?: string }).text, "find the auth code");
+  assert.equal((first?.payload as { text?: string })?.text, "find the auth code");
   // The child ran its own turn in its own session.
   assert.ok(
     childLog.some((e) => e.type === "assistant.completed"),
@@ -355,7 +355,7 @@ test("the verifier reviews in an isolated child and its verdict folds back to th
   // Independent review, not self-validation: it ran in its OWN isolated child session seeded with
   // ONLY the task (no parent transcript), and read-only so it could never edit the work it judged.
   const childLog = t.publishedBy("child-0");
-  assert.equal((childLog[0]?.payload as { text?: string }).text, "verify the change in src/x.ts");
+  assert.equal((childLog[0]?.payload as { text?: string })?.text, "verify the change in src/x.ts");
   assert.ok(offered.includes("read"), "the verifier keeps read-only tools");
   for (const mut of ["write", "edit", "bash"]) {
     assert.ok(!offered.includes(mut), `the verifier cannot mutate via ${mut}`);
@@ -626,8 +626,8 @@ test("delegate_background returns immediately with an ack and starts a tracked c
   // The child runs to completion and lands a terminal link on the parent (the late result).
   await bg.drain();
   const links = t.publishedBy("parent-session").filter((e) => e.type === "delegated.to");
-  assert.equal((links.at(-1)?.payload as Record<string, unknown>).status, "done");
-  assert.equal((links.at(-1)?.payload as Record<string, unknown>).result, "found it");
+  assert.equal((links.at(-1)?.payload as Record<string, unknown>)?.status, "done");
+  assert.equal((links.at(-1)?.payload as Record<string, unknown>)?.result, "found it");
 });
 
 test("delegate_background is rejected past the cap (and does not start a child)", async () => {

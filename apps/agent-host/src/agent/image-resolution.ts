@@ -27,11 +27,33 @@ export type HistoryImageResolver = (
 ) => Promise<readonly ChatMessage[]>;
 
 /**
- * Verifies bytes actually decode as an image (via `sips`). A corrupt image is the worst
+ * Verifies bytes actually decode as an image (via `sips` on macOS). A corrupt image is the worst
  * case for a vision model: LM Studio doesn't error on it, it just returns an EMPTY response -
  * so one bad upload silently kills the turn. We skip such images instead.
+ *
+ * `sips` exists only on macOS; off macOS (Linux CI, Linux hosts) the header sniff below stands in
+ * for the full decode check - it rejects non-image bytes while accepting the four model-image
+ * formats, which is what the runtime policy needs where no decoder is guaranteed.
  */
+export function hasModelImageHeader(bytes: Uint8Array): boolean {
+  const startsWith = (offset: number, ...sig: number[]): boolean =>
+    sig.every((byte, index) => bytes[offset + index] === byte);
+  return (
+    // PNG: 89 50 4E 47 0D 0A 1A 0A
+    startsWith(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a) ||
+    // JPEG: FF D8 FF
+    startsWith(0, 0xff, 0xd8, 0xff) ||
+    // GIF87a / GIF89a
+    startsWith(0, 0x47, 0x49, 0x46, 0x38) ||
+    // WebP: RIFF….….WEBP
+    (startsWith(0, 0x52, 0x49, 0x46, 0x46) && startsWith(8, 0x57, 0x45, 0x42, 0x50))
+  );
+}
+
 async function decodes(bytes: Uint8Array): Promise<boolean> {
+  if (process.platform !== "darwin") {
+    return hasModelImageHeader(bytes);
+  }
   let dir: string | undefined;
   try {
     dir = await mkdtemp(join(tmpdir(), "img-check-"));

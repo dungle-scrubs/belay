@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { ArtifactRef } from "@belay/session";
 import { afterEach, test } from "vitest";
-import { createHistoryImageResolver } from "./image-resolution";
+import { createHistoryImageResolver, hasModelImageHeader } from "./image-resolution";
 
 const ONE_BY_ONE_PNG = Uint8Array.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
@@ -43,6 +43,22 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
+});
+
+test("the off-macOS decode fallback accepts the four model-image formats and rejects the rest", () => {
+  // PNG (the real 1x1 fixture), JPEG SOI+APP0, GIF89a, and RIFF/WEBP pass; junk and PDF bytes fail.
+  const jpeg = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+  const gif = Uint8Array.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 0x01, 0x00]);
+  const webp = Uint8Array.from([
+    0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+  ]);
+  const pdf = Uint8Array.from([0x25, 0x50, 0x4b, 0x44, 0x46, 0x2d]);
+  assert.equal(hasModelImageHeader(ONE_BY_ONE_PNG), true);
+  assert.equal(hasModelImageHeader(jpeg), true);
+  assert.equal(hasModelImageHeader(gif), true);
+  assert.equal(hasModelImageHeader(webp), true);
+  assert.equal(hasModelImageHeader(Uint8Array.from([1, 2, 3, 4])), false);
+  assert.equal(hasModelImageHeader(pdf), false);
 });
 
 test("history image resolution uses shared artifact runtime policy and skips invalid images", async () => {
