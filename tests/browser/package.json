@@ -6,12 +6,12 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@playwright/test": "1.62.1",
+    "@playwright/test": "1.63.0",
     "@belay/session": "workspace:*",
     "@belay/test-kit": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "^26.0.0",
+    "@types/node": "^26.4.1",
     "typescript": "^6.0.3"
   }
 }
