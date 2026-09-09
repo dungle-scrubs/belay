@@ -5,7 +5,7 @@ import { BROWSER_VIEWPORT } from "./shared";
 // The runner (run-browser-e2e.ts) boots the store, picks a FREE preview port (so it never collides with
 // a dev server on the reserved web port), and exports it + VITE_SESSION_PROXY. `vite preview` serves the
 // built app there and proxies /sessions to the ephemeral store.
-const WEB_PORT = process.env.TREVOR_E2E_WEB_PORT ?? "17431";
+const WEB_PORT = process.env.BELAY_E2E_WEB_PORT ?? "17431";
 const APP_URL = `http://127.0.0.1:${WEB_PORT}`;
 const WEB_DIR = fileURLToPath(new URL("../../apps/web", import.meta.url));
 

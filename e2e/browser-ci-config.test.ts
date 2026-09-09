@@ -5,57 +5,52 @@ import { test } from "vitest";
 import { PLAYWRIGHT_IMAGE } from "../tests/browser/shared";
 
 /**
- * Plan 09.2 M0: a config guard (not a browser test - reads the workflow file) that fails if the browser
- * lane stops running inside the pinned Playwright container on ubuntu. Container-rendered screenshots are
- * what make the committed baselines match CI (D-002); dropping the container would silently flake every
- * story, so this keeps it self-guarding inside `pnpm test`.
+ * Config guard (not a browser test - reads the workflow and script files) for the browser lane's
+ * placement.
+ *
+ * The browser lane is LOCAL-ONLY and must never run on a cloud runner. Pinning the Playwright image tag
+ * fixes the Playwright version but NOT the CPU architecture: the image is multi-arch, so it resolves to
+ * arm64 on an Apple Silicon workstation and to amd64 on a GitHub runner. Font rasterization differs
+ * between them, so container-rendered baselines are only comparable against runs on the same
+ * architecture as the machine that wrote them. Running the lane in both places would diff arm64
+ * baselines against amd64 renders and flake every story.
+ *
+ * The committed baselines are therefore generated and verified locally through
+ * tests/browser/{update,check}-storybook-baselines.sh, which share the pinned image via container.sh.
  */
 
-const ci = readFileSync(
-  fileURLToPath(new URL("../.github/workflows/ci.yml", import.meta.url)),
-  "utf8",
-);
+const workflowSource = (name: string): string =>
+  readFileSync(fileURLToPath(new URL(`../.github/workflows/${name}`, import.meta.url)), "utf8");
 
-/** The `browser:` job block, from its header to the next top-level job (2-space indent) or EOF. */
-function browserJob(): string {
-  const start = ci.indexOf("\n  browser:");
-  assert.notEqual(start, -1, "ci.yml must define a `browser` job");
-  const rest = ci.slice(start + 1);
-  const next = rest.slice(1).search(/\n {2}\w[\w-]*:/u);
-  return next === -1 ? rest : rest.slice(0, next + 1);
-}
+test("no CI workflow runs Playwright on a cloud runner", () => {
+  for (const name of ["ci.yml", "release.yml"]) {
+    const contents = workflowSource(name);
+    assert.ok(
+      !/playwright/iu.test(contents),
+      `${name} must not reference Playwright - the browser lane is local-only (arch-sensitive baselines)`,
+    );
+    assert.ok(
+      !/test-storybook|test:e2e:browser/u.test(contents),
+      `${name} must not run a browser lane step - run it locally instead`,
+    );
+  }
+});
 
-test("the browser lane runs in the pinned Playwright container on ubuntu-latest", () => {
-  const job = browserJob();
-  assert.match(job, /runs-on: ubuntu-latest/u, "the browser job runs on ubuntu-latest");
+test("the CI workflow still runs the hermetic node/jsdom lanes", () => {
+  const ci = workflowSource("ci.yml");
+  for (const step of ["pnpm lint", "pnpm test:unit", "pnpm test:integration", "pnpm test:web"]) {
+    assert.ok(ci.includes(step), `ci.yml must keep running \`${step}\``);
+  }
+});
+
+test("the local baseline scripts pin the same Playwright container as PLAYWRIGHT_IMAGE", () => {
+  // container.sh holds the image for all three baseline scripts, so one assertion covers them.
+  const contents = readFileSync(
+    fileURLToPath(new URL("../tests/browser/container.sh", import.meta.url)),
+    "utf8",
+  );
   assert.ok(
-    job.includes(PLAYWRIGHT_IMAGE),
-    `the browser job must run inside the pinned container ${PLAYWRIGHT_IMAGE} (D-002)`,
+    contents.includes(PLAYWRIGHT_IMAGE),
+    `container.sh must pin ${PLAYWRIGHT_IMAGE} (keep it in sync with tests/browser/shared.ts)`,
   );
 });
-
-test("the browser job runs Lane A (Storybook visual regression) as a required per-PR pass", () => {
-  const job = browserJob();
-  assert.match(job, /build-storybook/u, "it builds the static Storybook first");
-  assert.match(job, /test-storybook/u, "it runs the Storybook visual-regression lane");
-});
-
-test("the browser job uploads diff/trace artifacts on failure so a regression is eyeballable", () => {
-  const job = browserJob();
-  assert.match(job, /if:\s*failure\(\)/u, "an on-failure artifact upload step exists");
-  assert.match(job, /upload-artifact/u);
-});
-
-// The image tag can't be imported into YAML/bash, so every place that re-spells it is guarded here
-// against drifting from the PLAYWRIGHT_IMAGE source of truth. (container.sh holds it for all 3 baseline
-// scripts, so one assertion covers them.)
-test.each(["../.github/workflows/nightly-perf.yml", "../tests/browser/container.sh"])(
-  "%s pins the same Playwright container as PLAYWRIGHT_IMAGE (D-002)",
-  (rel) => {
-    const contents = readFileSync(fileURLToPath(new URL(rel, import.meta.url)), "utf8");
-    assert.ok(
-      contents.includes(PLAYWRIGHT_IMAGE),
-      `${rel} must pin ${PLAYWRIGHT_IMAGE} (keep it in sync with tests/browser/shared.ts)`,
-    );
-  },
-);

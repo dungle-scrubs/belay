@@ -21,7 +21,7 @@ function freePort(): Promise<number> {
  * Playwright app-e2e against it. The store URL is handed to two consumers via the inherited env:
  *   - `VITE_SESSION_PROXY` -> the `vite preview` webServer proxies the browser's same-origin `/sessions`
  *     calls to the ephemeral store (REST + WS), so the built app needs no per-run rebuild.
- *   - `TREVOR_E2E_STORE_URL` -> the specs open their own transport to publish the deterministic transcript
+ *   - `BELAY_E2E_STORE_URL` -> the specs open their own transport to publish the deterministic transcript
  *     events the browser then renders.
  * Booting here (not in a Playwright hook) keeps the order unambiguous: store up BEFORE preview + workers,
  * and torn down after. The web app must already be built (`pnpm --filter @belay/web build`).
@@ -34,8 +34,8 @@ async function main(): Promise<number> {
   const env = {
     ...process.env,
     VITE_SESSION_PROXY: store.url,
-    TREVOR_E2E_STORE_URL: store.url,
-    TREVOR_E2E_WEB_PORT: String(webPort),
+    BELAY_E2E_STORE_URL: store.url,
+    BELAY_E2E_WEB_PORT: String(webPort),
   };
 
   // ASYNC spawn (not spawnSync): the store runs in THIS process's event loop, so blocking it would stop

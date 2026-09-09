@@ -14,12 +14,12 @@ import {
  * via a live host turn) so append timing is fully under test control - the determinism Lane B needs.
  */
 
-/** A transport onto the ephemeral store the runner booted (TREVOR_E2E_STORE_URL). */
+/** A transport onto the ephemeral store the runner booted (BELAY_E2E_STORE_URL). */
 export function storeTransport(): SessionTransport {
-  const url = process.env.TREVOR_E2E_STORE_URL;
+  const url = process.env.BELAY_E2E_STORE_URL;
   if (!url) {
     throw new Error(
-      "TREVOR_E2E_STORE_URL is unset - run via `pnpm test:e2e:browser` (the boot runner).",
+      "BELAY_E2E_STORE_URL is unset - run via `pnpm test:e2e:browser` (the boot runner).",
     );
   }
   return streamTransport(url);
@@ -152,62 +152,45 @@ export function browserJobTail(label: string, lines: number): string {
   return outputLines(label, lines);
 }
 
-/** One completed exchange whose ANSWER is exactly `quote` - selectable text inside a single
- *  `data-message-id` message, so the selection toolbar's Tangent action is enabled for it. */
-export async function seedQuotedAnswer(
+export async function seedTangentSession(
   transport: SessionTransport,
-  sessionId: string,
-  quote: string,
+  input: {
+    readonly parentSessionId: string;
+    readonly tangentSessionId: string;
+    readonly runId: string;
+    readonly quote: string;
+    readonly lineLabel: string;
+    readonly lines: number;
+  },
 ): Promise<void> {
-  const runId = `quote-${quote.length}`;
+  await transport.ensureSession(input.tangentSessionId);
   await publish(
     transport,
-    sessionId,
-    events.userMessage({ text: "where does scrolling anchor?", provider: "fake" }),
+    input.tangentSessionId,
+    events.sessionTangentOf({
+      parentSessionId: input.parentSessionId,
+      sourceMessageId: "message:seed",
+      quote: input.quote,
+      label: "Scroll tangent",
+    }),
     WEB,
   );
   await publish(
     transport,
-    sessionId,
-    events.assistantStarted({ runId, warm: true, model: "fake-1", provider: "fake" }),
-    HOST,
+    input.tangentSessionId,
+    events.userMessage({ text: "Explore this tangent", provider: "fake" }),
+    WEB,
   );
-  await publish(transport, sessionId, events.assistantDelta({ runId, text: quote }), HOST);
-  await publish(transport, sessionId, events.assistantCompleted({ runId, text: quote }), HOST);
-}
-
-/** The inventory id of the tangent branched off `parentSessionId`, or null while none exists yet -
- *  how a test learns the session id the UI's Tangent action just created. */
-export async function findChildTangentId(
-  transport: SessionTransport,
-  parentSessionId: string,
-): Promise<string | null> {
-  const sessions = await transport.fetchInventory();
-  return (
-    sessions.find((session) => session.tangentOf?.parentSessionId === parentSessionId)?.sessionId ??
-    null
-  );
-}
-
-/** Starts a streaming assistant run in an existing tangent session (the UI-created one): the
- *  takeover is already open and subscribed, so the deltas render live as they publish. */
-export async function startTangentOutput(
-  transport: SessionTransport,
-  tangentSessionId: string,
-  runId: string,
-  lineLabel: string,
-  lines: number,
-): Promise<void> {
   await publish(
     transport,
-    tangentSessionId,
-    events.assistantStarted({ runId, warm: true, model: "fake-1", provider: "fake" }),
+    input.tangentSessionId,
+    events.assistantStarted({ runId: input.runId, warm: true, model: "fake-1", provider: "fake" }),
     HOST,
   );
   await publish(
     transport,
-    tangentSessionId,
-    events.assistantDelta({ runId, text: outputLines(lineLabel, lines) }),
+    input.tangentSessionId,
+    events.assistantDelta({ runId: input.runId, text: outputLines(input.lineLabel, input.lines) }),
     HOST,
   );
 }

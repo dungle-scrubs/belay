@@ -48,18 +48,13 @@ test("the sandboxed overlay captures an element click into a structured target m
   const sandbox = await page.locator("#lucid").getAttribute("sandbox");
   expect(sandbox).not.toContain("allow-same-origin");
 
-  // Click a targetable element; the overlay captures its anchor and posts it out. (The message
-  // crosses a real postMessage boundary, so poll for its arrival rather than racing one evaluate.)
+  // Click a targetable element; the overlay captures its anchor and posts it out.
   await page.frameLocator("#lucid").locator('[data-lucid-id="s2"]').click();
-  await expect
-    .poll(() =>
-      page.evaluate(() => window.__lucidMessages?.some((m) => m?.kind === "target") ?? false),
-    )
-    .toBe(true);
 
   const target = await page.evaluate(() =>
     window.__lucidMessages?.find((m) => m?.kind === "target"),
   );
+  expect(target).toBeTruthy();
   const anchor = (target?.anchor ?? {}) as {
     type?: string;
     lucidId?: string;
