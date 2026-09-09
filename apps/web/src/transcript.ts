@@ -3,7 +3,7 @@ import {
   activeTurnRunId,
   addBreakdown,
   type CommandMenuPayload,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   inputEstimateTokens,
   isInlineAgentDelegation,
   isTerminalDelegationStatus,
@@ -475,7 +475,7 @@ function displayInputTokens(
 export function liveCallFrom(events: readonly SessionEvent[]): LiveCall | undefined {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
-    const decoded = event ? decodeTrevorEvent(event) : null;
+    const decoded = event ? decodeBelayEvent(event) : null;
     if (!decoded) {
       continue;
     }
@@ -512,7 +512,7 @@ export function queuedOrSupersededUserIds(
  * starts, so thinking/text that comes *after* a tool renders below it (not lumped into
  * one bubble at the top). started only records the run's model/warmth; a segment is
  * created lazily on the first thinking/text, so an empty turn never leaves a stray bubble.
- * Payloads are read through decodeTrevorEvent, so the fold never hand-guards raw fields.
+ * Payloads are read through decodeBelayEvent, so the fold never hand-guards raw fields.
  *
  * Durable follow-up queue (plan 47): a prompt superseded (folded/unqueued) or still queued behind the
  * current turn/awaiting prompt is hidden here - the queue panel renders it instead - so a
@@ -622,7 +622,7 @@ function createTranscriptFold(): TranscriptFold {
     return segment;
   };
   const apply = (event: SessionEvent): void => {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       return;
     }
@@ -1261,7 +1261,7 @@ const QUEUE_RELEVANT_EVENT_TYPES: ReadonlySet<string> = new Set([
 ]);
 
 function isQueueRelevant(event: SessionEvent): boolean {
-  const decoded = decodeTrevorEvent(event);
+  const decoded = decodeBelayEvent(event);
   return decoded != null && QUEUE_RELEVANT_EVENT_TYPES.has(decoded.type);
 }
 
@@ -1436,7 +1436,7 @@ export function panelModel(
   let foldAfter: number | undefined;
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
-    const decoded = event ? decodeTrevorEvent(event) : null;
+    const decoded = event ? decodeBelayEvent(event) : null;
     if (decoded?.type === "context.compacted") {
       foldAfter = decoded.tokensAfter;
       break;

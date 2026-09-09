@@ -1,7 +1,7 @@
 # Belay - Domain Context
 
 Durable home for cross-cutting domain vocabulary. The former canonical umbrella
-(`.plans/belay-v2/implementation.md` §3) is being retired in favor of the numbered plans; new
+(`.plans/trevor-v2/implementation.md` §3) is being retired in favor of the numbered plans; new
 cross-plan terms are anchored here. When a term is baked into the protocol, keep it stable.
 
 ## Orchestration vocabulary (`.plans/21-workflows-runtime`, `.plans/46-worktree-fleet`)
@@ -38,7 +38,7 @@ cross-plan terms are anchored here. When a term is baked into the protocol, keep
 
 ## Dropped term: "teams"
 
-"Teams" (belay legacy multi-user roster/inbox/DM/audit) is **permanently cut** (umbrella §4, D-003). Do **not**
+"Teams" (trevor legacy multi-user roster/inbox/DM/audit) is **permanently cut** (umbrella §4, D-003). Do **not**
 reintroduce "teams" for multi-agent orchestration. The orchestration nouns are **workflow** (the
 engine/pattern) and **fleet** (the worktree application). Likewise, **inline self-validation** is cut
 (D-033); a verifier *subagent/auditor leaf* is distinct and allowed.
@@ -127,10 +127,10 @@ so there was **no browser-reachable launcher** - hence a supervisor.
 ## CLI headless agent surface vocabulary (`.plans/50-cli-headless-agent-surface`)
 
 Making the `belay` CLI a first-class headless agent surface (like `claude -p` / `codex exec`), not
-only a browser-launcher plus a session-addressed `belay prompt`. The premise: Belay v2 is purely
+only a browser-launcher plus a session-addressed `belay prompt`. The premise: Belay is purely
 client/server - the agent loop lives in the agent-host and is driven over the session log via
 `@belay/sdk`, so a headless one-shot **drives a host**, it does not run the loop in-process (unlike
-belay legacy's in-process `cli/prompt.ts`). Selection plumbing (`ModelRef`, `reasoningLevels`,
+trevor legacy's in-process `cli/prompt.ts`). Selection plumbing (`ModelRef`, `reasoningLevels`,
 `PromptInput.model`) already exists end to end; this plan wires it to CLI flags + defaults.
 
 | Term | Meaning | Notes |
@@ -139,7 +139,7 @@ belay legacy's in-process `cli/prompt.ts`). Selection plumbing (`ModelRef`, `rea
 | **Browser-less spawn (`launch({ noBrowser })`)** | A launcher-core option that runs the spawn-or-reuse-host path but skips the two unconditional `openBrowser` calls in `launchInner`, exposing "ensure a host online" as a reusable primitive. | `.plans/50` D-003. The **single seam** shared with the `.plans/48` desktop supervisor (which spawns hosts headlessly too); they must not fork it. `spawnHost` was already fully headless. |
 | **Ephemeral session (`--ephemeral`)** | `belay -p --ephemeral` mints a throwaway session, spawns a host, runs the turn, then tears down - but **only a host this invocation spawned**, never a reused/pre-existing one. | `.plans/50` D-002. Default `-p` instead reuses the project session and leaves the host running (mirrors no-arg `belay`). Spawn ownership is tracked so teardown can't kill a host a browser tab / supervisor owns. |
 | **Catalog read (`client.listCatalog`)** | An SDK read of the host-announced `sources` + `catalogBySource` (per-model `reasoningLevels` / `defaultReasoning`) from presence / `host.online`; `belay models [--json]` prints it and `--model`/`--reasoning` validation resolves against it. | `.plans/50` D-006. The catalog data (from `~/.pi/auth.json` at host startup) was already on the wire but had no SDK accessor. Needs a live host, so it reuses the browser-less ensure-host-online primitive. |
-| **Per-request `--model` / `--reasoning`** | CLI flags on `prompt` / `-p` that build a `ModelRef {sourceId, modelId, reasoning}` in the CLI layer and ride the already-wired `PromptInput.model` path. `--model` is `<sourceId>/<modelId>` (bare modelId only when unambiguous); `--reasoning` is validated against that model's `reasoningLevels`. | `.plans/50` D-004/D-005/D-009. Unknown model / unsupported level **fails fast** with a catalog-derived error pointing at `belay models` (belay legacy silently dropped effort to `undefined`). |
+| **Per-request `--model` / `--reasoning`** | CLI flags on `prompt` / `-p` that build a `ModelRef {sourceId, modelId, reasoning}` in the CLI layer and ride the already-wired `PromptInput.model` path. `--model` is `<sourceId>/<modelId>` (bare modelId only when unambiguous); `--reasoning` is validated against that model's `reasoningLevels`. | `.plans/50` D-004/D-005/D-009. Unknown model / unsupported level **fails fast** with a catalog-derived error pointing at `belay models` (trevor legacy silently dropped effort to `undefined`). |
 | **Config resolver (`config.jsonc`)** | The `${BELAY_HOME}/config.jsonc` loader + precedence `--flag > BELAY_MODEL`/`BELAY_REASONING` env `> config.jsonc file > host-side default` (plan 51 `active ?? default ?? legacy`). | `.plans/50` D-007/D-008/D-011. **Exactly one** loader, shared with `.plans/49`/WS3 (which owns it and is numbered first): whichever of 49-WS3 / 50-M4 lands first builds it, the other extends it (49-WS3 to the full `BELAY_*` scatter + `belay init`; 50-M4 to `model`/`reasoning`). Env-wins-over-file matches WS3. |
 
 ## Command argument substitution vocabulary (`.plans/44.5-command-arg-substitution`)
@@ -152,8 +152,8 @@ token spaces (`$` vs `!`), see the reconciliation note below.
 | Term | Meaning | Notes |
 |---|---|---|
 | **Argument substitution** | Replacing `$`-placeholders in a command file's body with the invocation's arguments at dispatch. The `$`-space feature. | The shared engine is `packages/session/src/command-args.ts` (`tokenizeArgs` + `expandArgs`), dual-consumed by the host (authoritative) and web (keystroke preview), per the `command-family.ts:10` hoist doctrine. |
-| **Positional `$N`** | 0-based positional argument: `$0` = first token, `$1` = second, … | Diverges from belay legacy (1-based) and shell; chosen for Claude-Code parity (D-001). A reference beyond the provided count substitutes empty string (D-004). |
-| **`$ARGUMENTS`** | Expands to the **raw** argument string exactly as typed - quotes and interior whitespace preserved. | Not the tokenized re-join (belay legacy behavior); positional `$N` use tokenized values, `$ARGUMENTS` stays raw (D-002). |
+| **Positional `$N`** | 0-based positional argument: `$0` = first token, `$1` = second, … | Diverges from trevor legacy (1-based) and shell; chosen for Claude-Code parity (D-001). A reference beyond the provided count substitutes empty string (D-004). |
+| **`$ARGUMENTS`** | Expands to the **raw** argument string exactly as typed - quotes and interior whitespace preserved. | Not the tokenized re-join (trevor legacy behavior); positional `$N` use tokenized values, `$ARGUMENTS` stays raw (D-002). |
 | **Shell-style tokenizer** | Whitespace splits tokens; single **and** double quotes group + strip; backslash escapes the next char; `\$1` stays literal while `$1` expands. | Richer than `loop-parser.ts` `tokenize()` (double-quote-only regex, no escapes), so a new char-scanning module, not a reuse (D-003). |
 | **Custom command file** | A `.belay/commands/*.md` (project root) or config-home (user root) file; command name = `/<basename>`. Loaded into the plan-40 `CommandFile` primitive (`rootKind` project/user). | Project overrides same-named user file (D-006). Loader mirrors `skills/skills.ts` ordered roots. `.claude/commands/` import is a non-goal (D-009). |
 | **No-placeholder auto-append** | When a body carries NO `$` placeholder and the invocation has non-empty args, the raw args are appended as a trailing `ARGUMENTS: <raw>` block. | Claude-Code parity default (the M2 open question, resolved): a placeholder-free command body still receives its input. An escaped `\$0` is literal, not a placeholder, so it does not suppress the append. |

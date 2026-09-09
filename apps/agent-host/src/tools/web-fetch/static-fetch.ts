@@ -65,7 +65,7 @@ export class StaticFetchError extends Error {
 
 const REQUEST_HEADERS: Record<string, string> = {
   accept: "text/html,application/xhtml+xml,application/json,text/plain;q=0.9,*/*;q=0.8",
-  "user-agent": "TrevorWebFetch/1.0 (+read-only public source fetch)",
+  "user-agent": "BelayWebFetch/1.0 (+read-only public source fetch)",
 };
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);

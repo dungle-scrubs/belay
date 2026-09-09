@@ -6,7 +6,7 @@
  * exported method's entry/exit), not inside every helper - that's what `debug` is for.
  *
  * `debug` is the verbose toggle, off by default and switched on per scope via
- * TREVOR_DEBUG (`1`/`true`/`all`/`*` for everything, or a comma list like
+ * BELAY_DEBUG (`1`/`true`/`all`/`*` for everything, or a comma list like
  * `lmstudio,lease`). Use it for internal tracing - pi-ai stream events, lease tick
  * decisions - that would be noise in normal operation but is what you want when a
  * specific module is misbehaving.
@@ -58,13 +58,13 @@ export function warn(scope: string, message: string, fields?: Fields): void {
   console.error(format(scope, message, fields));
 }
 
-const DEBUG_SCOPES = (process.env.TREVOR_DEBUG ?? "")
+const DEBUG_SCOPES = (process.env.BELAY_DEBUG ?? "")
   .split(",")
   .map((scope) => scope.trim())
   .filter(Boolean);
 const DEBUG_ALL = DEBUG_SCOPES.some((scope) => ["1", "true", "all", "*"].includes(scope));
 
-/** Whether verbose tracing is on for this scope (set via TREVOR_DEBUG). */
+/** Whether verbose tracing is on for this scope (set via BELAY_DEBUG). */
 export function isDebug(scope: string): boolean {
   return DEBUG_ALL || DEBUG_SCOPES.includes(scope);
 }

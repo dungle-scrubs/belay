@@ -409,7 +409,7 @@ export function validateAnswer(
 //
 // The contract + answer ride the session event log; these read them back from untrusted / forward-compat
 // payloads. They never throw: unknown or missing fields become safe defaults and unknown extra metadata is
-// dropped. Used by `decodeTrevorEvent` and the host runtime.
+// dropped. Used by `decodeBelayEvent` and the host runtime.
 
 function decodePreview(value: unknown): QuestionChoicePreview | undefined {
   if (typeof value === "string") {

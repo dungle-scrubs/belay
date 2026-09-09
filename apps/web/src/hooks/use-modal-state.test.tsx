@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  type BelayEventInput,
   events,
   type SessionEvent,
   type SessionSummary,
-  type TrevorEventInput,
   type WorktreeSummary,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
@@ -79,7 +79,7 @@ const worktree: WorktreeSummary = {
   missing: false,
 };
 
-const stored = (input: TrevorEventInput): SessionEvent =>
+const stored = (input: BelayEventInput): SessionEvent =>
   storedEvent(input, {
     sessionId: "s-current",
     eventId: "ev-1",

@@ -7,7 +7,7 @@ import { afterAll, test } from "vitest";
 
 /**
  * Read-only structural search via ast-grep (Phase 6 M2 / D-062). The workspace root is read at
- * module load, so TREVOR_WORKSPACE is set before the dynamic import, against a throwaway TS tree.
+ * module load, so BELAY_WORKSPACE is set before the dynamic import, against a throwaway TS tree.
  * These pin: AST matches (formatting-independent), explicit + inferred language, no-match, an
  * invalid pattern/lang as a typed input error, the match cap, workspace confinement, and read-only
  * registry inclusion.
@@ -22,16 +22,16 @@ writeFileSync(
 );
 writeFileSync(join(ws, "src", "b.tsx"), "export const C = () => <div>{console.log(123)}</div>;\n");
 
-const prev = process.env.TREVOR_WORKSPACE;
-process.env.TREVOR_WORKSPACE = ws;
+const prev = process.env.BELAY_WORKSPACE;
+process.env.BELAY_WORKSPACE = ws;
 
 const { executeTool, READ_ONLY_TOOLS, TOOL_DEFS } = await import("./index");
 const sg = (args: Record<string, unknown>): Promise<string> =>
   Effect.runPromise(executeTool("ast_grep", JSON.stringify(args)));
 
 afterAll(() => {
-  if (prev === undefined) delete process.env.TREVOR_WORKSPACE;
-  else process.env.TREVOR_WORKSPACE = prev;
+  if (prev === undefined) delete process.env.BELAY_WORKSPACE;
+  else process.env.BELAY_WORKSPACE = prev;
   rmSync(ws, { recursive: true, force: true });
 });
 

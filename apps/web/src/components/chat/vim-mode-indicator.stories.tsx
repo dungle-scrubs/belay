@@ -39,7 +39,7 @@ function BottomRow({
       style={{ width, flexShrink: 0 }}
       className="overflow-hidden rounded-lg border border-border bg-background"
     >
-      <div className="min-h-16 px-2 pt-2 text-sm text-muted-foreground">message Trevor…</div>
+      <div className="min-h-16 px-2 pt-2 text-sm text-muted-foreground">message Belay…</div>
       <div className="flex items-center gap-2 px-2 pb-2">
         {glyph === "shell" ? (
           <span className="flex size-7 items-center justify-center text-smui-orange">

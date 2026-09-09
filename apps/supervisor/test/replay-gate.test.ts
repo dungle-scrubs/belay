@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   PRODUCER_IDS,
   projectSessionId,
@@ -48,7 +48,7 @@ function awaitLaunchResult(requestId: string) {
     SUPERVISOR_SESSION_ID,
     viewerIdentity({ displayName: "reader", instanceId: "reader-1", participantId: "reader-1" }),
     (event) => {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       return decoded?.type === "session.launch.result" && decoded.requestId === requestId;
     },
     { timeoutMs: 5000 },

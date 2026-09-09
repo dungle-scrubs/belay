@@ -1,5 +1,6 @@
 import {
-  decodeTrevorEvent,
+  type BelayEventInput,
+  decodeBelayEvent,
   errorMessage,
   events,
   isAnswerableProducer,
@@ -7,7 +8,6 @@ import {
   type SessionEvent,
   type SessionLaunchOkStatus,
   type SupervisorProject,
-  type TrevorEventInput,
 } from "@belay/session";
 
 /**
@@ -24,11 +24,11 @@ import {
 /** The collaborators the dispatcher needs, all injected so the handler stays free of node IO. */
 export interface SupervisorDeps {
   /** Publishes a result event on the control session (the caller stamps the supervisor producer id). */
-  readonly emit: (event: TrevorEventInput) => Promise<void>;
+  readonly emit: (event: BelayEventInput) => Promise<void>;
   /** Publishes an event on an ARBITRARY session (plan 58 M4): used to stamp a `session.project`
    *  marker on a freshly-minted project-scoped session before the host launches. The caller stamps
    *  the supervisor producer id. Falls back to `emit` (control session) when not wired. */
-  readonly publishToSession?: (sessionId: string, event: TrevorEventInput) => Promise<void>;
+  readonly publishToSession?: (sessionId: string, event: BelayEventInput) => Promise<void>;
   /** The launcher core: spawn-or-reuse a host for a resolved session; resolves the browser-facing
    *  outcome (`launched` = fresh/replaced host, `reused` = an already-live host). A rejection is
    *  reported as a `failed` result rather than crashing the daemon. */
@@ -96,7 +96,7 @@ export async function handleSupervisorEvent(
   if (!isAnswerableProducer(event.producerId, deps.selfProducerId)) {
     return;
   }
-  const decoded = decodeTrevorEvent(event);
+  const decoded = decodeBelayEvent(event);
   if (!decoded) {
     return;
   }

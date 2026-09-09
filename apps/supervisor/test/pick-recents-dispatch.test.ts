@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   PRODUCER_IDS,
   type SessionConnection,
@@ -74,7 +74,7 @@ function awaitResult(requestId: string) {
     SUPERVISOR_SESSION_ID,
     viewerIdentity({ displayName: "reader", instanceId: "reader-1", participantId: "reader-1" }),
     (event) => {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       return (
         (decoded?.type === "folder.pick.result" || decoded?.type === "projects.list.result") &&
         decoded.requestId === requestId
@@ -93,7 +93,7 @@ test("folder.pick.requested pops the (fake) picker and returns its chosen path",
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("fp-1")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("fp-1")) ?? throwUnresolved());
   assert.deepEqual(decoded, {
     type: "folder.pick.result",
     requestId: "fp-1",
@@ -109,7 +109,7 @@ test("folder.pick.requested reports cancelled when the picker is dismissed / una
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("fp-2")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("fp-2")) ?? throwUnresolved());
   assert.deepEqual(decoded, { type: "folder.pick.result", requestId: "fp-2", cancelled: true });
 });
 
@@ -124,7 +124,7 @@ test("projects.list.requested returns the recency-sorted recents", async () => {
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("pl-1")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("pl-1")) ?? throwUnresolved());
   assert.deepEqual(decoded, { type: "projects.list.result", requestId: "pl-1", projects });
 });
 

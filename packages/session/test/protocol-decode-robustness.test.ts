@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "../src/event";
-import { decodeTrevorEvent, REGISTERED_WIRE_TYPES } from "../src/protocol/decode";
+import { decodeBelayEvent, REGISTERED_WIRE_TYPES } from "../src/protocol/decode";
 import { DECODE_SEEDS } from "./decode-seeds";
 
 /**
@@ -72,14 +72,14 @@ for (const seed of DECODE_SEEDS) {
   test(`decode is total and self-tagged: ${seed.type}`, () => {
     for (const variant of seed.variants) {
       // The realistic (unmutated) payload decodes non-null and carries its own type tag.
-      const clean = decodeTrevorEvent(envelope(seed.type, variant));
+      const clean = decodeBelayEvent(envelope(seed.type, variant));
       assert.ok(clean !== null, `realistic payload decoded to null: ${JSON.stringify(variant)}`);
       assert.equal(clean.type, seed.type);
       // Every mutation of a REGISTERED type still decodes non-null and self-tagged: the
       // table decode is total, so malformed known events degrade to safe values - they
       // never throw and never silently drop to null.
       for (const payload of mutations(variant)) {
-        const decoded = decodeTrevorEvent(envelope(seed.type, payload));
+        const decoded = decodeBelayEvent(envelope(seed.type, payload));
         assert.ok(decoded !== null, `mutation decoded to null: ${JSON.stringify(payload)}`);
         assert.equal(decoded.type, seed.type);
       }

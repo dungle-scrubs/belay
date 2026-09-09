@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import { test } from "vitest";
 import { type DirectHandoffDeps, executeFinalizedHandoff, runDirectHandoff } from "./handoff-flow";
 
@@ -15,7 +15,7 @@ interface Call {
   readonly fn: "publish" | "publishPrompt" | "ensureSession" | "spawnHost" | "switchAndRetire";
   readonly sessionId?: string;
   readonly type?: string;
-  readonly event?: TrevorEventInput;
+  readonly event?: BelayEventInput;
 }
 
 function recorder(over: Partial<DirectHandoffDeps> = {}): {

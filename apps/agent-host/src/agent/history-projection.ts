@@ -34,7 +34,7 @@ function renderFold(summary: string, tasks: readonly TaskSnapshot[]): string {
  * Projects the durable session event log into the host's prompt view: the
  * `ChatMessage[]` the model is handed for a turn. This is the host-side mirror of
  * the web's `toTranscript` (transcript.ts) - one pure fold over `SessionEvent[]`,
- * read through `decodeTrevorEvent` so it never hand-guards raw payload fields.
+ * read through `decodeBelayEvent` so it never hand-guards raw payload fields.
  *
  * It OWNS every conversation-shaping invariant that keeps the prompt model-safe -
  * the rules once scattered as imperative mutation across main.ts plus the turn-time

@@ -94,7 +94,7 @@ export class LmStudioClient {
       );
       if (!response.ok) {
         // Reachable but no usable answer (model id unknown / server error) - distinct from
-        // the network failure below, and worth seeing under TREVOR_DEBUG=lmstudio.
+        // the network failure below, and worth seeing under BELAY_DEBUG=lmstudio.
         debug("lmstudio", "model info not ok", {
           model: this.config.model,
           status: response.status,
@@ -208,7 +208,7 @@ export class LmStudioClient {
         this.lastError = null;
         this.lastReloadMs = Date.now() - startedAt;
         // Record the load into the host residency registry ONLY here - the path where THIS instance
-        // actually ran `lms load` - so a model loaded outside Trevor is never eviction-eligible (D-004).
+        // actually ran `lms load` - so a model loaded outside Belay is never eviction-eligible (D-004).
         this.config.residency?.recordLoad(
           this.config.providerId,
           this.config.url,

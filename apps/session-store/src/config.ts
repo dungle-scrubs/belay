@@ -1,4 +1,4 @@
-import { storagePathByName, type TrevorPathEnv } from "@belay/session/node-paths";
+import { type BelayPathEnv, storagePathByName } from "@belay/session/node-paths";
 
 /**
  * The session-store's identity, declared ONCE: the storage-inventory artifact its DB lives under, the
@@ -20,7 +20,7 @@ export const SESSION_STORE = {
  * the root policy's storage inventory (the `sessions-db` entry), so its placement is declared once.
  * Override with SESSION_STORE_DB.
  */
-export function sessionStoreDbPath(env: TrevorPathEnv = process.env, home?: string): string {
+export function sessionStoreDbPath(env: BelayPathEnv = process.env, home?: string): string {
   return (
     env[SESSION_STORE.overrideEnv] ?? storagePathByName(SESSION_STORE.storageArtifact, env, home)
   );

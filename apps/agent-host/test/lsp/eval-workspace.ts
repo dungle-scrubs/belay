@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 
 /**
  * Fixture-workspace builder for the plan 24 M7 eval and distraction turns: a real temp TS
- * workspace the host singleton (WORKSPACE_ROOT via TREVOR_WORKSPACE) treats as production
+ * workspace the host singleton (WORKSPACE_ROOT via BELAY_WORKSPACE) treats as production
  * would. `tsconfig.json` makes the TS/JS adapter detect it, and - when `server` is true - a
  * `node_modules/.bin/typescript-language-server` shim resolves through the adapter's REAL
  * workspace-local binary lookup and launches ./fixture-eval-lsp-server.ts, so the whole
@@ -14,7 +14,7 @@ import { dirname, join } from "node:path";
  *
  * Responsible for: laying the fixture workspace on disk.
  * Not for: server behavior (./fixture-eval-lsp-server) or env wiring - the test files own
- * TREVOR_WORKSPACE and the TREVOR_LSP_* knobs, which bind BEFORE any host module loads.
+ * BELAY_WORKSPACE and the BELAY_LSP_* knobs, which bind BEFORE any host module loads.
  */
 
 const EVAL_SERVER_PATH = join(import.meta.dirname, "fixture-eval-lsp-server.ts");

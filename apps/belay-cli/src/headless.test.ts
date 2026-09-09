@@ -1,4 +1,4 @@
-import { createTrevorClient } from "@belay/sdk";
+import { createBelayClient } from "@belay/sdk";
 import { events, PRODUCER_IDS } from "@belay/session";
 import { doctorSnapshot, recordingTransport, storedEvent, storedLog } from "@belay/test-kit";
 import { describe, expect, it, vi } from "vitest";
@@ -15,7 +15,7 @@ const SESSION_URL = "http://127.0.0.1:17424";
 const BLOB_URL = "http://127.0.0.1:17423";
 
 function makeClient(rec = recordingTransport()) {
-  const client = createTrevorClient({
+  const client = createBelayClient({
     sessionUrl: SESSION_URL,
     blobUrl: BLOB_URL,
     producerId: PRODUCER_IDS.cli,
@@ -190,7 +190,7 @@ describe("runCapabilities (M8)", () => {
 describe("runArtifactPut error mapping (M8)", () => {
   it("surfaces a typed SdkError when the blob store is unreachable", async () => {
     // A guaranteed-unreachable blob URL (never the reserved 17423, which a real local store may hold).
-    const client = createTrevorClient({
+    const client = createBelayClient({
       sessionUrl: SESSION_URL,
       blobUrl: "http://127.0.0.1:1",
       producerId: PRODUCER_IDS.cli,

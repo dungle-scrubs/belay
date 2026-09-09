@@ -3,8 +3,8 @@ import { test } from "vitest";
 import { LocalResidencyRegistry } from "./registry";
 
 /**
- * The host-owned Trevor-loaded residency registry (plan 11.1 M2): tracks exactly the local models THIS
- * instance loaded so eviction is gated on Trevor-loaded (D-004). Pure over an injected clock.
+ * The host-owned Belay-loaded residency registry (plan 11.1 M2): tracks exactly the local models THIS
+ * instance loaded so eviction is gated on Belay-loaded (D-004). Pure over an injected clock.
  */
 
 const EP = "http://localhost:1234/v1";
@@ -15,18 +15,18 @@ function reg() {
   return new LocalResidencyRegistry(() => (t += 1_000));
 }
 
-test("recordLoad marks a model Trevor-loaded; an untouched model is absent", () => {
+test("recordLoad marks a model Belay-loaded; an untouched model is absent", () => {
   const r = reg();
   r.recordLoad(PROVIDER, EP, "unsloth/qwen3.6-27b-mlx", 65_536);
-  assert.equal(r.isTrevorLoaded(EP, "unsloth/qwen3.6-27b-mlx"), true);
-  // A model Trevor never loaded (externally loaded / another app) is NOT in the registry.
+  assert.equal(r.isBelayLoaded(EP, "unsloth/qwen3.6-27b-mlx"), true);
+  // A model Belay never loaded (externally loaded / another app) is NOT in the registry.
   assert.equal(
-    r.isTrevorLoaded(EP, "qwen/qwen3-vl-8b"),
+    r.isBelayLoaded(EP, "qwen/qwen3-vl-8b"),
     false,
-    "external model is not Trevor-loaded",
+    "external model is not Belay-loaded",
   );
   // The same model id on a DIFFERENT endpoint is a distinct resource.
-  assert.equal(r.isTrevorLoaded("http://other:1234/v1", "unsloth/qwen3.6-27b-mlx"), false);
+  assert.equal(r.isBelayLoaded("http://other:1234/v1", "unsloth/qwen3.6-27b-mlx"), false);
 
   const resident = r.resident();
   assert.equal(resident.length, 1);
@@ -54,7 +54,7 @@ test("the resident set updates on load and on unload", () => {
   );
 
   r.recordUnload(EP, "a");
-  assert.equal(r.isTrevorLoaded(EP, "a"), false, "unload removes it from the set");
+  assert.equal(r.isBelayLoaded(EP, "a"), false, "unload removes it from the set");
   assert.deepEqual(
     r.resident().map((m) => m.model),
     ["b"],

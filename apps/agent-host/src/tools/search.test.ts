@@ -7,13 +7,13 @@ import { afterAll, test } from "vitest";
 /**
  * Characterization tests for the shared workspace search iterator (M3 / D-006). The iterator owns
  * the glob(cwd)+SKIP_DIRS walk that glob and grep used to each copy, plus the capped-collect with
- * an honest "more exist" flag. TREVOR_WORKSPACE is set before the dynamic import (the tools read
+ * an honest "more exist" flag. BELAY_WORKSPACE is set before the dynamic import (the tools read
  * the root at module load), against a throwaway tree.
  */
 
 const ws = mkdtempSync(join(tmpdir(), "belay-search-"));
-const prevWorkspace = process.env.TREVOR_WORKSPACE;
-process.env.TREVOR_WORKSPACE = ws;
+const prevWorkspace = process.env.BELAY_WORKSPACE;
+process.env.BELAY_WORKSPACE = ws;
 
 const { mkdirSync, writeFileSync } = await import("node:fs");
 mkdirSync(join(ws, "src"), { recursive: true });
@@ -26,8 +26,8 @@ writeFileSync(join(ws, "node_modules", "pkg", "index.ts"), "skip me");
 const { walkWorkspace, collectWorkspace } = await import("./search");
 
 afterAll(() => {
-  if (prevWorkspace === undefined) delete process.env.TREVOR_WORKSPACE;
-  else process.env.TREVOR_WORKSPACE = prevWorkspace;
+  if (prevWorkspace === undefined) delete process.env.BELAY_WORKSPACE;
+  else process.env.BELAY_WORKSPACE = prevWorkspace;
   rmSync(ws, { recursive: true, force: true });
 });
 

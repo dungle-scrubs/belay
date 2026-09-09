@@ -2,7 +2,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 
 /**
- * The server lifecycle shared by Trevor's local stores: bind a `node:http` server to a
+ * The server lifecycle shared by Belay's local stores: bind a `node:http` server to a
  * loopback port and hand back a uniform handle with its resolved URL/port and a single
  * `close()` teardown. Production binds the configured port (and logs a banner); tests
  * bind port 0 for an ephemeral one. Both go through THIS path, so listen/shutdown is

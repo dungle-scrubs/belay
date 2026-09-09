@@ -10,7 +10,7 @@ import {
 } from "./command-menu";
 import type { SessionEvent } from "./event";
 import { events } from "./protocol";
-import { decodeTrevorEvent } from "./protocol-decode";
+import { decodeBelayEvent } from "./protocol-decode";
 
 /** Wraps a constructor's `{ type, payload }` into a full wire `SessionEvent` for decode round-trips. */
 function wire(input: { readonly type: string; readonly payload: unknown }): SessionEvent {
@@ -127,7 +127,7 @@ describe("decode (permissive, backward-compatible)", () => {
 
 describe("command.result carries the menu over the wire (backward-compatible)", () => {
   test("a result WITH a menu round-trips through the real event decode", () => {
-    const decoded = decodeTrevorEvent(
+    const decoded = decodeBelayEvent(
       wire(
         events.commandResult({
           command: "/style",
@@ -143,7 +143,7 @@ describe("command.result carries the menu over the wire (backward-compatible)", 
   });
 
   test("a plain result (no menu) decodes unchanged, with no menu field", () => {
-    const decoded = decodeTrevorEvent(
+    const decoded = decodeBelayEvent(
       wire(events.commandResult({ command: "/help", text: "the help text", ok: true })),
     );
     expect(decoded?.type).toBe("command.result");
@@ -153,7 +153,7 @@ describe("command.result carries the menu over the wire (backward-compatible)", 
   });
 
   test("a focus session hint round-trips without requiring a menu", () => {
-    const decoded = decodeTrevorEvent(
+    const decoded = decodeBelayEvent(
       wire(
         events.commandResult({
           command: "/worktree-new",

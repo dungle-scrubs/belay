@@ -13,7 +13,7 @@ import { startFixtureHttpServer } from "./fixture-http-server";
 /**
  * MCP prompt import integration (plan 23 M6): prompts/list + prompts/get against the REAL
  * fixture servers become imported prompt ARTIFACTS - provenance-carrying records with
- * server-side argument substitution and bounded expansion - and are explicitly NOT Trevor
+ * server-side argument substitution and bounded expansion - and are explicitly NOT Belay
  * slash commands.
  */
 
@@ -125,7 +125,7 @@ describe("mcp prompts - imported artifacts", () => {
   });
 });
 
-describe("mcp prompts - NOT Trevor slash commands", () => {
+describe("mcp prompts - NOT Belay slash commands", () => {
   it("importing prompts registers nothing in the host slash-command registry", async () => {
     await withRuntime([stdioFixtureConfig("alpha")], async (runtime) => {
       await Effect.runPromise(runtime.getPrompt("alpha:summarize", { text: "hi" }));

@@ -15,25 +15,25 @@ test("an empty env contributes no overrides (the manager defaults apply)", () =>
   assert.deepEqual(lspManagerEnvOptions({}), {});
 });
 
-test("each TREVOR_LSP_* knob maps to its manager option", () => {
-  assert.deepEqual(lspManagerEnvOptions({ TREVOR_LSP_REQUEST_TIMEOUT_MS: "800" }), {
+test("each BELAY_LSP_* knob maps to its manager option", () => {
+  assert.deepEqual(lspManagerEnvOptions({ BELAY_LSP_REQUEST_TIMEOUT_MS: "800" }), {
     requestTimeoutMs: 800,
   });
-  assert.deepEqual(lspManagerEnvOptions({ TREVOR_LSP_INIT_TIMEOUT_MS: "1500" }), {
+  assert.deepEqual(lspManagerEnvOptions({ BELAY_LSP_INIT_TIMEOUT_MS: "1500" }), {
     initTimeoutMs: 1500,
   });
-  assert.deepEqual(lspManagerEnvOptions({ TREVOR_LSP_STALE_AFTER_MS: "1" }), {
+  assert.deepEqual(lspManagerEnvOptions({ BELAY_LSP_STALE_AFTER_MS: "1" }), {
     staleAfterMs: 1,
   });
-  assert.deepEqual(lspManagerEnvOptions({ TREVOR_LSP_PUBLISH_WAIT_MS: "500" }), {
+  assert.deepEqual(lspManagerEnvOptions({ BELAY_LSP_PUBLISH_WAIT_MS: "500" }), {
     publishWaitMs: 500,
   });
   assert.deepEqual(
     lspManagerEnvOptions({
-      TREVOR_LSP_REQUEST_TIMEOUT_MS: "800",
-      TREVOR_LSP_INIT_TIMEOUT_MS: "1500",
-      TREVOR_LSP_STALE_AFTER_MS: "60000",
-      TREVOR_LSP_PUBLISH_WAIT_MS: "500",
+      BELAY_LSP_REQUEST_TIMEOUT_MS: "800",
+      BELAY_LSP_INIT_TIMEOUT_MS: "1500",
+      BELAY_LSP_STALE_AFTER_MS: "60000",
+      BELAY_LSP_PUBLISH_WAIT_MS: "500",
     }),
     { requestTimeoutMs: 800, initTimeoutMs: 1500, staleAfterMs: 60000, publishWaitMs: 500 },
   );
@@ -43,10 +43,10 @@ test("malformed, zero, or negative values are ignored, never a crash or a zero t
   for (const bad of ["", "abc", "0", "-5", "NaN", "1.5e999"]) {
     assert.deepEqual(
       lspManagerEnvOptions({
-        TREVOR_LSP_REQUEST_TIMEOUT_MS: bad,
-        TREVOR_LSP_INIT_TIMEOUT_MS: bad,
-        TREVOR_LSP_STALE_AFTER_MS: bad,
-        TREVOR_LSP_PUBLISH_WAIT_MS: bad,
+        BELAY_LSP_REQUEST_TIMEOUT_MS: bad,
+        BELAY_LSP_INIT_TIMEOUT_MS: bad,
+        BELAY_LSP_STALE_AFTER_MS: bad,
+        BELAY_LSP_PUBLISH_WAIT_MS: bad,
       }),
       {},
       `"${bad}" must be ignored`,

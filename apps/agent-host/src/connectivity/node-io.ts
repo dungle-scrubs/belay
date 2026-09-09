@@ -15,12 +15,12 @@ import type { ProbeIo, ProbeTargets } from "./probe";
 /** Per-check timeout: a slow/blackholed network settles as offline instead of hanging the probe. */
 const PROBE_TIMEOUT_MS = 4_000;
 
-/** The configured probe targets, from env or public defaults. `TREVOR_INTERNET_PROBE=0` disables it. */
+/** The configured probe targets, from env or public defaults. `BELAY_INTERNET_PROBE=0` disables it. */
 export function defaultProbeTargets(): ProbeTargets {
   return {
-    dnsHost: process.env.TREVOR_INTERNET_DNS ?? "cloudflare.com",
-    httpsUrl: process.env.TREVOR_INTERNET_URL ?? "https://www.cloudflare.com/cdn-cgi/trace",
-    enabled: process.env.TREVOR_INTERNET_PROBE !== "0",
+    dnsHost: process.env.BELAY_INTERNET_DNS ?? "cloudflare.com",
+    httpsUrl: process.env.BELAY_INTERNET_URL ?? "https://www.cloudflare.com/cdn-cgi/trace",
+    enabled: process.env.BELAY_INTERNET_PROBE !== "0",
   };
 }
 

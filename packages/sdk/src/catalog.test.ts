@@ -2,7 +2,7 @@ import { type CatalogEntry, events, PRODUCER_IDS, type SourceSummary } from "@be
 import { recordingTransport, storedLog } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
 import { EMPTY_CATALOG_SNAPSHOT, projectCatalog } from "./catalog";
-import { createTrevorClient } from "./client";
+import { createBelayClient } from "./client";
 
 const SESSION_URL = "http://127.0.0.1:17424";
 
@@ -40,7 +40,7 @@ function entry(overrides: Partial<CatalogEntry> = {}): CatalogEntry {
 describe("catalog read", () => {
   it("projects host.online payload.catalog as SDK catalogBySource", async () => {
     const rec = recordingTransport();
-    const client = createTrevorClient({
+    const client = createBelayClient({
       sessionUrl: SESSION_URL,
       producerId: PRODUCER_IDS.web,
       transport: rec.transport,

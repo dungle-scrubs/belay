@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { decodeTrevorEvent, type TrevorEventInput, UNKNOWN_INTERNET } from "@belay/session";
+import { type BelayEventInput, decodeBelayEvent, UNKNOWN_INTERNET } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import { makePresence } from "./presence";
@@ -13,7 +13,7 @@ import { makePresence } from "./presence";
  */
 
 function capturingPresence() {
-  const emitted: TrevorEventInput[] = [];
+  const emitted: BelayEventInput[] = [];
   const presence = makePresence({
     providers: {},
     commands: { specs: [] },
@@ -36,7 +36,7 @@ test("announceOnline puts the host model preference on host.online (plan 51)", (
 
   const online = emitted.find((e) => e.type === "host.online");
   assert.ok(online, "an host.online announcement was emitted");
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     storedEvent(online, { sessionId: "s", seq: 1, producerId: "host" }),
   );
   assert.equal(decoded?.type, "host.online");

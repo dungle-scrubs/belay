@@ -1,12 +1,12 @@
 import {
+  type BelayEventInput,
   type DecodedEvent,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   isInlineAgentDelegation,
   isTerminalDelegationStatus,
   type SessionEvent,
   type SessionTransport,
-  type TrevorEventInput,
 } from "@belay/session";
 import { discoverSkills } from "@host/skills/skills";
 import type { AgentDefinition } from "@host/subagents/discovery";
@@ -84,7 +84,7 @@ export function childHistory(agent: AgentDefinition, task: string): ChatMessage[
 export function publishTo(
   ctx: DelegationContext,
   sessionId: string,
-  event: TrevorEventInput,
+  event: BelayEventInput,
 ): Promise<void> {
   return ctx.transport.publishEvent(sessionId, {
     type: event.type,
@@ -110,7 +110,7 @@ function inlineDelegationMetadata(
     : {};
 }
 
-function outputTokensOf(event: TrevorEventInput): number | undefined {
+function outputTokensOf(event: BelayEventInput): number | undefined {
   const usage = (event.payload as { readonly usage?: { readonly output?: unknown } }).usage;
   return typeof usage?.output === "number" ? usage.output : undefined;
 }
@@ -216,11 +216,11 @@ export async function foldBackLink(
 export function orphanedSubagentReaps(
   parentEvents: readonly SessionEvent[],
   activeChildSessionIds: ReadonlySet<string>,
-): TrevorEventInput[] {
+): BelayEventInput[] {
   const running = new Map<string, Extract<DecodedEvent, { type: "delegated.to" }>>();
   const terminated = new Set<string>();
   for (const event of parentEvents) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type !== "delegated.to") {
       continue;
     }
@@ -230,7 +230,7 @@ export function orphanedSubagentReaps(
       running.set(decoded.childSessionId, decoded);
     }
   }
-  const out: TrevorEventInput[] = [];
+  const out: BelayEventInput[] = [];
   for (const [childSessionId, link] of running) {
     if (terminated.has(childSessionId) || activeChildSessionIds.has(childSessionId)) {
       continue;
@@ -286,7 +286,7 @@ export async function runDelegatedChild(
     await seedChildSession(ctx, req, childSessionId);
 
     const childEmit = Layer.succeed(Emit, {
-      publish: (event: TrevorEventInput) =>
+      publish: (event: BelayEventInput) =>
         Effect.promise(async () => {
           if (event.type === "assistant.progress") {
             finalOutputTokens = outputTokensOf(event) ?? finalOutputTokens;

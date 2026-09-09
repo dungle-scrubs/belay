@@ -1,6 +1,6 @@
-# Doctor - Trevor's health surface
+# Doctor - Belay's health surface
 
-`/doctor` is Trevor's user-facing health report about **Trevor itself**: what is
+`/doctor` is Belay's user-facing health report about **Belay itself**: what is
 healthy, what is degraded, what is broken, why it matters, and what to do next.
 It is deliberately separate from `host.debugInfo` (see below).
 
@@ -27,7 +27,7 @@ Web / Docs · MCP · LSP · Hooks · Storage / Roots · Workspace · Local admis
 Telemetry · Updates / Version.
 
 The canonical id set and order are frozen in `packages/session/src/doctor.ts`
-(`DOCTOR_AREA_ORDER`) and pinned by `doctor.test.ts`. An area Trevor does not
+(`DOCTOR_AREA_ORDER`) and pinned by `doctor.test.ts`. An area Belay does not
 probe reports `not_checked` with a concise reason - it is never dropped, so the
 grid is always complete.
 
@@ -71,7 +71,7 @@ can leak anything the dashboard does not already show.
 
 The read-only `doctor` tool returns the same sanitized health report as formatted
 text. It is **diagnostic only**: the system prompt tells the model to call it only
-when the user asks about Trevor's own health, setup, provider/model/tool
+when the user asks about Belay's own health, setup, provider/model/tool
 availability, connectivity, or why a turn failed - never as routine
 context-gathering for ordinary coding work (use read/grep/glob for that).
 
@@ -81,5 +81,5 @@ context-gathering for ordinary coding work (use read/grep/glob for that).
 - **`host.debugInfo`** = sanitized runtime internals for inspection.
 
 Reach for `host.debugInfo` when you need raw internal state a health verdict does
-not surface; reach for `/doctor` to answer "is Trevor healthy, and if not, what do
+not surface; reach for `/doctor` to answer "is Belay healthy, and if not, what do
 I do?".

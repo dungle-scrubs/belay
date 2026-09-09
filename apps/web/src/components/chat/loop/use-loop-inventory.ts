@@ -1,5 +1,5 @@
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   type LoopInventoryRow,
   loopSnapshotToInventoryRow,
   type SessionEvent,
@@ -14,7 +14,7 @@ export function loopInventoryRowsFromEvents(
     if (event.type !== "loop.status") {
       continue;
     }
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type !== "loop.status") {
       continue;
     }

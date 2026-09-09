@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  type BelayEventInput,
   events,
   PRODUCER_IDS,
   type ProducerId,
   type SessionEvent,
-  type TrevorEventInput,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
@@ -34,13 +34,13 @@ const WEB: ProducerId = PRODUCER_IDS.web;
 
 let seq = 0;
 /** Wraps an `events.*` constructor output in a durable-log envelope for the fold. */
-const ev = (input: TrevorEventInput, producerId: ProducerId = WEB): SessionEvent =>
+const ev = (input: BelayEventInput, producerId: ProducerId = WEB): SessionEvent =>
   storedEvent(input, { seq: seq++, producerId });
 
 const project = (log: SessionEvent[]): ChatMessage[] => buildHistory(log, { selfProducerId: SELF });
 
 /** A `context.compacted` fold event with a minimal manifest, for the compaction (D-040) tests. */
-const fold = (p: { throughSeq: number; summary: string; supersedes?: string }): TrevorEventInput =>
+const fold = (p: { throughSeq: number; summary: string; supersedes?: string }): BelayEventInput =>
   events.contextCompacted({
     foldId: `fold-${p.throughSeq}`,
     throughSeq: p.throughSeq,

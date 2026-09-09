@@ -6,7 +6,7 @@ import {
   transportEmit,
 } from "@belay/agent-host/testing";
 import type { RunningServer } from "@belay/server-kit";
-import { decodeTrevorEvent, type SessionEvent, streamTransport } from "@belay/session";
+import { decodeBelayEvent, type SessionEvent, streamTransport } from "@belay/session";
 import { createWorkflowDriver } from "@belay/test-kit";
 import { bootStore } from "@belay/test-kit/boot";
 import { Stream } from "effect";
@@ -99,7 +99,7 @@ test("a DeepSeek-like 1M-context low-pressure stop replays as an adaptive step_b
     label: "assistant.completed step_backstop",
   });
   const completed = workflow.events.find((e) => e.type === "assistant.completed");
-  const decoded = completed ? decodeTrevorEvent(completed) : null;
+  const decoded = completed ? decodeBelayEvent(completed) : null;
   assert.equal(decoded?.type, "assistant.completed");
   if (decoded?.type !== "assistant.completed") return;
   // A 1M window at ~8.9% pressure earns the >=1M tier budget (96), so the backstop replays at the
@@ -143,7 +143,7 @@ test("a high-context pressure stop replays as context_pressure after synthesis",
     label: "assistant.completed context_pressure",
   });
   const completed = workflow.events.find((e) => e.type === "assistant.completed");
-  const decoded = completed ? decodeTrevorEvent(completed) : null;
+  const decoded = completed ? decodeBelayEvent(completed) : null;
   assert.equal(decoded?.type, "assistant.completed");
   if (decoded?.type !== "assistant.completed") return;
   assert.equal(decoded.stepLimit, 1);
@@ -198,7 +198,7 @@ test("a DeepSeek-style thinking-only stream drop reconnects and completes throug
 
   // A reconnecting marker carrying the safe-to-retry transport diagnostic rode the durable wire.
   const reconnecting = workflow.events.find((e) => e.type === "assistant.reconnecting");
-  const rDecoded = reconnecting ? decodeTrevorEvent(reconnecting) : null;
+  const rDecoded = reconnecting ? decodeBelayEvent(reconnecting) : null;
   assert.equal(rDecoded?.type, "assistant.reconnecting");
   if (rDecoded?.type !== "assistant.reconnecting") return;
   assert.equal(rDecoded.diagnostic?.safeToRetry, true);
@@ -206,7 +206,7 @@ test("a DeepSeek-style thinking-only stream drop reconnects and completes throug
 
   // The retry succeeded: a clean completion with the answer, and NEVER a bare `stream failed` error.
   const completed = workflow.events.find((e) => e.type === "assistant.completed");
-  const decoded = completed ? decodeTrevorEvent(completed) : null;
+  const decoded = completed ? decodeBelayEvent(completed) : null;
   assert.equal(decoded?.type, "assistant.completed");
   if (decoded?.type !== "assistant.completed") return;
   assert.equal(decoded.error, undefined);

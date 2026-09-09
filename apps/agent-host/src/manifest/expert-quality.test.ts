@@ -2,7 +2,7 @@ import type { CapabilityManifest, ManifestScope, ManifestSection } from "@belay/
 import { MANIFEST_VERSION } from "@belay/session";
 import { describe, expect, it } from "vitest";
 import { READ_ONLY_TOOLS } from "../tools";
-import { answerExpertQuery, MAX_EXPERT_SECTIONS, TREVOR_EXPERT_NAME } from "./expert";
+import { answerExpertQuery, BELAY_EXPERT_NAME, MAX_EXPERT_SECTIONS } from "./expert";
 
 /**
  * A rich fake manifest covering every topic, plus one unavailable section, so the expert evals exercise
@@ -72,7 +72,7 @@ const getManifest = (scope: ManifestScope): Promise<CapabilityManifest> =>
 
 describe("belay-expert safety - read-only, no authority, bounded (M9)", () => {
   it("is classified read-only in the shared tool vocabulary", () => {
-    expect(READ_ONLY_TOOLS.has(TREVOR_EXPERT_NAME)).toBe(true);
+    expect(READ_ONLY_TOOLS.has(BELAY_EXPERT_NAME)).toBe(true);
   });
 
   it("only READS the manifest at the expert scope - its sole external call is a manifest read", async () => {

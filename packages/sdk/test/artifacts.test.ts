@@ -1,6 +1,6 @@
 import { type BootedBlob, bootBlob } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createTrevorClient } from "../src/index";
+import { createBelayClient } from "../src/index";
 
 /**
  * SDK artifact client over a REAL blob-store (plan 28 M3 integration): upload returns a content-addressed
@@ -21,7 +21,7 @@ afterAll(async () => {
 
 describe("artifact round-trip over a real blob-store (M3)", () => {
   it("uploads bytes to a structured ref and downloads them back exactly", async () => {
-    const client = createTrevorClient({ sessionUrl: "http://127.0.0.1:1", blobUrl: blob.url });
+    const client = createBelayClient({ sessionUrl: "http://127.0.0.1:1", blobUrl: blob.url });
     const bytes = new TextEncoder().encode("artifact payload");
     const ref = await client.uploadArtifact(bytes, "text/plain", {
       kind: "document",
@@ -41,7 +41,7 @@ describe("artifact round-trip over a real blob-store (M3)", () => {
   });
 
   it("dedupes identical bytes to the same hash and probes metadata via HEAD", async () => {
-    const client = createTrevorClient({ sessionUrl: "http://127.0.0.1:1", blobUrl: blob.url });
+    const client = createBelayClient({ sessionUrl: "http://127.0.0.1:1", blobUrl: blob.url });
     const bytes = new TextEncoder().encode("same content");
     const first = await client.uploadArtifact(bytes, "text/plain");
     const second = await client.uploadArtifact(bytes, "text/plain");

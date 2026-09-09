@@ -1,13 +1,8 @@
-import {
-  events,
-  type LoopSnapshot,
-  type SessionEvent,
-  type TrevorEventInput,
-} from "@belay/session";
+import { type BelayEventInput, events, type LoopSnapshot, type SessionEvent } from "@belay/session";
 import { expect, test } from "vitest";
 import { loopInventoryRowsFromEvents } from "./use-loop-inventory";
 
-function stored(input: TrevorEventInput, seq: number): SessionEvent {
+function stored(input: BelayEventInput, seq: number): SessionEvent {
   return {
     createdAt: "2026-01-01T00:00:00.000Z",
     eventId: `ev-${seq}`,

@@ -16,7 +16,7 @@ test("bootstrapTelemetry resolves config and installs a sink (disabled/local -> 
   assert.equal(telemetrySink(), sink, "the installed sink is the active one");
   // Under a test/CI env, remote telemetry is force-off.
   assert.equal(
-    bootstrapTelemetry({ VITEST: "true", TREVOR_SENTRY_DSN: "https://x@y/1" }) &&
+    bootstrapTelemetry({ VITEST: "true", BELAY_SENTRY_DSN: "https://x@y/1" }) &&
       telemetryConfig().sentryDsn,
     null,
   );

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  type BelayEventInput,
   events,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
   type SessionEvent,
-  type TrevorEventInput,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { Effect, Exit, Fiber } from "effect";
@@ -47,12 +47,12 @@ const ACCEPT: ProviderQuestionAnswer = {
 
 function harness() {
   const rt = new ProviderQuestionRuntime();
-  const emitted: TrevorEventInput[] = [];
+  const emitted: BelayEventInput[] = [];
   rt.configure((e) => emitted.push(e));
   return { rt, emitted };
 }
 
-const requestedId = (emitted: readonly TrevorEventInput[]): string => {
+const requestedId = (emitted: readonly BelayEventInput[]): string => {
   const requested = emitted.find((e) => e.type === "provider.question.requested");
   assert.ok(requested, "a request event was emitted");
   return requested.payload.questionId as string;

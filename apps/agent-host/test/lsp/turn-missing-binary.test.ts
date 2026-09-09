@@ -10,7 +10,7 @@ import { finalAnswer, scriptedProvider, toolCallNames, toolResult } from "./scri
  * Plan 24 M7 distraction regression, missing-binary case (D-009, D-006): a TS workspace with NO
  * language server installed anywhere (no workspace-local binary, PATH cleared) must degrade to
  * bounded "not installed" text inside a full fake-provider turn that then proceeds to normal
- * read/answer work. Its own file because the workspace binds per test module (TREVOR_WORKSPACE
+ * read/answer work. Its own file because the workspace binds per test module (BELAY_WORKSPACE
  * is read at host-module load) and this one must NOT carry the fixture server shim.
  */
 
@@ -21,8 +21,8 @@ const ws = createEvalWorkspace({
   },
 });
 
-const prevWorkspace = process.env.TREVOR_WORKSPACE;
-process.env.TREVOR_WORKSPACE = ws;
+const prevWorkspace = process.env.BELAY_WORKSPACE;
+process.env.BELAY_WORKSPACE = ws;
 
 const { runTurn } = await import("../support/fake-provider");
 const { executeTool } = await import("@host/tools/index");
@@ -41,8 +41,8 @@ afterAll(async () => {
   await lspManager.close();
   if (prevPath === undefined) delete process.env.PATH;
   else process.env.PATH = prevPath;
-  if (prevWorkspace === undefined) delete process.env.TREVOR_WORKSPACE;
-  else process.env.TREVOR_WORKSPACE = prevWorkspace;
+  if (prevWorkspace === undefined) delete process.env.BELAY_WORKSPACE;
+  else process.env.BELAY_WORKSPACE = prevWorkspace;
   rmSync(ws, { recursive: true, force: true });
 });
 

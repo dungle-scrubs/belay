@@ -22,7 +22,7 @@ import { READ_ONLY_TOOLS, TOOL_DEFS } from "@host/tools/index";
  *
  * Three built-ins ship: `general-purpose` (all tools), `explorer` (read-only), and `verifier` (a
  * read-only INDEPENDENT ADVERSARIAL reviewer - plan 45 M2). User-defined agents are discovered from
- * `<TREVOR_AGENTS_DIR>/<id>/AGENT.md` (frontmatter + body) like skills, and
+ * `<BELAY_AGENTS_DIR>/<id>/AGENT.md` (frontmatter + body) like skills, and
  * override a built-in of the same id. The discovered roster is announced in host.online so the model
  * can choose one by description.
  *
@@ -32,7 +32,7 @@ import { READ_ONLY_TOOLS, TOOL_DEFS } from "@host/tools/index";
 
 /** Configurable agents root; one agent per `<dir>/<id>/AGENT.md`. */
 export const AGENTS_DIR = resolve(
-  process.env.TREVOR_AGENTS_DIR ?? join(homedir(), ".belay", "agents"),
+  process.env.BELAY_AGENTS_DIR ?? join(homedir(), ".belay", "agents"),
 );
 
 /** A delegated subagent's contract. */

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import { publishTurn } from "@host/agent/turn";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
@@ -55,7 +55,7 @@ function twoStepProvider(onStep: (reasoning: string | undefined, call: number) =
 
 const history: ChatMessage[] = [{ role: "user", content: "go" }];
 
-async function runWith(provider: Provider, cell = createSwitchCell()): Promise<TrevorEventInput[]> {
+async function runWith(provider: Provider, cell = createSwitchCell()): Promise<BelayEventInput[]> {
   const { layer, events } = collectingEmit();
   await Effect.runPromise(
     publishTurn(provider, history, {

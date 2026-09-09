@@ -1,7 +1,7 @@
 import type { HostPresence } from "./envelope";
 import type { SessionEvent } from "./event";
 import type { SessionSummary } from "./inventory";
-import type { TrevorEventInput } from "./protocol";
+import type { BelayEventInput } from "./protocol";
 import type { PermanentDeleteResult } from "./session-delete";
 
 /**
@@ -39,7 +39,7 @@ export interface PublishInput {
  * `{ ...envelope, producerId }` - and, at their worst, re-typing the event-type literal beside the
  * constructor that already owns it.
  */
-export function toPublishInput(envelope: TrevorEventInput, producerId: string): PublishInput {
+export function toPublishInput(envelope: BelayEventInput, producerId: string): PublishInput {
   return { type: envelope.type, producerId, payload: envelope.payload };
 }
 

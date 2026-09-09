@@ -31,7 +31,7 @@ import type { HighlightResult } from "./code-highlight";
 // renderer must (a) route Mermaid away first, (b) pass an explicit fenced language (never guess), and
 // (c) keep its copy action sourced from the raw text, not the returned token markup.
 //
-// Explicit-language grammars only (plan 36): we register the languages Trevor transcripts actually
+// Explicit-language grammars only (plan 36): we register the languages Belay transcripts actually
 // carry and never auto-detect, so an unknown or bare fence stays plain and safe. Each grammar also
 // registers the aliases it declares (`ts`, `sh`, `py`, `yml`, ...); a few extra aliases below cover
 // spellings hljs doesn't ship. Runs once at module load, never on a render path (M2 REFACTOR).

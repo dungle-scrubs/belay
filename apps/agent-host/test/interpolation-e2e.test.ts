@@ -10,14 +10,14 @@ import { afterEach, describe, expect, it } from "vitest";
  * Responsible for: the end-to-end command-file interpolation checks (plan 40, M8) - disabled vs. enabled
  * expansion through the real allow-listed command runner + manifest source, the refusal path, the
  * regression that immediate slash commands never interpolate, and the gated LIVE lane (skipped unless the
- * operator sets TREVOR_ENABLE_INTERPOLATION=1 in the process env).
+ * operator sets BELAY_ENABLE_INTERPOLATION=1 in the process env).
  * Not for: the pure parser (interpolation-engine.test.ts) or the policy primitives
  * (interpolation.test.ts).
  */
 
-const ON = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
+const ON = resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" });
 const OFF = resolveInterpolationConfig({});
-const LIVE = process.env.TREVOR_ENABLE_INTERPOLATION === "1";
+const LIVE = process.env.BELAY_ENABLE_INTERPOLATION === "1";
 
 function trusted(body: string): CommandFile {
   return { id: "demo", rootKind: "builtin", body };

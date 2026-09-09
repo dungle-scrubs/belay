@@ -1,4 +1,4 @@
-import { events, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events } from "@belay/session";
 import type { ProviderError } from "@host/providers/index";
 import type { Lease } from "@host/session/lease";
 import { warn } from "@host/transport/log";
@@ -57,12 +57,12 @@ export function makeCompactionCommands(deps: CompactionCommandsDeps) {
   /** The in-flight MANUAL `/compact` fold, so ESC can interrupt it (the user asked, so they can take
    *  it back). Only the manual fold is tracked - automatic folds are not interruptible (the blocking
    *  one is load-bearing for the next turn). Null when no manual fold is running. */
-  let manualCompactFiberValue: Fiber.RuntimeFiber<TrevorEventInput | null, ProviderError> | null =
+  let manualCompactFiberValue: Fiber.RuntimeFiber<BelayEventInput | null, ProviderError> | null =
     null;
 
   /** The in-flight manual fold's fiber, or null - read by abortRuns (to interrupt it), the
    *  workspace-switch blocker, and the leadership dangling-/compact reap. */
-  function manualCompactFiber(): Fiber.RuntimeFiber<TrevorEventInput | null, ProviderError> | null {
+  function manualCompactFiber(): Fiber.RuntimeFiber<BelayEventInput | null, ProviderError> | null {
     return manualCompactFiberValue;
   }
 

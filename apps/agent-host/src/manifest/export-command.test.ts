@@ -1,7 +1,7 @@
 import type { CapabilityManifest, ManifestScope } from "@belay/session";
 import { MANIFEST_VERSION } from "@belay/session";
 import { describe, expect, it } from "vitest";
-import { buildTrevorExportCommand, parseExportArgs } from "./export-command";
+import { buildBelayExportCommand, parseExportArgs } from "./export-command";
 import { registerManifestSource } from "./source";
 
 function fakeManifest(scope: ManifestScope): CapabilityManifest {
@@ -65,7 +65,7 @@ describe("parseExportArgs (M6)", () => {
 describe("/belay-export command dispatch (M6)", () => {
   it("reports the manifest as unavailable when no live source is registered", async () => {
     // This runs before any registration in this file, so the source is unset.
-    const command = buildTrevorExportCommand();
+    const command = buildBelayExportCommand();
     const result = await command.run("", undefined);
     expect(typeof result === "object" && result.ok).toBe(false);
     expect(typeof result === "object" && result.text).toMatch(/unavailable/i);
@@ -73,7 +73,7 @@ describe("/belay-export command dispatch (M6)", () => {
 
   it("renders JSON and human text from the live source, at the requested scope", async () => {
     registerManifestSource((scope) => Promise.resolve(fakeManifest(scope)));
-    const command = buildTrevorExportCommand();
+    const command = buildBelayExportCommand();
 
     const json = await command.run("--json", undefined);
     const jsonText = typeof json === "object" ? json.text : json;

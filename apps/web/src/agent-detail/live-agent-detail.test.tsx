@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, type SessionEvent, events as sessionEvents } from "@belay/session";
 import { recordingTransport } from "@belay/test-kit";
 import { render, screen, waitFor } from "@testing-library/react";
 import { test } from "vitest";
@@ -13,7 +13,7 @@ import { LiveAgentDetail } from "./live-agent-detail";
  */
 
 let seq = 0;
-function stored(input: TrevorEventInput, producerId = "belay-host"): SessionEvent {
+function stored(input: BelayEventInput, producerId = "belay-host"): SessionEvent {
   seq += 1;
   return {
     sessionId: "s::sub::a",

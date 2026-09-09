@@ -4,7 +4,7 @@ import {
   type CatalogEntry,
   type CommandSpec,
   type DecodedEvent,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   expandArgs,
   type GitStatus,
   HOST_ROLE,
@@ -37,7 +37,7 @@ function latest<T>(
   let result: T | undefined;
 
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     const value = decoded ? pick(decoded, event) : undefined;
     if (value !== undefined) {
       result = value;
@@ -50,7 +50,7 @@ function latest<T>(
 /**
  * Pure view-model derivations over the Tether event log, kept out of app.tsx so
  * the component is just rendering. Each folds `readonly SessionEvent[]` into a
- * typed shape via `decodeTrevorEvent`, so none of them hand-guard raw payloads.
+ * typed shape via `decodeBelayEvent`, so none of them hand-guard raw payloads.
  */
 
 /** Compact token count: 6100 -> "6.1k", 812 -> "812". */
@@ -229,7 +229,7 @@ export function hostStatus(
   const lastSeen = new Map<string, number>();
 
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
 
     if (!decoded) {
       continue;
@@ -433,7 +433,7 @@ export function tasksFrom(events: readonly SessionEvent[]): TaskSnapshot[] {
   let bestTasks: readonly TaskSnapshot[] | undefined;
 
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
 
     if (decoded?.type === "tasks.current" && taskSnapshotReplaces(decoded.rev, bestRev)) {
       bestRev = decoded.rev;
@@ -458,7 +458,7 @@ export function tasksStale(events: readonly SessionEvent[]): boolean {
   let lastUserMessageAt = -1;
 
   events.forEach((event, index) => {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type === "tasks.current") {
       lastTasksAt = index;
       lastTasksEmpty = decoded.tasks.length === 0;
@@ -486,7 +486,7 @@ export interface LastUserModel {
 export function lastUserModelFrom(events: readonly SessionEvent[]): LastUserModel | null {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
-    const decoded = event ? decodeTrevorEvent(event) : null;
+    const decoded = event ? decodeBelayEvent(event) : null;
     if (decoded?.type === "user.message" && decoded.provider) {
       return {
         provider: decoded.provider,
@@ -514,7 +514,7 @@ export function pendingQuestionFrom(events: readonly SessionEvent[]): PendingQue
   const requested = new Map<string, PendingQuestion>();
   const resolved = new Set<string>();
   for (const event of events) {
-    const d = decodeTrevorEvent(event);
+    const d = decodeBelayEvent(event);
     if (d?.type === "provider.question.requested") {
       requested.set(d.questionId, {
         questionId: d.questionId,
@@ -552,7 +552,7 @@ export type PendingHandoff =
 export function pendingHandoffFrom(events: readonly SessionEvent[]): PendingHandoff | null {
   const byId = new Map<string, PendingHandoff>();
   for (const event of events) {
-    const d = decodeTrevorEvent(event);
+    const d = decodeBelayEvent(event);
     if (!d) {
       continue;
     }
@@ -821,7 +821,7 @@ export function activeTurnStartedAt(events: readonly SessionEvent[]): number | n
     if (!event) {
       continue;
     }
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }
@@ -878,7 +878,7 @@ function activeTurnEvidence(
   let streaming = false;
   if (runId) {
     for (const event of events) {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       if (!decoded) {
         continue;
       }
@@ -911,7 +911,7 @@ function activeDelegatingAgent(
   }
   const runningByChild = new Map<string, string>();
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type !== "delegated.to" || decoded.runId !== runId) {
       continue;
     }
@@ -938,7 +938,7 @@ function liveOutputTokens(events: readonly SessionEvent[]): number | undefined {
   let max: number | undefined;
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const event = events[i];
-    const decoded = event ? decodeTrevorEvent(event) : null;
+    const decoded = event ? decodeBelayEvent(event) : null;
     if (!decoded) {
       continue;
     }
@@ -1163,7 +1163,7 @@ export function detectOrphanedSubagents(
   const running = new Map<string, OrphanedSubagent>();
   const terminated = new Set<string>();
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type !== "delegated.to") {
       continue;
     }
@@ -1207,7 +1207,7 @@ function newestTurnIsUnansweredPrompt(events: readonly SessionEvent[]): boolean 
     if (!event) {
       continue;
     }
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }

@@ -1,6 +1,6 @@
 /**
  * The usage-limit signal (plan 44.4): a provider's "how close is this session to a rate/usage window
- * limit" reading, normalized across providers into ONE Trevor-native vocabulary. Owned here so the
+ * limit" reading, normalized across providers into ONE Belay-native vocabulary. Owned here so the
  * pi-ai boundary (Claude's `anthropic-ratelimit-unified-*` success headers, a Codex 429), the
  * `assistant.limit` protocol event, and both consumers (sdk projection, web transcript marker) all read
  * the SAME status/scope set instead of re-deriving it. Mirrors `connectivity.ts` - a pure, isomorphic
@@ -12,7 +12,7 @@
  * failure-taxonomy/usage-limit-capture), or rendering (web transcript).
  */
 
-/** The Trevor-native, provider-agnostic limit status, ordered least -> most constrained. Normalized
+/** The Belay-native, provider-agnostic limit status, ordered least -> most constrained. Normalized
  *  from Claude's `allowed|allowed_warning|rejected` and Codex's 429 (`reached`). */
 export const LIMIT_STATUSES = ["ok", "approaching", "reached"] as const;
 export type LimitStatus = (typeof LIMIT_STATUSES)[number];
@@ -33,14 +33,14 @@ export interface UsageLimit {
 
 const UNIFIED_PREFIX = "anthropic-ratelimit-unified";
 
-/** The Anthropic unified windows, in scope-priority order (tie-break), mapped to Trevor scope ids. */
+/** The Anthropic unified windows, in scope-priority order (tie-break), mapped to Belay scope ids. */
 const WINDOWS: readonly { readonly key: string; readonly scope: LimitScope }[] = [
   { key: "5h", scope: "five_hour" },
   { key: "7d-opus", scope: "seven_day_opus" },
   { key: "7d", scope: "seven_day" },
 ];
 
-/** Claude's `anthropic-ratelimit-unified-status` tokens -> the Trevor-native status. */
+/** Claude's `anthropic-ratelimit-unified-status` tokens -> the Belay-native status. */
 const STATUS_MAP: Record<string, LimitStatus> = {
   allowed: "ok",
   allowed_warning: "approaching",

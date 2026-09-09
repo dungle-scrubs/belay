@@ -5,7 +5,7 @@ import type { QuestionMessage } from "@/transcript";
 import { QuestionTranscriptItem } from "./question-item";
 
 /**
- * The slim resolved-question transcript item (02.7): renders what Trevor asked and how the user
+ * The slim resolved-question transcript item (02.7): renders what Belay asked and how the user
  * answered, compact by default and as a single line when `oneLine`. Runs in the jsdom `web` project.
  */
 

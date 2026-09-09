@@ -18,7 +18,7 @@ import { test } from "vitest";
  * live daemon: `SOURCE_RECALL_URL=http://127.0.0.1:7249 pnpm test:e2e`.
  */
 
-const OPTED_IN = process.env.TREVOR_LIVE === "1" || Boolean(process.env.SOURCE_RECALL_URL);
+const OPTED_IN = process.env.BELAY_LIVE === "1" || Boolean(process.env.SOURCE_RECALL_URL);
 const URL = process.env.SOURCE_RECALL_URL ?? "http://127.0.0.1:7249";
 
 interface Probe {
@@ -53,7 +53,7 @@ const probe: Probe = OPTED_IN
   ? await probeHealth(URL)
   : {
       reachable: false,
-      reason: "set SOURCE_RECALL_URL or TREVOR_LIVE=1 to run the live source-recall check",
+      reason: "set SOURCE_RECALL_URL or BELAY_LIVE=1 to run the live source-recall check",
     };
 
 if (!probe.reachable) {

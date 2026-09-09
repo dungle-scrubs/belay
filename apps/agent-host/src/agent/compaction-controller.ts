@@ -3,7 +3,7 @@
  * window, last measured usage, fold snapshots, and the needed()/planFold() surface callers drive.
  * Not for: fold planning or summarization - compaction-planner.ts and compactor.ts.
  */
-import type { SessionEvent, TrevorEventInput } from "@belay/session";
+import type { BelayEventInput, SessionEvent } from "@belay/session";
 import type { Effect } from "effect";
 import type { Provider, ProviderError } from "../providers";
 import { COMPACT_WHEN, overBudget, runCompaction } from "./compactor";
@@ -94,7 +94,7 @@ export class CompactionController {
    * positional arg list. The caller forks the returned Effect; its `context.compacted` result (or
    * null on nothing-to-fold) flows back through the normal echo path.
    */
-  planFold(plan: CompactionFoldRequest): Effect.Effect<TrevorEventInput | null, ProviderError> {
+  planFold(plan: CompactionFoldRequest): Effect.Effect<BelayEventInput | null, ProviderError> {
     return runCompaction(
       plan.provider,
       plan.events,

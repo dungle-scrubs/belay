@@ -1,11 +1,11 @@
 import {
-  decodeTrevorEvent,
+  type BelayEventInput,
+  decodeBelayEvent,
   type SessionEvent,
   type SessionTransport,
   SUPERVISOR_SESSION_ID,
   type SupervisorProject,
   events as sessionEvents,
-  type TrevorEventInput,
 } from "@belay/session";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { publishWebEvent, sessionTransport, useSessionWithTransport } from "@/session/use-session";
@@ -67,7 +67,7 @@ export function useSidebarSupervisor(
   const controlEvents = control.events;
 
   const publish = useCallback(
-    (built: TrevorEventInput): Promise<void> =>
+    (built: BelayEventInput): Promise<void> =>
       publishWebEvent(transport, SUPERVISOR_SESSION_ID, built),
     [transport],
   );
@@ -98,7 +98,7 @@ export function useSidebarSupervisor(
   useEffect(() => {
     for (let i = cursorRef.current; i < controlEvents.length; i += 1) {
       const event = controlEvents[i];
-      const decoded = event ? decodeTrevorEvent(event) : null;
+      const decoded = event ? decodeBelayEvent(event) : null;
       if (!decoded) {
         continue;
       }

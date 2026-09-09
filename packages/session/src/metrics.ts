@@ -1,6 +1,6 @@
 import type { SessionEvent } from "./event";
 import type { ProviderIncidentReason, Usage } from "./protocol";
-import { decodeTrevorEvent } from "./protocol-decode";
+import { decodeBelayEvent } from "./protocol-decode";
 
 /**
  * The usage-metrics READ MODEL (plan 43). A pure, presentation-free projection of the durable session
@@ -309,7 +309,7 @@ export function collectTurns(events: readonly SessionEvent[]): readonly TurnUsag
   let started = 0;
 
   for (const event of ordered) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }

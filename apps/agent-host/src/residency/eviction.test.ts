@@ -67,7 +67,7 @@ test("an orphaned Belay-loaded model (no claim, no generation) is unloaded under
   assert.deepEqual(outcomes, [{ model: MODEL, unloaded: true }]);
   assert.deepEqual(unloaded, [MODEL], "the model was unloaded");
   assert.deepEqual(leaseCalls, [MODEL], "the unload ran under the lifecycle lease");
-  assert.equal(registry.isTrevorLoaded(EP, MODEL), false, "and recorded as no longer resident");
+  assert.equal(registry.isBelayLoaded(EP, MODEL), false, "and recorded as no longer resident");
 });
 
 test("a model another live instance still claims is NOT unloaded (D-002)", async () => {
@@ -82,7 +82,7 @@ test("a model another live instance still claims is NOT unloaded (D-002)", async
   const outcomes = await eviction.sweep(PROVIDER, EP);
   assert.deepEqual(outcomes, [{ model: MODEL, unloaded: false, skipped: "other-claim" }]);
   assert.deepEqual(unloaded, [], "a model another instance claims is never unloaded");
-  assert.equal(registry.isTrevorLoaded(EP, MODEL), true, "it stays resident");
+  assert.equal(registry.isBelayLoaded(EP, MODEL), true, "it stays resident");
 });
 
 test("a model under an active generation is NOT unloaded (cross-instance: A generating, B switching away)", async () => {

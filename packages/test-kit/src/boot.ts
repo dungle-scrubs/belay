@@ -1,6 +1,6 @@
 import { rmSync } from "node:fs";
 import { createBlobServer } from "@belay/blob-store/server";
-import { createTrevorClient, type TrevorClient } from "@belay/sdk";
+import { type BelayClient, createBelayClient } from "@belay/sdk";
 import { type RunningServer, startServer } from "@belay/server-kit";
 import { streamTransport } from "@belay/session";
 import { createSessionStore } from "@belay/session-store/server";
@@ -53,7 +53,7 @@ export interface BootedSdkStack {
   readonly store: RunningServer;
   readonly blob: BootedBlob;
   /** An SDK client bound to the booted store (`sessionUrl`) and blob (`blobUrl`). */
-  readonly client: TrevorClient;
+  readonly client: BelayClient;
   /** Stops both stores (and removes the blob temp root). */
   close(): Promise<void>;
 }
@@ -67,7 +67,7 @@ export interface BootedSdkStack {
 export async function bootSdkStack(): Promise<BootedSdkStack> {
   const store = await bootStore();
   const blob = await bootBlob();
-  const client = createTrevorClient({ sessionUrl: store.url, blobUrl: blob.url });
+  const client = createBelayClient({ sessionUrl: store.url, blobUrl: blob.url });
   return {
     store,
     blob,

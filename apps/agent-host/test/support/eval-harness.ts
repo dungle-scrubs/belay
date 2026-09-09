@@ -3,13 +3,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   type ArtifactSource,
-  createTrevorClient,
+  type BelayClient,
+  createBelayClient,
   type TranscriptEntry,
-  type TrevorClient,
 } from "@belay/sdk";
 import {
   type ArtifactRef,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   PRODUCER_IDS,
   type SessionEvent,
   type SessionTransport,
@@ -68,7 +68,7 @@ export function attachFakeHost(
     identity: testIdentity("eval-fake-host"),
     afterSeq: 0,
     onEvent: (event) => {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       if (
         event.type === "user.message" &&
         event.producerId !== hostProducer &&
@@ -130,7 +130,7 @@ export interface EvalRunRecord {
 }
 
 export interface EvalHarness {
-  readonly client: TrevorClient;
+  readonly client: BelayClient;
   readonly store: BootedStore;
   readonly blob: BootedBlob;
   /** Uploads bytes to the booted blob store and returns a ref a run can attach to its prompt. */
@@ -151,7 +151,7 @@ const DEFAULT_FAKE_TIMEOUT_MS = 5_000;
 export async function createFakeEvalHarness(sessionId = "eval"): Promise<EvalHarness> {
   const store = await bootStore();
   const blob = await bootBlob();
-  const client = createTrevorClient({ sessionUrl: store.url, blobUrl: blob.url });
+  const client = createBelayClient({ sessionUrl: store.url, blobUrl: blob.url });
   await client.ensureSession(sessionId);
 
   let currentProvider: Provider = fakeProvider();
@@ -172,7 +172,7 @@ export async function createFakeEvalHarness(sessionId = "eval"): Promise<EvalHar
         afterSeq,
         timeoutMs: input.timeoutMs ?? DEFAULT_FAKE_TIMEOUT_MS,
         onEvent: (event) => {
-          const decoded = decodeTrevorEvent(event);
+          const decoded = decodeBelayEvent(event);
           if (decoded?.type === "assistant.started" && runId === null) {
             runId = decoded.runId;
             if (input.cancel) {

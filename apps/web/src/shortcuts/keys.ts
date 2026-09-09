@@ -1,6 +1,6 @@
 /**
  * Platform `Mod` normalization + chord matching (plan 07). "Mod" is the primary app modifier - `Cmd`
- * on macOS, `Ctrl` on Windows/Linux - so every Trevor binding is written once as e.g. `Mod+K` and
+ * on macOS, `Ctrl` on Windows/Linux - so every Belay binding is written once as e.g. `Mod+K` and
  * matched against the live platform. Pure + injectable (`mac` is a parameter), so the router decision
  * is unit-tested without a real `navigator`.
  */

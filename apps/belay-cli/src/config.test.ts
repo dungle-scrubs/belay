@@ -13,14 +13,14 @@ test("model config precedence is flag over env over file over host default", () 
     resolveModelConfig({
       flagModel: "flag/model",
       flagReasoning: "high",
-      env: { TREVOR_MODEL: "env/model", TREVOR_REASONING: "medium" },
+      env: { BELAY_MODEL: "env/model", BELAY_REASONING: "medium" },
       loadedConfig,
     }),
     { model: "flag/model", reasoning: "high", warning: null },
   );
   assert.deepEqual(
     resolveModelConfig({
-      env: { TREVOR_MODEL: "env/model", TREVOR_REASONING: "medium" },
+      env: { BELAY_MODEL: "env/model", BELAY_REASONING: "medium" },
       loadedConfig,
     }),
     { model: "env/model", reasoning: "medium", warning: null },

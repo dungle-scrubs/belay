@@ -7,7 +7,7 @@ import {
 } from "@host/doctor/build";
 import { buildLoopCommands } from "@host/loop/command";
 import type { LoopController } from "@host/loop/store";
-import { buildTrevorExportCommand } from "@host/manifest/export-command";
+import { buildBelayExportCommand } from "@host/manifest/export-command";
 import { loadStylePref, saveStylePref } from "@host/prefs/style-store";
 import { handleStyleCommand } from "@host/prefs/styles";
 import { resolveVimToggle, saveVimPref, vimEnabled } from "@host/prefs/vim-store";
@@ -402,7 +402,7 @@ export function buildCommandRegistry(
   add(buildStyleCommand());
   // /belay-export owns the capability manifest export (plan 14); it reads the live manifest through a
   // source seam registered by main.ts, so it needs no CommandContext.
-  add(buildTrevorExportCommand());
+  add(buildBelayExportCommand());
   add(buildVimCommand());
   add(buildJobsCommand());
   add(buildJobsDismissCommand());

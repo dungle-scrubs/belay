@@ -14,7 +14,7 @@ export interface ProtocolRegistry {
 }
 
 /**
- * Owns Trevor event-family registration and lookup. Family modules can register the wire names they
+ * Owns Belay event-family registration and lookup. Family modules can register the wire names they
  * decode without exposing registry internals through the package root.
  */
 export function createProtocolRegistry(families: readonly EventFamily[]): ProtocolRegistry {
@@ -22,7 +22,7 @@ export function createProtocolRegistry(families: readonly EventFamily[]): Protoc
   for (const family of families) {
     for (const wireName of family.wireNames) {
       if (byWireName.has(wireName)) {
-        throw new Error(`Duplicate Trevor protocol event registration: ${wireName}`);
+        throw new Error(`Duplicate Belay protocol event registration: ${wireName}`);
       }
       byWireName.set(wireName, family);
     }

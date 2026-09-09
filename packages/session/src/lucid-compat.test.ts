@@ -33,7 +33,7 @@ test("the committed fixture conforms to the standalone lucid CLI anchor contract
   }
 });
 
-test("importLucidSession maps an external lucid log into structured Trevor feedback (M8)", () => {
+test("importLucidSession maps an external lucid log into structured Belay feedback (M8)", () => {
   const imported = importLucidSession(FIXTURE);
   assert.equal(imported.lucidId, "plan", "lucidId derives from the artifact path basename");
   assert.equal(imported.version, 2, "the latest version wins");
@@ -55,7 +55,7 @@ test("importLucidSession maps an external lucid log into structured Trevor feedb
   }
 });
 
-test("Trevor's import is NON-DESTRUCTIVE: the fixture anchors still pass lucid's contract after import", () => {
+test("Belay's import is NON-DESTRUCTIVE: the fixture anchors still pass lucid's contract after import", () => {
   const before = fixtureAnchors();
   const snapshot = JSON.parse(JSON.stringify(before));
   importLucidSession(FIXTURE);
@@ -67,7 +67,7 @@ test("Trevor's import is NON-DESTRUCTIVE: the fixture anchors still pass lucid's
   }
 });
 
-test("an imported session becomes a panel-openable addressable Trevor artifact", () => {
+test("an imported session becomes a panel-openable addressable Belay artifact", () => {
   const imported = importLucidSession(FIXTURE);
   const ref = lucidArtifactRef({
     htmlHash: imported.htmlHash ?? "0".repeat(8),

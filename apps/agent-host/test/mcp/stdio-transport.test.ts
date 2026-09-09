@@ -239,7 +239,7 @@ describe("stdio transport - D-004 env probe", () => {
       ZAI_API_KEY: "zai-fake",
       MINIMAX_API_KEY: "mm-fake",
       OPENROUTER_API_KEY: "or-fake",
-      TREVOR_FAKE_SECRET: "belay-fake",
+      BELAY_FAKE_SECRET: "belay-fake",
       SESSION_ID: "sess-fake",
     };
     const previous = new Map(Object.keys(planted).map((name) => [name, process.env[name]]));

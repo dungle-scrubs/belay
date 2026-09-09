@@ -9,7 +9,7 @@ import {
 } from "@belay/agent-host/testing";
 import type { RunningServer } from "@belay/server-kit";
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   freshSessionId,
   PRODUCER_IDS,
   planTangent,
@@ -129,7 +129,7 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
   // The tangent ran its OWN turn: lineage marker + the seeded prompt + an assistant reply.
   assert.ok(tangentLog.some((e) => e.type === "session.tangentOf"));
   const prompt = tangentLog.find((e) => e.type === "user.message");
-  assert.equal((prompt?.payload as { text?: string })?.text, firstPrompt);
+  assert.equal((prompt?.payload as { text?: string }).text, firstPrompt);
   const completed = tangentLog.find((e) => e.type === "assistant.completed");
   assert.ok(String(completed?.payload.text ?? "").includes("idempotent"));
 
@@ -162,7 +162,7 @@ test("create -> isolated chat -> fold-back keeps the parent transcript intact", 
     label: "fold-back recorded",
   });
   const foldEvent = workflow.events.find((e) => e.type === "tangent.foldedBack");
-  const decoded = foldEvent ? decodeTrevorEvent(foldEvent) : null;
+  const decoded = foldEvent ? decodeBelayEvent(foldEvent) : null;
   assert.equal(decoded?.type, "tangent.foldedBack");
 
   // Parent STILL intact after fold-back: fold-back is composer-only, never a parent-log write.
@@ -208,7 +208,7 @@ test("delivered tangent.created wakes adoption before the inventory poll interva
     identity: testIdentity("event-parent-host"),
     afterSeq: 0,
     onEvent: (event) => {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       if (decoded?.type === "tangent.created") {
         adoption.adopt(decoded.tangentSessionId, "event");
       }

@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
   activeTurnRunId,
+  type BelayEventInput,
   events,
   PRODUCER_IDS,
   type SessionEvent,
-  type TrevorEventInput,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
@@ -15,9 +15,9 @@ const HOST = PRODUCER_IDS.host;
 const WEB = "web-1";
 
 // A stored event at `seq`, from the host by default (assistant/tool lifecycle) or the web (user prompts).
-const host = (seq: number, input: TrevorEventInput): SessionEvent =>
+const host = (seq: number, input: BelayEventInput): SessionEvent =>
   storedEvent(input, { seq, producerId: HOST, createdAt: "2026-06-24T00:00:00.000Z" });
-const web = (seq: number, input: TrevorEventInput): SessionEvent =>
+const web = (seq: number, input: BelayEventInput): SessionEvent =>
   storedEvent(input, { seq, producerId: WEB, createdAt: "2026-06-24T00:00:00.000Z" });
 
 // A rich log exercising the streaming, tool, inline-agent, compaction, and follow-up-queue paths - the

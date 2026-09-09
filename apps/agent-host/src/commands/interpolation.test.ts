@@ -20,15 +20,15 @@ describe("interpolation gate defaults disabled (M7, D-003)", () => {
   });
 
   it("stays disabled for any value other than an explicit opt-in", () => {
-    expect(resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "0" }).enabled).toBe(false);
-    expect(resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "" }).enabled).toBe(false);
-    expect(resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "yes-please" }).enabled).toBe(
+    expect(resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "0" }).enabled).toBe(false);
+    expect(resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "" }).enabled).toBe(false);
+    expect(resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "yes-please" }).enabled).toBe(
       false,
     );
   });
 
   it("enables ONLY with the explicit opt-in, and then only allow-lists bounded read-only targets", () => {
-    const config = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
+    const config = resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" });
     expect(config.enabled).toBe(true);
     expect([...config.allowedCommands]).toEqual([...DEFAULT_INTERPOLATION_ALLOWLIST]);
     expect(config.allowedCommands.has("/belay-export")).toBe(true);
@@ -42,20 +42,20 @@ describe("interpolation gate defaults disabled (M7, D-003)", () => {
 describe("interpolation target allow-listing (M7)", () => {
   it("permits belay-export as an interpolation target ONLY when interpolation is enabled", () => {
     const off = resolveInterpolationConfig({});
-    const on = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
+    const on = resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" });
     expect(isInterpolationTargetAllowed(off, "/belay-export")).toBe(false);
     expect(isInterpolationTargetAllowed(on, "/belay-export")).toBe(true);
   });
 
   it("never permits a non-allow-listed command, even when interpolation is enabled", () => {
-    const on = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
+    const on = resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" });
     expect(isInterpolationTargetAllowed(on, "/shell")).toBe(false);
     expect(isInterpolationTargetAllowed(on, "rm -rf /")).toBe(false);
   });
 });
 
 describe("interpolation output policy (M7)", () => {
-  const config = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
+  const config = resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" });
 
   it("redacts secrets/paths and caps the spliced output", () => {
     const out = applyInterpolationOutputPolicy(
@@ -76,16 +76,16 @@ describe("interpolation output policy (M7)", () => {
 
 describe("interpolation source provenance + separate gates (plan 40, M1)", () => {
   it("gates the two lanes with DIFFERENT env keys so enabling one never enables the other", () => {
-    expect(INTERPOLATION_GATE_ENV["skill-shell"]).toBe("TREVOR_SKILL_SHELL");
-    expect(INTERPOLATION_GATE_ENV["command-file"]).toBe("TREVOR_ENABLE_INTERPOLATION");
+    expect(INTERPOLATION_GATE_ENV["skill-shell"]).toBe("BELAY_SKILL_SHELL");
+    expect(INTERPOLATION_GATE_ENV["command-file"]).toBe("BELAY_ENABLE_INTERPOLATION");
     expect(INTERPOLATION_GATE_ENV["skill-shell"]).not.toBe(INTERPOLATION_GATE_ENV["command-file"]);
   });
 
   it("the command-file gate env does NOT arm skill-shell, and vice versa", () => {
     // Setting only the command-file gate leaves the command-file lane enabled...
-    expect(resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" }).enabled).toBe(true);
+    expect(resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" }).enabled).toBe(true);
     // ...while setting only the skill-shell gate leaves the COMMAND-FILE config disabled.
-    expect(resolveInterpolationConfig({ TREVOR_SKILL_SHELL: "1" }).enabled).toBe(false);
+    expect(resolveInterpolationConfig({ BELAY_SKILL_SHELL: "1" }).enabled).toBe(false);
   });
 });
 
@@ -116,7 +116,7 @@ describe("argv split is the shell-injection defense (plan 40, M4/D-007)", () => 
 });
 
 describe("bounded-output metadata + refusal marker (plan 40, M6)", () => {
-  const config = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
+  const config = resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" });
 
   it("reports bytes + truncated=false for output under the cap", () => {
     const bounded = boundInterpolationOutput(config, "small output");

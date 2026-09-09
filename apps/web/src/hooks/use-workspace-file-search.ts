@@ -1,5 +1,5 @@
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   type FileMatch,
   type SessionEvent,
   searchWorkspaceFiles,
@@ -53,7 +53,7 @@ export function fileIndexFrom(events: readonly SessionEvent[]): WorkspaceFileInd
   if (!latest) {
     return EMPTY_INDEX;
   }
-  const decoded = decodeTrevorEvent(latest);
+  const decoded = decodeBelayEvent(latest);
   if (decoded?.type !== "file.index.result") {
     return EMPTY_INDEX;
   }

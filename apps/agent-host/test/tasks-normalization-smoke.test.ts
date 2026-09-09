@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import {
-  decodeTrevorEvent,
+  type BelayEventInput,
+  decodeBelayEvent,
   events,
   type TaskSnapshot,
-  type TrevorEventInput,
   taskSnapshotReplaces,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
@@ -24,9 +24,9 @@ import { test } from "vitest";
  */
 
 /** Mirrors main.ts: every registry mutation publishes a revisioned tasks.current snapshot. */
-function wireStream(): { registry: TaskRegistry; emitted: TrevorEventInput[] } {
+function wireStream(): { registry: TaskRegistry; emitted: BelayEventInput[] } {
   const registry = new TaskRegistry();
-  const emitted: TrevorEventInput[] = [];
+  const emitted: BelayEventInput[] = [];
 
   registry.onChange(() => {
     emitted.push(events.tasksCurrent({ tasks: registry.snapshot(), rev: registry.revision() }));
@@ -36,12 +36,12 @@ function wireStream(): { registry: TaskRegistry; emitted: TrevorEventInput[] } {
 }
 
 /** Folds an event stream the way a consumer does: the freshest valid tasks.current wins (D-004). */
-function freshestTasks(stream: readonly TrevorEventInput[]): readonly TaskSnapshot[] {
+function freshestTasks(stream: readonly BelayEventInput[]): readonly TaskSnapshot[] {
   let bestRev = Number.NEGATIVE_INFINITY;
   let best: readonly TaskSnapshot[] = [];
 
   stream.forEach((input, index) => {
-    const decoded = decodeTrevorEvent(storedEvent(input, { seq: index + 1 }));
+    const decoded = decodeBelayEvent(storedEvent(input, { seq: index + 1 }));
 
     if (decoded?.type === "tasks.current" && taskSnapshotReplaces(decoded.rev, bestRev)) {
       bestRev = decoded.rev;
@@ -91,19 +91,19 @@ const ID_FORMS: ReadonlyArray<{ readonly sent: string; readonly resolvesTo: stri
   { sent: " 2 ", resolvesTo: "task_2" }, // stray surrounding whitespace
 ];
 
-test.each(ID_FORMS)(
-  "task_update tolerates id form $sent -> $resolvesTo",
-  async ({ sent, resolvesTo }) => {
-    const { registry, emitted } = wireStream();
-    const [create, update] = buildTaskTools(registry);
-    await Effect.runPromise(create.execute({ subject: "a" })); // task_1
-    await Effect.runPromise(create.execute({ subject: "b" })); // task_2
+test.each(ID_FORMS)("task_update tolerates id form $sent -> $resolvesTo", async ({
+  sent,
+  resolvesTo,
+}) => {
+  const { registry, emitted } = wireStream();
+  const [create, update] = buildTaskTools(registry);
+  await Effect.runPromise(create.execute({ subject: "a" })); // task_1
+  await Effect.runPromise(create.execute({ subject: "b" })); // task_2
 
-    await Effect.runPromise(update.execute({ updates: [{ taskId: sent, status: "completed" }] }));
+  await Effect.runPromise(update.execute({ updates: [{ taskId: sent, status: "completed" }] }));
 
-    assert.equal(statusOf(freshestTasks(emitted), resolvesTo), "completed");
-  },
-);
+  assert.equal(statusOf(freshestTasks(emitted), resolvesTo), "completed");
+});
 
 test("a genuinely unknown id is reported as a per-entry failure and emits nothing (never over-matches)", async () => {
   const { registry, emitted } = wireStream();

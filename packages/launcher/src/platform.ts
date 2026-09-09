@@ -5,7 +5,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HEALTH_PATH, isHealthBody } from "@belay/server-kit";
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   type SessionEvent,
   streamTransport,
   viewerIdentity,
@@ -171,7 +171,7 @@ function watchSession(
 }
 
 const isHostOnline = (event: SessionEvent): boolean =>
-  decodeTrevorEvent(event)?.type === "host.online";
+  decodeBelayEvent(event)?.type === "host.online";
 
 export function buildHostSpawnCommand(opts: {
   readonly envFileExists: boolean;
@@ -230,7 +230,7 @@ async function spawnHost(opts: {
   debug?: boolean;
 }): Promise<SpawnedHost> {
   // Run the host through tsx with cwd = the project root, so its host-cwd tools (read/write/bash)
-  // operate in the project and confined tools see TREVOR_WORKSPACE. Env is inherited (so a shell that
+  // operate in the project and confined tools see BELAY_WORKSPACE. Env is inherited (so a shell that
   // already injected provider secrets passes them through) plus the session + workspace; nothing
   // secret is constructed or logged here.
   const require = createRequire(import.meta.url);
@@ -254,15 +254,15 @@ async function spawnHost(opts: {
     env: {
       ...process.env,
       SESSION_ID: opts.sessionId,
-      TREVOR_WORKSPACE: opts.root,
-      TREVOR_MANAGED_HOST: "1",
+      BELAY_WORKSPACE: opts.root,
+      BELAY_MANAGED_HOST: "1",
       // tsx resolves tsconfig `paths` from the child's cwd (the project root here), and only the
       // host's own tsconfig carries the @host/* mapping (22.1 D-007) - without this pointer the
       // host dies on its first @host import before it can log anything.
       TSX_TSCONFIG_PATH: join(repoRoot(), "apps", "agent-host", "tsconfig.json"),
       // Debug mode (`belay --debug`): the host boots with its debug command surface on (incl.
       // /restart). The flag rides the env so it survives the host's own /restart re-exec.
-      ...(opts.debug ? { TREVOR_DEBUG: "1" } : {}),
+      ...(opts.debug ? { BELAY_DEBUG: "1" } : {}),
     },
   });
   // Wait for the spawn/error verdict BEFORE handing the pid back: a failed spawn rejects (so the

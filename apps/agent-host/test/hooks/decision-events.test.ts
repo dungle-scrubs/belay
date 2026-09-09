@@ -1,4 +1,4 @@
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import type { TurnHooks } from "@host/agent/loop";
 import { afterEach, describe, expect, test } from "vitest";
 import { fakeProvider, runTurn, scriptedStep } from "../support/fake-provider";
@@ -39,7 +39,7 @@ function turnHooks(h: HooksRuntimeHarness): TurnHooks {
   };
 }
 
-const hookDecisions = (events: readonly TrevorEventInput[]) =>
+const hookDecisions = (events: readonly BelayEventInput[]) =>
   events
     .filter((event) => event.type === "hook.decision")
     .map((event) => event.payload as Record<string, unknown>);

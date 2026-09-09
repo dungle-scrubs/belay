@@ -7,8 +7,13 @@ import { createRoot } from "react-dom/client";
 import { App } from "./app";
 import { TelemetryErrorBoundary } from "./components/error-boundary";
 import { TooltipProvider } from "./components/ui/tooltip";
+import { migrateRenamedStorage } from "./rename-migration";
 import { bootstrapBrowserSentry } from "./sentry";
 import { bootstrapTelemetry } from "./telemetry";
+
+// Carry Trevor-era browser state across the rename. MUST run before anything reads storage, or the
+// first read misses and overwrites the value we are trying to preserve.
+migrateRenamedStorage(window.localStorage, window.sessionStorage);
 
 // Resolve the browser telemetry config once at startup (plan 13): disabled/local by default, so this
 // installs a NOOP sink and emits nothing without explicit opt-in.

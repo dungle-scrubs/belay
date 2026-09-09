@@ -1,7 +1,7 @@
 import { type Chord, parseChord } from "./keys";
 
 /**
- * The declarative shortcut registry (plan 07): the single source of truth for every Trevor-owned
+ * The declarative shortcut registry (plan 07): the single source of truth for every Belay-owned
  * keyboard binding. Each entry is classified by policy (see `apps/web/HOTKEYS.md`), and a test
  * cross-checks that every registered binding is documented in that ledger - so a shortcut can't be
  * added in code without updating the policy doc. The router (`./router`) dispatches against this list;

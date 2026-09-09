@@ -1,5 +1,5 @@
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   isAnswerableProducer,
   isClipProducer,
   type ModelRef,
@@ -121,7 +121,7 @@ export function makeStartTurn(deps: StartTurnDeps) {
     if (!isAnswerableProducer(event.producerId, PRODUCER_ID) || !lease.isLeader()) {
       return null;
     }
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type !== "user.message") {
       return null;
     }

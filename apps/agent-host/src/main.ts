@@ -2,11 +2,12 @@ import { execFile, execSync } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import {
+  type BelayEventInput,
   catalogEntryFor,
   clipProducerId,
   controlProducerId,
   DEFAULT_SESSION_ID,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   inputEstimateTokens,
   isAnswerableProducer,
@@ -14,7 +15,6 @@ import {
   recallProducerId,
   type SessionEvent,
   streamTransport,
-  type TrevorEventInput,
   tangentsOf,
   toPublishInput,
   viewerIdentity,
@@ -105,7 +105,7 @@ import { makeWorktreeCommands } from "./worktrees/commands";
  * readiness, and defaults to a shared session ("belay-local") so host and
  * browser auto-attach; override with SESSION_ID.
  *
- * The session contract (event shape, the `events` constructors, `decodeTrevorEvent`)
+ * The session contract (event shape, the `events` constructors, `decodeBelayEvent`)
  * lives in @belay/session and is shared with the web client, so host and browser
  * can never disagree on the protocol. The durable log is reached through a
  * SessionTransport; by default this host plugs in the local session-store, and sets
@@ -140,7 +140,7 @@ const transport = streamTransport(TETHER_URL ?? SESSION_STORE_URL);
 const hostTelemetry = createTelemetrySink("agent-host");
 // Wire the host telemetry sink into tool_script's observability span (plan 16 M8).
 registerToolScriptSink(hostTelemetry);
-// The opt-in provider-attempt trace (plan 13 M6): a no-op unless TREVOR_PROVIDER_TRACE is set. Records
+// The opt-in provider-attempt trace (plan 13 M6): a no-op unless BELAY_PROVIDER_TRACE is set. Records
 // a redacted terminal-failure record per turn for debugging a flaky provider, local-only.
 const providerTrace = createProviderTraceWriter({
   enabled: resolveTelemetryConfig().providerTrace,
@@ -244,13 +244,13 @@ function refreshCatalog(): void {
 // shared home-abbreviation as its display closure.
 const worktrees = nodeWorktreeManager(abbrevHome);
 
-// Debug mode: a runtime flag (booted from `TREVOR_DEBUG`, set by `belay --debug`, toggled at
+// Debug mode: a runtime flag (booted from `BELAY_DEBUG`, set by `belay --debug`, toggled at
 // runtime by `/debug`) that gates a collection of dev-only host commands - hidden from a normal
 // session. `/restart` re-execs the host to pick up code changes on demand; `/archive`, `/unarchive`,
 // and `/stop` are the debug lifecycle controls (D-094 M4). The gated set + the `/stop` confirm live in
 // debug-commands.ts (pure, unit-tested); the flag stays here (announceOnline and the replacement-host
 // env read it), and the handlers in commands/lifecycle.ts are wired over it via {getDebug, setDebug}.
-let debugMode = process.env.TREVOR_DEBUG === "1";
+let debugMode = process.env.BELAY_DEBUG === "1";
 
 /** Stable per-process identity: shared producerId on events, unique stream id + instance. */
 const INSTANCE_ID = crypto.randomUUID();
@@ -303,7 +303,7 @@ let live = false;
 // the SessionWorker constructed below, not in module mutables.
 
 /** Publishes one event to the durable log, attaching this host's producerId. */
-function emit(event: TrevorEventInput): Promise<void> {
+function emit(event: BelayEventInput): Promise<void> {
   return transport.publishEvent(SESSION_ID, toPublishInput(event, PRODUCER_ID));
 }
 
@@ -948,7 +948,7 @@ function recordEvent(event: SessionEvent): void {
 
 /** Applies one live or replayed session event to the host's in-memory state. */
 function handleEvent(message: SessionEvent): void {
-  const decoded = decodeTrevorEvent(message);
+  const decoded = decodeBelayEvent(message);
   if (!decoded) {
     return;
   }

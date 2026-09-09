@@ -80,14 +80,14 @@ export const McpParams = Schema.Struct({
 export type McpArgs = typeof McpParams.Type;
 
 const MCP_DESCRIPTION =
-  "Use the user's configured MCP servers - external integrations connected to Trevor, each a " +
+  "Use the user's configured MCP servers - external integrations connected to Belay, each a " +
   "named server exposing tools, resources, and prompts. Actions: 'search' finds capabilities " +
   "across servers by keyword (ranked, capped - the only discovery path), 'call' runs one " +
   "external tool by its qualified name '<server>:<tool>' (e.g. 'github:create_issue'), " +
   "'resources' lists attributable context records (pass server + uri to read one), 'prompt' " +
   "lists prompts (pass name '<server>:<prompt>' + args to expand one), 'status' reports " +
   "per-server health. Always address a capability by its qualified '<server>:<name>' identity. " +
-  "Prefer Trevor's built-in tools when they fit; use mcp only for configured external " +
+  "Prefer Belay's built-in tools when they fit; use mcp only for configured external " +
   "integrations. External calls may change external services and run serially.";
 
 const inputError = (detail: string): Effect.Effect<never, ToolError> =>
@@ -146,7 +146,7 @@ export function buildMcpTool(runtime: McpRuntime): Tool<McpArgs> {
     const entries = runtime.statusSnapshot();
     if (entries.length === 0) {
       return (
-        "No MCP servers are configured. MCP connects Trevor to external integrations; " +
+        "No MCP servers are configured. MCP connects Belay to external integrations; " +
         `the user can add named servers in ${abbrevHome(USER_MCP_SERVERS_JSON)}.`
       );
     }

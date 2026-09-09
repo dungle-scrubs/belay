@@ -1,4 +1,4 @@
-import { storagePathByName, type TrevorPathEnv } from "@belay/session/node-paths";
+import { type BelayPathEnv, storagePathByName } from "@belay/session/node-paths";
 
 /**
  * The blob-store's identity, declared ONCE: the storage-inventory artifact its data lives under, the
@@ -20,6 +20,6 @@ export const BLOB_STORE = {
  * root policy's storage inventory (the `blobs` entry), so its placement is declared once. Override
  * with BLOB_STORE_DIR.
  */
-export function blobStoreRoot(env: TrevorPathEnv = process.env, home?: string): string {
+export function blobStoreRoot(env: BelayPathEnv = process.env, home?: string): string {
   return env[BLOB_STORE.overrideEnv] ?? storagePathByName(BLOB_STORE.storageArtifact, env, home);
 }

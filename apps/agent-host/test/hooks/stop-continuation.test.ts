@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import type { TurnHooks } from "@host/agent/loop";
 import type { StopOutcome } from "@host/hooks/runtime";
 import {
@@ -55,7 +55,7 @@ function turnHooks(h: HooksRuntimeHarness, overrides: Partial<TurnHooks> = {}): 
   };
 }
 
-const payloadOf = (events: TrevorEventInput[], type: string) =>
+const payloadOf = (events: BelayEventInput[], type: string) =>
   events.find((event) => event.type === type)?.payload as Record<string, unknown> | undefined;
 
 /** True for the continuation pass's message set: a trailing user message citing a hook note. */

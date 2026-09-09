@@ -17,5 +17,5 @@ export const BUILT_IN_COMMANDS = [
   NEW_SESSION_COMMAND,
   { name: "/cd", summary: "Alias for /new <path>", usage: "/cd <directory>" },
   { name: "/resume", summary: "Open a prior session (no implicit resume)" },
-  { name: "/worktree", summary: "Switch a Trevor-managed worktree" },
+  { name: "/worktree", summary: "Switch a Belay-managed worktree" },
 ] as const;

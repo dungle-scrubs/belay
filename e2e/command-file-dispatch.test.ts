@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunningServer } from "@belay/server-kit";
-import { decodeTrevorEvent, events, streamTransport } from "@belay/session";
+import { decodeBelayEvent, events, streamTransport } from "@belay/session";
 import { createWorkflowDriver, waitFor } from "@belay/test-kit";
 import { bootStore } from "@belay/test-kit/boot";
 import { makeCommandFileDispatch } from "@host/commands/command-file-dispatch";
@@ -83,7 +83,7 @@ test("dispatching /fix 123 submits the expanded body as a user.message prompt", 
     label: "user.message",
   });
   const message = workflow.events.find((e) => e.type === "user.message");
-  const decoded = message ? decodeTrevorEvent(message) : null;
+  const decoded = message ? decodeBelayEvent(message) : null;
   assert.equal(decoded?.type, "user.message");
   if (decoded?.type !== "user.message") {
     return;

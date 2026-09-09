@@ -97,7 +97,7 @@ describe("renderInterpolation preserves order + line count with an injected exec
 });
 
 describe("the shared execution floor for enabled skill interpolation (M1)", () => {
-  // The executor skills use when TREVOR_SKILL_SHELL is on: every segment runs through runCommand, so the
+  // The executor skills use when BELAY_SKILL_SHELL is on: every segment runs through runCommand, so the
   // always-prevented floor, timeout, and cap apply. This is the exact behavior the skill gate switches on.
   const shellExecutor: SegmentExecutor = async (segment) =>
     (await runCommand(segment.kind === "command" ? segment.command : segment.script)).output;

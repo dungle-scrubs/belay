@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 
 /**
- * The transport-level HTTP helpers shared by Trevor's local stores: permissive CORS,
+ * The transport-level HTTP helpers shared by Belay's local stores: permissive CORS,
  * a JSON responder, and two request-body readers (parsed JSON vs raw bytes). They are
  * pure plumbing - they know nothing about sessions, blobs, routes, or any domain - so
  * every store can drop its hand-rolled copy and share one implementation.

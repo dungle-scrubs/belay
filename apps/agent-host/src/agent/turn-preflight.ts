@@ -8,7 +8,7 @@ import type { ModelCapabilities } from "@host/providers/types";
 import { Effect } from "effect";
 import { type HistoryImageResolver, resolveHistoryImages } from "./image-resolution";
 
-const MIN_CONTEXT_TOKENS = envNumber("TREVOR_MIN_CONTEXT", 16_384);
+const MIN_CONTEXT_TOKENS = envNumber("BELAY_MIN_CONTEXT", 16_384);
 
 export type TurnPreflight =
   | {
@@ -37,7 +37,7 @@ export function prepareTurn(
       return {
         type: "blocked" as const,
         warm,
-        error: `Model ${provider.model} supports only ${caps.contextLength} tokens of context, below the ${MIN_CONTEXT_TOKENS} (16k) minimum required to run Trevor. Pick a model with at least 16k of context.`,
+        error: `Model ${provider.model} supports only ${caps.contextLength} tokens of context, below the ${MIN_CONTEXT_TOKENS} (16k) minimum required to run Belay. Pick a model with at least 16k of context.`,
       };
     }
 

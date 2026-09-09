@@ -1,6 +1,6 @@
 import {
   type DecodedEvent,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   type ModelRef,
   type SessionEvent,
 } from "@belay/session";
@@ -69,7 +69,7 @@ export function createTurnProviderResolver(
   }
 
   function resolveUserMessage(event: SessionEvent): ResolvedPreflightTurnProvider | null {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type !== "user.message") {
       return null;
     }

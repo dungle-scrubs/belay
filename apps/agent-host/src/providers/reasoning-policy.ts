@@ -12,7 +12,7 @@ import {
  * family) means "use the model default" (medium for GPT-5.5), NOT "disable" - so "off" silently runs
  * at medium there. We stream through `stream()` and decide the effort here instead.
  *
- * The decision is keyed on the MODEL DESCRIPTOR, not a Trevor-maintained adapter-id set:
+ * The decision is keyed on the MODEL DESCRIPTOR, not a Belay-maintained adapter-id set:
  * `thinkingLevelMap.off` is the source of truth for adapters that accept an explicit off effort
  * ("none", provider-specific strings, etc.). Toggle-style adapters omit that map entry and disable
  * reasoning on a falsy effort, so "off" stays undefined there. Codex Responses is the compatibility

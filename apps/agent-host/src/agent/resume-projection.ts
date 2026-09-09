@@ -1,4 +1,4 @@
-import { decodeTrevorEvent, type SessionEvent } from "@belay/session";
+import { decodeBelayEvent, type SessionEvent } from "@belay/session";
 import {
   countRestartResumes,
   type ResumeInputs,
@@ -27,7 +27,7 @@ export const RESTART_RESUME_PREFIX = `${CONTINUATION_PREFIX} Reason: ${RESTART_R
 
 /** A decoded `user.message`, the only event the resume projection inspects for prompts. */
 export type DecodedUserMessage = Extract<
-  ReturnType<typeof decodeTrevorEvent>,
+  ReturnType<typeof decodeBelayEvent>,
   { type: "user.message" }
 >;
 
@@ -35,7 +35,7 @@ export type DecodedUserMessage = Extract<
 export function lastUserPrompt(events: readonly SessionEvent[]): DecodedUserMessage | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    const decoded = event ? decodeTrevorEvent(event) : null;
+    const decoded = event ? decodeBelayEvent(event) : null;
     if (decoded?.type === "user.message") {
       return decoded;
     }
@@ -60,7 +60,7 @@ export function trailingTurn(events: readonly SessionEvent[]): TrailingTurn | nu
   let continued = false;
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    const decoded = event ? decodeTrevorEvent(event) : null;
+    const decoded = event ? decodeBelayEvent(event) : null;
     if (!decoded) {
       continue;
     }
@@ -89,7 +89,7 @@ function trailingResumeMarkers(events: readonly SessionEvent[]): ResumeMarker[] 
   const markers: ResumeMarker[] = [];
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
-    const decoded = event ? decodeTrevorEvent(event) : null;
+    const decoded = event ? decodeBelayEvent(event) : null;
     if (!decoded) {
       continue;
     }

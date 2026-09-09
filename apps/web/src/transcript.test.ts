@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import {
+  type BelayEventInput,
   events,
   type SessionEvent,
-  type TrevorEventInput,
   type UsageBreakdown,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
@@ -37,11 +37,11 @@ const breakdown: UsageBreakdown = {
   output: { thinking: 100, answer: 100, toolCallArgs: 0 },
 };
 
-const ev = (seq: number, input: TrevorEventInput): SessionEvent =>
+const ev = (seq: number, input: BelayEventInput): SessionEvent =>
   storedEvent(input, { seq, producerId: "belay-host", createdAt: "2026-06-24T00:00:00.000Z" });
 
 // A stored event with an explicit createdAt, for the elapsed-clock timestamp source (M2).
-const evAt = (seq: number, createdAt: string, input: TrevorEventInput): SessionEvent =>
+const evAt = (seq: number, createdAt: string, input: BelayEventInput): SessionEvent =>
   storedEvent(input, { seq, producerId: "belay-host", createdAt });
 
 test("58.6.1 M2: a tool.started row carries startedAt = Date.parse(event.createdAt) for the elapsed clock", () => {

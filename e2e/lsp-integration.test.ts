@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, test } from "vitest";
 
 /**
  * S-E2E LSP suite (plan 24 M9, D-006 / Gate 4): the read-only LSP tool surface, end to end and
- * hermetic. A REAL temp TS workspace (tsconfig + sources) is the host's TREVOR_WORKSPACE, and
+ * hermetic. A REAL temp TS workspace (tsconfig + sources) is the host's BELAY_WORKSPACE, and
  * the eval fixture server installs as its workspace-local `typescript-language-server` binary,
  * so the exact production path (boot/paths -> lsp/host-runtime singleton -> TS/JS adapter
  * detection -> node_modules/.bin resolution -> spawn -> initialize -> lsp_* tools) is exercised
@@ -22,7 +22,7 @@ import { afterAll, beforeAll, describe, test } from "vitest";
  * the unavailable path degrades to bounded text while read/grep keep working IN THE SAME TURN
  * (D-006); the shim then installs mid-suite and the manager's next lazy acquire recovers.
  *
- * ORDERING MATTERS: `@belay/session/node-paths` binds BELAY_HOME/TREVOR_WORKSPACE at first
+ * ORDERING MATTERS: `@belay/session/node-paths` binds BELAY_HOME/BELAY_WORKSPACE at first
  * evaluation, and the host testing surface reaches it (the LSP singleton reads WORKSPACE_ROOT
  * at import). So this file's static imports are strictly side-effect-free (node builtins,
  * types, the LSP fixture-workspace surface); the env override runs at module scope; and every
@@ -74,12 +74,12 @@ const WS = createEvalWorkspace({
 const SAVED_ENV = {
   BELAY_HOME: process.env.BELAY_HOME,
   BELAY_STATE_HOME: process.env.BELAY_STATE_HOME,
-  TREVOR_WORKSPACE: process.env.TREVOR_WORKSPACE,
+  BELAY_WORKSPACE: process.env.BELAY_WORKSPACE,
 };
 
 process.env.BELAY_HOME = HOME;
 process.env.BELAY_STATE_HOME = STATE;
-process.env.TREVOR_WORKSPACE = WS;
+process.env.BELAY_WORKSPACE = WS;
 
 type HostTesting = typeof import("@belay/agent-host/testing");
 type SessionModule = typeof import("@belay/session");

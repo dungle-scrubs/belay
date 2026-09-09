@@ -4,7 +4,7 @@ import { DEFAULT_STYLE_ID, findStyle, resolveStyle } from "./styles";
 
 /**
  * The active output-style preference store (plan 03, M5). The selected style id persists as a small
- * `{ activeStyle }` JSON under the config home (`<TREVOR_HOME>/style.json`), the approved Trevor settings
+ * `{ activeStyle }` JSON under the config home (`<BELAY_HOME>/style.json`), the approved Belay settings
  * root - portable, separate from provider/model/reasoning preferences. Read at turn start for run
  * attribution; written when `/style` selects a style. An unknown / retired / missing id falls back to the
  * built-in default (and is reported as `source: "default"`). Read/write are injectable so the store is

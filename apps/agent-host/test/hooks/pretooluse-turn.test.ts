@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import type { TurnHooks } from "@host/agent/loop";
 import type { PreToolUseOutcome } from "@host/hooks/runtime";
 import { afterEach, describe, expect, test } from "vitest";
@@ -41,14 +41,14 @@ function turnHooks(h: HooksRuntimeHarness, overrides: Partial<TurnHooks> = {}): 
   };
 }
 
-const payloadOf = (events: TrevorEventInput[], type: string) =>
+const payloadOf = (events: BelayEventInput[], type: string) =>
   events.find((event) => event.type === type)?.payload as Record<string, unknown> | undefined;
 
 async function runBashTurn(
   h: HooksRuntimeHarness,
   command: string,
   options: { readonly runId?: string; readonly hooks?: TurnHooks } = {},
-): Promise<TrevorEventInput[]> {
+): Promise<BelayEventInput[]> {
   const provider = fakeProvider({
     step: scriptedStep([{ name: "bash", args: { command } }], "All done."),
   });

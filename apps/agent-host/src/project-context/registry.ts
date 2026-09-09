@@ -10,7 +10,7 @@ import {
   renderContext,
   SCOPE_PRECEDENCE,
 } from "./agents-md";
-import { RuleCollector, type TrevorRuleSource } from "./rules";
+import { type BelayRuleSource, RuleCollector } from "./rules";
 
 /**
  * Session-scoped AGENTS.md context (D-080), the live counterpart to the pure reader. It owns the one
@@ -28,7 +28,7 @@ export class ContextRegistry {
   /** Below-cwd AGENTS.md that have been lazily loaded, keyed by their directory (so each loads once). */
   private lazy = new Map<string, ContextScope>();
   /** Scoped .belay/rules loaded after matching file access, keyed by rule path. */
-  private lazyRules = new Map<string, TrevorRuleSource>();
+  private lazyRules = new Map<string, BelayRuleSource>();
   /** Directories already checked for a below-cwd AGENTS.md (present or not), so a re-touch never re-stats. */
   private scanned = new Set<string>();
   /** The cached `.belay/rules` collector for the current cwd. Building one walks the rules tree, so it

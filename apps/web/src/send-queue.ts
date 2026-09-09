@@ -1,6 +1,6 @@
 import {
   type ArtifactRef,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   isControlProducer,
   type ModelRef,
   type PastePayload,
@@ -57,7 +57,7 @@ function initialHandoffPromptIds(
   const hidden = new Set<string>();
   const pendingPrompts: string[] = [];
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }
@@ -92,7 +92,7 @@ export function queuedPromptsFrom(
   return queuedFollowUps(events, selfProducerId)
     .filter((event) => !hiddenInitialHandoffPrompts.has(event.eventId))
     .map((event) => {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       const message = decoded?.type === "user.message" ? decoded : null;
       return {
         id: event.eventId,

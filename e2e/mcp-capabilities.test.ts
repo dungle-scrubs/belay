@@ -226,7 +226,7 @@ describe("full host path (config file -> singleton runtime -> tool registry -> t
     assert.equal(childEnv.OPENAI_API_KEY, undefined);
     assert.ok(!JSON.stringify(childEnv).includes(FAKE_OPENAI_KEY));
     assert.equal(
-      Object.keys(childEnv).find((key) => key.startsWith("TREVOR_")),
+      Object.keys(childEnv).find((key) => key.startsWith("BELAY_")),
       undefined,
     );
     viewer.connection.close();

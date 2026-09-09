@@ -7,7 +7,7 @@ import { LocalResidencyEviction } from "./eviction";
 import { LocalResidencyRegistry, type ResidencyRecorder } from "./registry";
 
 /**
- * The host-side composition of local-model residency (plan 11.1): it wires the Trevor-loaded registry
+ * The host-side composition of local-model residency (plan 11.1): it wires the Belay-loaded registry
  * (M2), the cross-instance claims (M3), the reference-counted eviction (M4), and the keep-current policy
  * (M5) into one object the host drives. `recorder` is handed to the LM Studio provider slots so their
  * loads register here; `onActiveModelChanged` is called when a turn resolves its provider (claim the new
@@ -36,7 +36,7 @@ export interface HostResidencyDeps {
 }
 
 export interface HostResidency {
-  /** Passed to each LM Studio slot so its `lms load`/unload registers as Trevor-loaded (M2). */
+  /** Passed to each LM Studio slot so its `lms load`/unload registers as Belay-loaded (M2). */
   readonly recorder: ResidencyRecorder;
   /** Reconcile residency for a turn's resolved provider: `null` for a cloud turn (holds no local model). */
   onActiveModelChanged(target: ResidencyClaimTarget | null): Promise<void>;

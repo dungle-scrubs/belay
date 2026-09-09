@@ -1,5 +1,6 @@
 import {
   type ArtifactRef,
+  type BelayEventInput,
   type BlobMetaProbe,
   type DoctorSnapshot,
   type PermanentDeleteResult,
@@ -11,7 +12,6 @@ import {
   type SessionSummary,
   type SessionTransport,
   streamTransport,
-  type TrevorEventInput,
   toPublishInput,
 } from "@belay/session";
 import { type ArtifactSource, downloadArtifact, headArtifact, uploadArtifact } from "./artifacts";
@@ -56,7 +56,7 @@ import { projectTranscript, type Transcript } from "./transcript";
  * stays in `apps/belay-cli`, not here (D-003).
  */
 
-export interface TrevorClientConfig {
+export interface BelayClientConfig {
   /** The session backend URL: a local session-store or a Tether service (identical `/sessions` wire). */
   readonly sessionUrl: string;
   /** The content-addressed blob store URL; required only for the artifact workflows. */
@@ -72,14 +72,14 @@ export interface TrevorClientConfig {
   readonly transport?: SessionTransport;
 }
 
-export class TrevorClient {
+export class BelayClient {
   readonly sessionUrl: string;
   readonly blobUrl: string | undefined;
   readonly identity: SessionIdentity;
   readonly producerId: string;
   readonly transport: SessionTransport;
 
-  constructor(config: TrevorClientConfig) {
+  constructor(config: BelayClientConfig) {
     this.sessionUrl = config.sessionUrl;
     this.blobUrl = config.blobUrl;
     this.identity = config.identity ?? sdkIdentity();
@@ -94,7 +94,7 @@ export class TrevorClient {
         operation,
         backend: "blob",
         backendUrlClass: "<unset>",
-        detail: "no blob-store URL configured (pass blobUrl to createTrevorClient)",
+        detail: "no blob-store URL configured (pass blobUrl to createBelayClient)",
       });
     }
     return this.blobUrl;
@@ -156,7 +156,7 @@ export class TrevorClient {
    *  own `operation` label so the failure reads as e.g. `prompt`/`cancel`, not a generic `publishEvent`. */
   publishEvent(
     sessionId: string,
-    input: TrevorEventInput,
+    input: BelayEventInput,
     operation: SdkOperation = "publishEvent",
   ): Promise<void> {
     return this.publish(sessionId, toPublishInput(input, this.producerId), operation);
@@ -320,7 +320,7 @@ export class TrevorClient {
   }
 }
 
-/** Builds a `TrevorClient` bound to a session backend (and optionally a blob store) by URL. */
-export function createTrevorClient(config: TrevorClientConfig): TrevorClient {
-  return new TrevorClient(config);
+/** Builds a `BelayClient` bound to a session backend (and optionally a blob store) by URL. */
+export function createBelayClient(config: BelayClientConfig): BelayClient {
+  return new BelayClient(config);
 }

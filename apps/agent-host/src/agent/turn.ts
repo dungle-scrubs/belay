@@ -1,7 +1,7 @@
 import {
+  type BelayEventInput,
   events,
   type ProviderDiagnostic,
-  type TrevorEventInput,
   type TurnStop,
 } from "@belay/session";
 import {
@@ -110,7 +110,7 @@ export function publishTurn(
   // outcome also folds into visible hook.decision events. The wrapper only QUEUES them (its
   // observer callbacks are sync); the turn drains the queue through the same awaited Emit path
   // as every other event - deterministic ordering, never a dangling forked publish.
-  const pendingHookEvents: TrevorEventInput[] = [];
+  const pendingHookEvents: BelayEventInput[] = [];
   const turnHooks = options.hooks
     ? withHookDecisionEvents(options.hooks, options.runId, (event) => pendingHookEvents.push(event))
     : undefined;

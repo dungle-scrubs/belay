@@ -1,4 +1,4 @@
-import { decodeTrevorEvent, type SessionEvent } from "@belay/session";
+import { decodeBelayEvent, type SessionEvent } from "@belay/session";
 
 /**
  * The SDK transcript projection (plan 28 M4): a lightweight, headless-appropriate fold of a session's
@@ -52,7 +52,7 @@ export interface Transcript {
 export function projectTranscript(events: readonly SessionEvent[]): Transcript {
   const entries: TranscriptEntry[] = [];
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }

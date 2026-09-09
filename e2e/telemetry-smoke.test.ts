@@ -87,7 +87,7 @@ test("with telemetry disabled (the default), a booted service writes no otel art
   setEnv({
     BELAY_STATE_HOME: stateHome,
     BELAY_OTEL_EXPORTER: undefined,
-    TREVOR_SENTRY_DSN: undefined,
+    BELAY_SENTRY_DSN: undefined,
   });
   blob = await bootBlob();
   await put("no telemetry here");

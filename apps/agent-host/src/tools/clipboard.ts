@@ -11,7 +11,7 @@ import { simpleTool, toolExecution } from "./shared";
 import type { Tool } from "./types";
 
 /**
- * The host's plain-text clipboard write boundary - the ONE place a string crosses from Trevor into
+ * The host's plain-text clipboard write boundary - the ONE place a string crosses from Belay into
  * the system clipboard. Platform selection (pbcopy/clip/wl-copy) and the test-capture seam stay
  * behind this interface, so command code and the model never shell out to a clipboard command
  * themselves (D-008). `write` rejects when the platform write fails; it never reads the clipboard.

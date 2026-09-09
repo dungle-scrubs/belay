@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { events, PRODUCER_IDS, type SessionEvent, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events, PRODUCER_IDS, type SessionEvent } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { render, waitFor } from "@testing-library/react";
 import { type RefObject, useRef } from "react";
@@ -21,9 +21,9 @@ vi.mock("@/components/chat/markdown-body", () => ({
 }));
 
 const HOST = PRODUCER_IDS.host;
-const hostEvent = (seq: number, input: TrevorEventInput): SessionEvent =>
+const hostEvent = (seq: number, input: BelayEventInput): SessionEvent =>
   storedEvent(input, { seq, producerId: HOST, createdAt: "2026-07-10T00:00:00.000Z" });
-const webEvent = (seq: number, input: TrevorEventInput): SessionEvent =>
+const webEvent = (seq: number, input: BelayEventInput): SessionEvent =>
   storedEvent(input, { seq, producerId: "web-1", createdAt: "2026-07-10T00:00:00.000Z" });
 
 /** A completed earlier turn plus a second turn that is still streaming (r2 has an open segment). */

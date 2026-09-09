@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { CatalogSnapshot, TrevorClient } from "@belay/sdk";
+import type { BelayClient, CatalogSnapshot } from "@belay/sdk";
 import type { ArtifactRef, SessionSummary } from "@belay/session";
 import { test } from "vitest";
 import {
@@ -64,7 +64,7 @@ function makeDeps(overrides: Partial<CommandRouterDeps> = {}): CommandRouterDeps
       downloads.push(hash);
       return new Uint8Array([9, 8, 7]);
     },
-  } as unknown as TrevorClient;
+  } as unknown as BelayClient;
 
   return {
     client,
@@ -196,7 +196,7 @@ test("router maps model catalog read failures to a CLI stage", async () => {
         listCatalog: async () => {
           throw new Error("store offline");
         },
-      } as unknown as TrevorClient,
+      } as unknown as BelayClient,
     }),
   );
 

@@ -3,10 +3,10 @@ import { existsSync, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  type BelayEventInput,
   events,
   freshSessionId,
   type SessionTransport,
-  type TrevorEventInput,
 } from "@belay/session";
 import type { CompactionCommandsApi } from "@host/agent/compaction-commands";
 import type { BackgroundChildInfo } from "@host/agent/delegate";
@@ -79,7 +79,7 @@ export interface SessionSwitchDeps {
    * worktree TARGET before spawn. Do not use `emit` for this marker - `emit` writes the current
    * retiring session. Main.ts stamps the host producer id via `toPublishInput`.
    */
-  readonly publishToSession?: (sessionId: string, event: TrevorEventInput) => Promise<void>;
+  readonly publishToSession?: (sessionId: string, event: BelayEventInput) => Promise<void>;
   /**
    * Optional injectable spawn seam for tests (plan 58.2). When omitted, the real OS re-exec path
    * under {@link makeSessionSwitch} is used.
@@ -147,8 +147,8 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
       env: {
         ...process.env,
         SESSION_ID: opts.sessionId,
-        TREVOR_WORKSPACE: opts.workspace,
-        TREVOR_MANAGED_HOST: "1",
+        BELAY_WORKSPACE: opts.workspace,
+        BELAY_MANAGED_HOST: "1",
         // tsx resolves tsconfig `paths` from the child's cwd, and the replacement's cwd is the TARGET
         // project - which has no @host/* mapping - so without this pointer the re-exec dies on its
         // first @host import. Self-anchored so it also covers hosts whose launcher didn't set it.
@@ -156,7 +156,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
           process.env.TSX_TSCONFIG_PATH ?? join(import.meta.dirname, "..", "..", "tsconfig.json"),
         // Carry the CURRENT debug flag (which may have been toggled at runtime via /debug, so it
         // isn't in process.env) across the re-exec, so a debug session stays in debug after /restart.
-        ...(debugMode() ? { TREVOR_DEBUG: "1" } : {}),
+        ...(debugMode() ? { BELAY_DEBUG: "1" } : {}),
       },
     });
     child.unref();
@@ -173,7 +173,7 @@ export function makeSessionSwitch(deps: SessionSwitchDeps) {
   function retireAfterSessionSwitch(): void {
     const timer = setTimeout(() => {
       supervisor.killAll();
-      if (process.env.TREVOR_MANAGED_HOST === "1") {
+      if (process.env.BELAY_MANAGED_HOST === "1") {
         process.exit(0);
       }
     }, 750);

@@ -6,15 +6,31 @@ export interface ResidualNameViolation {
   readonly path: string;
 }
 
-const OLD_VERSION_SUFFIX = "V2";
-const RESIDUAL_PATTERN = new RegExp(
-  [
-    `~\\/\\.belay${OLD_VERSION_SUFFIX}`,
-    `Belay ${OLD_VERSION_SUFFIX}`,
-    `belay${OLD_VERSION_SUFFIX}`,
-  ].join("|"),
-  "g",
-);
+/** Forms of the pre-Belay name that are legitimate history, not residue: the real `~/.trevor_legacy`
+ *  and `~/dev/trevor_legacy` directories, prose naming the retired project, and the artifacts of the
+ *  earlier trevorV2 -> trevor rename. These are redacted from a line before residue is looked for, so
+ *  a doc may still say "Trevor legacy" while "~/.trevor" fails the build. */
+const HISTORICAL_FORMS: readonly RegExp[] = [
+  /V2-to-Trevor/g,
+  /rename-to-trevor/g,
+  /trevor-v2/g,
+  /[Tt]revorV2/g,
+  /Trevor V2/g,
+  /Trevor v2/g,
+  /trevor v2/g,
+  /trevor_legacy/g,
+  /Trevor legacy/g,
+  /trevor legacy/g,
+];
+
+const RESIDUAL_PATTERN = /trevor/gi;
+
+/** Blanks out historical forms while preserving offsets, so reported line/column stay truthful. */
+const redactHistorical = (line: string): string =>
+  HISTORICAL_FORMS.reduce(
+    (acc, form) => acc.replace(form, (match) => " ".repeat(match.length)),
+    line,
+  );
 
 const isMarkdownDoc = (path: string): boolean =>
   path.endsWith(".md") &&
@@ -24,7 +40,10 @@ const isMarkdownDoc = (path: string): boolean =>
     path === "FEATURES.md" ||
     path === "SECURITY_RISKS.md" ||
     path.startsWith("docs/") ||
-    path.startsWith("apps/"));
+    path.startsWith("apps/") ||
+    path.startsWith(".plans/46-worktree-fleet/") ||
+    path.startsWith(".plans/48-desktop-shell-tauri/") ||
+    path.startsWith(".plans/49-open-source-launch-readiness/"));
 
 const isClaudeSkill = (path: string): boolean =>
   path.startsWith(".claude/skills/") && path.endsWith("/SKILL.md");
@@ -36,8 +55,10 @@ const findMatches = (path: string, contents: string): readonly ResidualNameViola
   const violations: ResidualNameViolation[] = [];
   const lines = contents.split("\n");
   for (const [index, line] of lines.entries()) {
-    for (const match of line.matchAll(RESIDUAL_PATTERN)) {
-      violations.push({ path, line: index + 1, match: match[0] });
+    for (const match of redactHistorical(line).matchAll(RESIDUAL_PATTERN)) {
+      // Redaction preserves offsets, so the original spelling is read back from the untouched line.
+      const spelling = line.slice(match.index, match.index + match[0].length);
+      violations.push({ path, line: index + 1, match: spelling });
     }
   }
   return violations;
@@ -62,7 +83,7 @@ export const formatResidualNameViolations = (
   }
 
   const lines = [
-    "Residual name policy failed: docs and Claude skills must not use old Belay rename markers.",
+    "Residual name policy failed: docs and Claude skills must not use the pre-Belay Trevor name.",
     "",
     ...violations.map(
       ({ line, match, path }) => `- ${path}:${line} contains ${JSON.stringify(match)}`,

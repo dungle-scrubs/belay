@@ -20,7 +20,7 @@ let sdkInstanceCounter = 0;
 /**
  * Builds the default viewer identity for a headless client, with a per-process-unique `instanceId` so two
  * SDK clients in one process are distinguishable on presence. Callers may pass an explicit identity to
- * `createTrevorClient` instead when they own participant identity (e.g. an eval run tags itself).
+ * `createBelayClient` instead when they own participant identity (e.g. an eval run tags itself).
  */
 export function sdkIdentity(instanceId?: string): SessionIdentity {
   sdkInstanceCounter += 1;

@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import {
-  decodeTrevorEvent,
+  type BelayEventInput,
+  decodeBelayEvent,
   events,
   PROVIDER_QUESTION_ADAPTERS,
   type ProviderQuestionAdapter,
   type ProviderQuestionAnswer,
   type ProviderQuestionContract,
   type SessionEvent,
-  type TrevorEventInput,
   validateAnswer,
   validateContract,
 } from "@belay/session";
@@ -47,7 +47,7 @@ export type SubmitResult =
 type ResolvedOutcome = "answered" | "declined" | "cancelled";
 
 /** Publishes a session event; injected so this module never imports the transport. */
-export type QuestionEmitter = (event: TrevorEventInput) => void;
+export type QuestionEmitter = (event: BelayEventInput) => void;
 
 /** Which surface raised a question: the tool name shown on the transcript row and the typed adapter
  *  tag the web dispatches its renderer on. One object so the two can never be transposed. */
@@ -93,7 +93,7 @@ export class ProviderQuestionRuntime {
     return new Set(this.pending.keys());
   }
 
-  private emit(event: TrevorEventInput): void {
+  private emit(event: BelayEventInput): void {
     this.emitter?.(event);
   }
 
@@ -251,11 +251,11 @@ export const providerQuestionRuntime = new ProviderQuestionRuntime();
 export function orphanedQuestionReaps(
   sessionEvents: readonly SessionEvent[],
   liveQuestionIds: ReadonlySet<string>,
-): TrevorEventInput[] {
+): BelayEventInput[] {
   const requested = new Map<string, { readonly runId: string; readonly toolCallId: string }>();
   const resolved = new Set<string>();
   for (const event of sessionEvents) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type === "provider.question.requested") {
       requested.set(decoded.questionId, {
         runId: decoded.runId,
@@ -265,7 +265,7 @@ export function orphanedQuestionReaps(
       resolved.add(decoded.questionId);
     }
   }
-  const out: TrevorEventInput[] = [];
+  const out: BelayEventInput[] = [];
   for (const [questionId, question] of requested) {
     if (resolved.has(questionId) || liveQuestionIds.has(questionId)) {
       continue;

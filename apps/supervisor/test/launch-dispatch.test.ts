@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { missingRootError } from "@belay/launcher";
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   PRODUCER_IDS,
   projectSessionId,
@@ -61,7 +61,7 @@ function awaitResult(requestId: string) {
     SUPERVISOR_SESSION_ID,
     viewerIdentity({ displayName: "reader", instanceId: "reader-1", participantId: "reader-1" }),
     (event) => {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       return decoded?.type === "session.launch.result" && decoded.requestId === requestId;
     },
     { timeoutMs: 5000 },
@@ -104,7 +104,7 @@ test("a control-session launch request drives the launcher and returns the resol
 
   const result = await awaitResult("req-1");
   assert.ok(result, "a session.launch.result was published on the control session");
-  const decoded = result ? decodeTrevorEvent(result) : null;
+  const decoded = result ? decodeBelayEvent(result) : null;
   assert.equal(decoded?.type, "session.launch.result");
   if (decoded?.type === "session.launch.result") {
     assert.equal(decoded.sessionId, projectSessionId(root));
@@ -136,7 +136,7 @@ test("a dead-root launch yields a failed result with the missing-folder reason a
     ...events.sessionLaunchRequested({ requestId: "req-dead", root: "/gone/dead" }),
     producerId: PRODUCER_IDS.web,
   });
-  const failed = decodeTrevorEvent((await awaitResult("req-dead")) ?? throwUnresolved());
+  const failed = decodeBelayEvent((await awaitResult("req-dead")) ?? throwUnresolved());
   assert.equal(failed?.type, "session.launch.result");
   if (failed?.type === "session.launch.result") {
     assert.equal(failed.status, "failed");
@@ -148,7 +148,7 @@ test("a dead-root launch yields a failed result with the missing-folder reason a
     ...events.sessionLaunchRequested({ requestId: "req-after", root: "/work/alive" }),
     producerId: PRODUCER_IDS.web,
   });
-  const next = decodeTrevorEvent((await awaitResult("req-after")) ?? throwUnresolved());
+  const next = decodeBelayEvent((await awaitResult("req-after")) ?? throwUnresolved());
   assert.equal(next?.type, "session.launch.result");
   if (next?.type === "session.launch.result") {
     assert.equal(next.status, "launched");
@@ -183,7 +183,7 @@ test("a home-abbreviated root is expanded before the launcher and the session-id
     producerId: PRODUCER_IDS.web,
   });
 
-  const result = decodeTrevorEvent((await awaitResult("req-tilde")) ?? throwUnresolved());
+  const result = decodeBelayEvent((await awaitResult("req-tilde")) ?? throwUnresolved());
   assert.equal(result?.type, "session.launch.result");
 
   if (result?.type === "session.launch.result") {
@@ -217,7 +217,7 @@ test("a launcher failure becomes a failed result carrying the error, not a crash
   });
 
   const result = await awaitResult("req-fail");
-  const decoded = result ? decodeTrevorEvent(result) : null;
+  const decoded = result ? decodeBelayEvent(result) : null;
   assert.equal(decoded?.type, "session.launch.result");
   if (decoded?.type === "session.launch.result") {
     assert.equal(decoded.sessionId, projectSessionId(root));

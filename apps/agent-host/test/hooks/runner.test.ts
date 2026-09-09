@@ -118,12 +118,12 @@ describe("runHook - spawn hygiene (D-004)", () => {
   });
 
   test("the child env is the minimal allowlist - host secrets never arrive", async () => {
-    const hostEnv = { ...process.env, TREVOR_HOOK_TEST_SECRET: "boom" };
+    const hostEnv = { ...process.env, BELAY_HOOK_TEST_SECRET: "boom" };
     const execution = await runHook(fixtureHook("env"), {}, { cwd, hostEnv });
 
     const keys = JSON.parse(contextOf(execution)) as string[];
     expect(keys).toContain("PATH");
-    expect(keys).not.toContain("TREVOR_HOOK_TEST_SECRET");
+    expect(keys).not.toContain("BELAY_HOOK_TEST_SECRET");
   });
 
   test("a missing executable resolves as a spawn error, never a rejection", async () => {

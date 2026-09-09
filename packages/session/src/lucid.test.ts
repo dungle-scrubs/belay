@@ -12,7 +12,7 @@ import {
   lucidArtifactRef,
 } from "./lucid";
 import { events } from "./protocol";
-import { decodeTrevorEvent } from "./protocol-decode";
+import { decodeBelayEvent } from "./protocol-decode";
 
 const HASH_A = "a".repeat(64);
 const HASH_B = "b".repeat(64);
@@ -85,7 +85,7 @@ test("a user.message artifact carries the lucid marker through decode; a plain o
       }),
     ],
   });
-  const decoded = decodeTrevorEvent(event(withLucid));
+  const decoded = decodeBelayEvent(event(withLucid));
   assert.equal(decoded?.type, "user.message");
   if (decoded?.type !== "user.message") {
     throw new Error("unreachable");
@@ -95,7 +95,7 @@ test("a user.message artifact carries the lucid marker through decode; a plain o
   assert.ok(isLucidArtifact(first));
   assert.equal(first.lucid?.lucidId, "p1");
 
-  const plain = decodeTrevorEvent(
+  const plain = decodeBelayEvent(
     event(
       events.userMessage({
         text: "plain",

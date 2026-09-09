@@ -6,7 +6,7 @@ import { USER_MCP_SERVERS_JSON } from "@host/boot/paths";
 /**
  * The normalized MCP server config model (plan 23 M1). MCP is a generalized host-owned runtime
  * (D-001): every server - including tool-proxy - is an ordinary named entry in
- * `<TREVOR_HOME>/mcp-servers.json` (`{ "servers": { "<name>": { ... } } }`), following the
+ * `<BELAY_HOME>/mcp-servers.json` (`{ "servers": { "<name>": { ... } } }`), following the
  * host's optional-JSON-config precedent (admission.json, models.json). Normalization is a
  * tolerant pure decoder in the loadJsonConfig tradition: a malformed entry is dropped with a
  * STRUCTURED issue (never a crash, never a bare string), so one typo cannot take out the rest
@@ -143,7 +143,7 @@ export function normalizeMcpServersConfig(raw: unknown): McpServersConfig {
   return { servers, issues };
 }
 
-/** Loads + normalizes `<TREVOR_HOME>/mcp-servers.json`; absent or malformed means no servers. */
+/** Loads + normalizes `<BELAY_HOME>/mcp-servers.json`; absent or malformed means no servers. */
 export function loadMcpServersConfig(read?: (path: string) => string): McpServersConfig {
   return loadJsonConfig(
     USER_MCP_SERVERS_JSON,

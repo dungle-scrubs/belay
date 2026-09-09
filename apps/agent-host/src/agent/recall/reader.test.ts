@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import {
+  type BelayEventInput,
   events,
   type SessionEvent,
   type SessionSummary,
-  type TrevorEventInput,
 } from "@belay/session";
 import { type RecordingTransport, recordingTransport, storedEvent } from "@belay/test-kit";
 import { beforeEach, test } from "vitest";
@@ -38,7 +38,7 @@ function summary(over: Partial<SessionSummary> & { sessionId: string }): Session
   };
 }
 
-const ev = (input: TrevorEventInput, sessionId: string, seq: number): SessionEvent =>
+const ev = (input: BelayEventInput, sessionId: string, seq: number): SessionEvent =>
   storedEvent(input, {
     sessionId,
     seq,

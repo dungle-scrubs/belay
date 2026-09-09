@@ -36,7 +36,7 @@ import type { McpTransport, McpTransportState, McpTransportStatus } from "./tran
  *
  * Execution semantics (D-008): `callTool` speaks the host tool contract exactly -
  * `Effect<string, ToolError>` (tools/types.ts) - so the model-facing MCP tool (M7) rides
- * Trevor's normal tool boundary: tool.started/tool.completed events, redaction, truncation
+ * Belay's normal tool boundary: tool.started/tool.completed events, redaction, truncation
  * (tools/shared.ts norms), and cancellation (the Effect interrupts like any other tool;
  * the abandoned request settles server-side and its late reply is dropped by the transport).
  * Scheduling classification: an external MCP tool mutates EXTERNAL service state - a different
@@ -48,7 +48,7 @@ import type { McpTransport, McpTransportState, McpTransportStatus } from "./tran
  * Resources are attributable CONTEXT records, not tool execution: list/read return
  * provenance-carrying records (server + uri + mime) with bounded content, for the M7 surface
  * to expose. Prompts are imported ARTIFACTS the same way (M6): provenance-carrying records
- * with server-side argument substitution and bounded expansion - explicitly NOT Trevor slash
+ * with server-side argument substitution and bounded expansion - explicitly NOT Belay slash
  * commands (nothing here touches the command registry). Server-originated requests
  * (elicitation, sampling) are answered by the per-server ./mediation mediator wired into each
  * transport at construction; sampling shares ONE budget across every server.
@@ -95,7 +95,7 @@ export interface McpServerStatusEntry {
   };
 }
 
-/** An imported MCP prompt (M6): a provenance-carrying artifact, NOT a Trevor slash command. */
+/** An imported MCP prompt (M6): a provenance-carrying artifact, NOT a Belay slash command. */
 export interface McpPromptArtifact {
   readonly kind: "mcp_prompt";
   readonly server: string;

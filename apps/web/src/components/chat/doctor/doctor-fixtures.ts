@@ -1007,7 +1007,7 @@ const providersLongName: DoctorArea = {
       nextAction: {
         label: "Verify the gateway hostname",
         command:
-          "TREVOR_PROVIDER_GPT_BASE_URL=https://gateway.internal.us-east-1.models.example-corp.com/v1",
+          "BELAY_PROVIDER_GPT_BASE_URL=https://gateway.internal.us-east-1.models.example-corp.com/v1",
       },
     },
   ],

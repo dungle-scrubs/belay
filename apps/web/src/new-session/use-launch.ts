@@ -1,5 +1,5 @@
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   type SessionEvent,
   type SessionTransport,
   SUPERVISOR_SESSION_ID,
@@ -31,7 +31,7 @@ const HOST_ONLINE_TIMEOUT_MS = 30_000;
 const RESULT_WAIT_TIMEOUT_MS = 90_000;
 
 const isHostOnline = (event: SessionEvent): boolean =>
-  decodeTrevorEvent(event)?.type === "host.online";
+  decodeBelayEvent(event)?.type === "host.online";
 
 export interface UseLaunchOptions {
   /**
@@ -182,7 +182,7 @@ export function useLaunch(options: UseLaunchOptions): LaunchController {
   useEffect(() => {
     for (let i = cursorRef.current; i < controlEvents.length; i += 1) {
       const event = controlEvents[i];
-      const decoded = event ? decodeTrevorEvent(event) : null;
+      const decoded = event ? decodeBelayEvent(event) : null;
       if (!decoded) {
         continue;
       }

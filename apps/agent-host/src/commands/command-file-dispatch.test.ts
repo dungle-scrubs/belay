@@ -47,7 +47,7 @@ test("interpolate-then-substitute (D-007): a $0 value containing !cmd lands iner
   const dispatch = makeCommandFileDispatch({
     // Gate OPEN, so if the ordering were reversed the substituted `!belay-export` would become an
     // interpolation site and run. It must not: interpolation runs on the trusted body FIRST.
-    interpolationConfig: resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" }),
+    interpolationConfig: resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" }),
     publish: async (text) => {
       published.push(text);
     },

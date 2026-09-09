@@ -7,7 +7,7 @@ import { createHostResidency, type HostResidency } from "../../src/residency/hos
 /**
  * A reusable hermetic fake-LM-Studio residency fixture (plan 11.1 M7).
  *
- * Each {@link FakeResidencyInstance} is one "host instance": its own Trevor-loaded registry, admission
+ * Each {@link FakeResidencyInstance} is one "host instance": its own Belay-loaded registry, admission
  * gate, and a fake `lms unload` that RECORDS the model instead of shelling out - all over ONE shared
  * admission dir on the real filesystem, so two instances reference-count residency claims across a real
  * cross-process store exactly as two OS processes would. No LM Studio, no network: deterministic for the
@@ -21,7 +21,7 @@ export interface FakeResidencyInstance {
   readonly residency: HostResidency;
   /** Models this instance's fake LM Studio has unloaded (the recorded `lms unload` side effect). */
   readonly unloaded: readonly string[];
-  /** Simulate this instance running `lms load` for a model: register it Trevor-loaded here. */
+  /** Simulate this instance running `lms load` for a model: register it Belay-loaded here. */
   load(target: ResidencyClaimTarget, contextLength?: number): void;
   /** Acquire a real generation lease for `target` (an in-flight stream) on the shared store. */
   startGeneration(target: ResidencyClaimTarget): Promise<{ release: () => Promise<void> }>;

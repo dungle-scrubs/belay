@@ -73,8 +73,8 @@ describe("inspectVideoFile", () => {
       {
         putFrame,
         env: {
-          TREVOR_FFMPEG_PATH: "/tmp/belay-missing-ffmpeg",
-          TREVOR_FFPROBE_PATH: "/tmp/belay-missing-ffprobe",
+          BELAY_FFMPEG_PATH: "/tmp/belay-missing-ffmpeg",
+          BELAY_FFPROBE_PATH: "/tmp/belay-missing-ffprobe",
         },
       },
     );

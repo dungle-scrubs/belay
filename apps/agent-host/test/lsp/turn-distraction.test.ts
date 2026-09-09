@@ -8,12 +8,12 @@ import { finalAnswer, scriptedProvider, toolCallNames, toolResult } from "./scri
 /**
  * Plan 24 M7 distraction regressions (D-009, D-006): a degraded language server must never
  * derail a turn. Each case drives a FULL fake-provider turn through the production path (the
- * host LSP singleton over TREVOR_WORKSPACE) that calls one lsp tool and then proceeds to normal
+ * host LSP singleton over BELAY_WORKSPACE) that calls one lsp tool and then proceeds to normal
  * read/answer work, asserting the turn COMPLETES with the normal answer, the LSP result stays
  * bounded, and no further LSP calls follow the degraded one:
  *
  * - hanging (slow) server: the hover result degrades to bounded timeout text within the
- *   env-tuned request timeout (TREVOR_LSP_REQUEST_TIMEOUT_MS - the M7 runtime fix), so the
+ *   env-tuned request timeout (BELAY_LSP_REQUEST_TIMEOUT_MS - the M7 runtime fix), so the
  *   turn's wall clock stays far below the 15s compile-time default;
  * - noisy server: hundreds of published diagnostics come back capped, never a dump;
  * - stale server: a long-quiet server reports "stale" as data, and requests still answer -
@@ -38,16 +38,16 @@ const ws = createEvalWorkspace({
 });
 
 const prevEnv = {
-  TREVOR_WORKSPACE: process.env.TREVOR_WORKSPACE,
-  TREVOR_LSP_REQUEST_TIMEOUT_MS: process.env.TREVOR_LSP_REQUEST_TIMEOUT_MS,
-  TREVOR_LSP_INIT_TIMEOUT_MS: process.env.TREVOR_LSP_INIT_TIMEOUT_MS,
-  TREVOR_LSP_STALE_AFTER_MS: process.env.TREVOR_LSP_STALE_AFTER_MS,
+  BELAY_WORKSPACE: process.env.BELAY_WORKSPACE,
+  BELAY_LSP_REQUEST_TIMEOUT_MS: process.env.BELAY_LSP_REQUEST_TIMEOUT_MS,
+  BELAY_LSP_INIT_TIMEOUT_MS: process.env.BELAY_LSP_INIT_TIMEOUT_MS,
+  BELAY_LSP_STALE_AFTER_MS: process.env.BELAY_LSP_STALE_AFTER_MS,
 };
 
-process.env.TREVOR_WORKSPACE = ws;
-process.env.TREVOR_LSP_REQUEST_TIMEOUT_MS = "700";
-process.env.TREVOR_LSP_INIT_TIMEOUT_MS = "8000";
-process.env.TREVOR_LSP_STALE_AFTER_MS = "40";
+process.env.BELAY_WORKSPACE = ws;
+process.env.BELAY_LSP_REQUEST_TIMEOUT_MS = "700";
+process.env.BELAY_LSP_INIT_TIMEOUT_MS = "8000";
+process.env.BELAY_LSP_STALE_AFTER_MS = "40";
 
 const { runTurn } = await import("../support/fake-provider");
 const { lspManager } = await import("@host/lsp/host-runtime");

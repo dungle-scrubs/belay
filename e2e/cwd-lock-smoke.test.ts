@@ -95,7 +95,7 @@ function spawnActor(mode: string, cwd: string, sessionId: string, hostId: string
     env: {
       ...process.env,
       BELAY_STATE_HOME: stateHome,
-      TREVOR_DEBUG: "0",
+      BELAY_DEBUG: "0",
       TSX_TSCONFIG_PATH: join(REPO_ROOT, "apps/agent-host/tsconfig.json"),
     },
     stdio: ["ignore", "pipe", "pipe"],

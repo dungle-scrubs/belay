@@ -1,13 +1,13 @@
 import {
+  type BelayEventInput,
   type ConnectionStatus,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   hostIdentity,
   inputEstimateTokens,
   isAnswerableProducer,
   type SessionConnection,
   type SessionEvent,
   type SessionTransport,
-  type TrevorEventInput,
   toPublishInput,
 } from "@belay/session";
 import type { TelemetrySink } from "@belay/session/telemetry";
@@ -74,7 +74,7 @@ export interface SessionWorker {
   readonly activeRun: ActiveRun;
   readonly compactionController: CompactionController;
   readonly scheduler: TurnScheduler;
-  readonly emit: (event: TrevorEventInput) => Promise<void>;
+  readonly emit: (event: BelayEventInput) => Promise<void>;
   readonly abortRuns: (runId: string, kind?: "cancelled" | "steered") => void;
   readonly reapOrphans: () => void;
   readonly reapOrphanSubagents: () => void;
@@ -120,7 +120,7 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
   let closed = false;
   let connection: SessionConnection | null = null;
 
-  const emit = (event: TrevorEventInput): Promise<void> =>
+  const emit = (event: BelayEventInput): Promise<void> =>
     transport.publishEvent(sessionId, toPublishInput(event, producerId));
 
   const emitLive = emitLiveLayer(emit, (runId) => turnMachine.markCompleted(runId));
@@ -174,7 +174,7 @@ export function makeSessionWorker(deps: SessionWorkerDeps): SessionWorker {
   }
 
   function handleEvent(message: SessionEvent): void {
-    const decoded = decodeTrevorEvent(message);
+    const decoded = decodeBelayEvent(message);
     if (!decoded) {
       return;
     }

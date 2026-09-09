@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { events, type SessionEvent, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events, type SessionEvent } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { Effect, Stream } from "effect";
 import { test } from "vitest";
@@ -16,7 +16,7 @@ import { type RecallDeps, runRecall, type SiblingRead } from "./engine";
  */
 
 let seq = 0;
-const ev = (input: TrevorEventInput, sessionId: string, producerId = "belay-web"): SessionEvent =>
+const ev = (input: BelayEventInput, sessionId: string, producerId = "belay-web"): SessionEvent =>
   storedEvent(input, { seq: seq++, sessionId, producerId });
 
 function fakeProvider(text: string, fail = false): Provider {

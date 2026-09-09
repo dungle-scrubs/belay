@@ -3,7 +3,7 @@ import { test } from "vitest";
 import type { SessionEvent } from "./event";
 import { pendingFollowUps, queuedFollowUps, supersededMessageIds } from "./follow-up-queue";
 import { PRODUCER_IDS, type ProducerId } from "./identity";
-import { events, type TrevorEventInput } from "./protocol";
+import { type BelayEventInput, events } from "./protocol";
 
 /**
  * The durable follow-up queue derivation (plan 47 M2/M3): the single ordering rule the host's leader
@@ -14,7 +14,7 @@ import { events, type TrevorEventInput } from "./protocol";
  */
 
 let seq = 0;
-const ev = (input: TrevorEventInput, producerId: ProducerId = PRODUCER_IDS.web): SessionEvent => {
+const ev = (input: BelayEventInput, producerId: ProducerId = PRODUCER_IDS.web): SessionEvent => {
   const n = seq++;
   return {
     sessionId: "s",

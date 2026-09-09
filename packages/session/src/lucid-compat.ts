@@ -1,16 +1,16 @@
 import type { LucidAnchor, LucidDeliveredAnnotation, LucidReviewStatus } from "./lucid";
 
 /**
- * External LUCID CLI compatibility (plan 27, M8). Trevor renders Lucid artifacts natively in its
+ * External LUCID CLI compatibility (plan 27, M8). Belay renders Lucid artifacts natively in its
  * artifact panel, but a session authored by the standalone `~/dev/lucid` CLI has a different on-disk
  * shape: a co-located append-only NDJSON event log (`.lucid/<name>/log.ndjson`) whose anchors follow
- * `~/dev/lucid/src/anchors/anchor.ts`. This module ADAPTS that external shape into Trevor's structured
+ * `~/dev/lucid/src/anchors/anchor.ts`. This module ADAPTS that external shape into Belay's structured
  * Lucid feedback WITHOUT depending on or running the lucid CLI, and re-states lucid's anchor CONTRACT
- * so a committed fixture can be validated against it - proving Trevor's integration reads lucid output
+ * so a committed fixture can be validated against it - proving Belay's integration reads lucid output
  * faithfully and never mutates it (the CLI contract stays intact).
  *
  * The external types below MIRROR `~/dev/lucid` exactly (it is not a dependency); they are the
- * fixture-validated contract, distinct from Trevor's own `LucidAnchor` (see `lucid.ts`).
+ * fixture-validated contract, distinct from Belay's own `LucidAnchor` (see `lucid.ts`).
  */
 
 /** The external lucid ELEMENT anchor (mirrors lucid `ElementAnchor`). */
@@ -23,7 +23,7 @@ export interface LucidExternalElementAnchor {
 }
 
 /** The external lucid RANGE anchor (mirrors lucid `RangeAnchor`): nested quote + position, snippet on
- *  the anchor - deliberately different from Trevor's flattened {@link LucidAnchor}. */
+ *  the anchor - deliberately different from Belay's flattened {@link LucidAnchor}. */
 export interface LucidExternalRangeAnchor {
   readonly kind: "range";
   readonly quote: { readonly exact: string; readonly prefix: string; readonly suffix: string };
@@ -40,7 +40,7 @@ const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Num
 /**
  * Validates an external lucid anchor against the CLI contract (a faithful re-statement of lucid's
  * `parseAnchor`). Used by the M8 test to prove a committed fixture conforms to lucid's output shape,
- * and that Trevor's import leaves that shape valid.
+ * and that Belay's import leaves that shape valid.
  */
 export function isValidLucidExternalAnchor(input: unknown): input is LucidExternalAnchor {
   if (!isRecord(input)) {
@@ -71,7 +71,7 @@ export function isValidLucidExternalAnchor(input: unknown): input is LucidExtern
   return false;
 }
 
-/** Adapts an external lucid anchor to Trevor's {@link LucidAnchor} + its addressed snippet. Pure and
+/** Adapts an external lucid anchor to Belay's {@link LucidAnchor} + its addressed snippet. Pure and
  *  total; it never reshapes the input, so the caller's fixture is untouched. */
 export function adaptLucidAnchor(anchor: LucidExternalAnchor): {
   readonly anchor: LucidAnchor;
@@ -101,7 +101,7 @@ export function adaptLucidAnchor(anchor: LucidExternalAnchor): {
   };
 }
 
-/** The Trevor-native projection of an imported external lucid session: what the artifact panel needs
+/** The Belay-native projection of an imported external lucid session: what the artifact panel needs
  *  to render + review it. */
 export interface ImportedLucidSession {
   readonly lucidId: string;
@@ -112,16 +112,16 @@ export interface ImportedLucidSession {
   readonly annotations: readonly LucidDeliveredAnnotation[];
 }
 
-/** The stable Trevor lucidId for an external session file path (its basename without extension). */
+/** The stable Belay lucidId for an external session file path (its basename without extension). */
 export function lucidIdFromPath(path: string): string {
   const base = path.split("/").pop() ?? path;
   return base.replace(/\.[^.]+$/, "") || base;
 }
 
 /**
- * Imports a `~/dev/lucid` NDJSON event log into a Trevor-native {@link ImportedLucidSession}: it folds
+ * Imports a `~/dev/lucid` NDJSON event log into a Belay-native {@link ImportedLucidSession}: it folds
  * `session_opened`/`version` for the artifact identity + latest version, `annotation` events into
- * structured Trevor annotations (adapting the anchors), and `review_resolved`/`review_reopened` into
+ * structured Belay annotations (adapting the anchors), and `review_resolved`/`review_reopened` into
  * the review status. Torn-tail tolerant (a garbled trailing line is skipped, like lucid's own fold).
  * Never runs or requires the lucid CLI. Pure.
  */

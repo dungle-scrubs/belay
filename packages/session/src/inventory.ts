@@ -1,5 +1,5 @@
 import type { SessionEvent } from "./event";
-import { decodeTrevorEvent, type GitStatus } from "./protocol";
+import { decodeBelayEvent, type GitStatus } from "./protocol";
 
 /**
  * The session inventory read model (D-090): one distilled summary per durable session,
@@ -142,7 +142,7 @@ function titleFrom(
   sessionId: string,
 ): string {
   if (rename) {
-    const decoded = decodeTrevorEvent(rename);
+    const decoded = decodeBelayEvent(rename);
     if (decoded?.type === "session.title") {
       const renamed = decoded.title.trim().replace(/\s+/g, " ");
       if (renamed) {
@@ -151,7 +151,7 @@ function titleFrom(
     }
   }
   if (firstUser) {
-    const decoded = decodeTrevorEvent(firstUser);
+    const decoded = decodeBelayEvent(firstUser);
     if (decoded?.type === "user.message") {
       const text = decoded.text.trim().replace(/\s+/g, " ");
       if (text) {
@@ -172,7 +172,7 @@ export function activeTurnRunId(lifecycle: readonly SessionEvent[]): string | nu
   const completed = new Set<string>();
   let lastStarted: string | null = null;
   for (const event of lifecycle) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }
@@ -198,7 +198,7 @@ export function activeTurnRunId(lifecycle: readonly SessionEvent[]): string | nu
 export function activityFromLog(lifecycle: readonly SessionEvent[]): SessionActivity {
   let everCompleted = false;
   for (const event of lifecycle) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }
@@ -235,7 +235,7 @@ export function sessionProjectPath(
   cwd: string | null,
 ): string | null {
   if (projectMarker) {
-    const decoded = decodeTrevorEvent(projectMarker);
+    const decoded = decodeBelayEvent(projectMarker);
     if (decoded?.type === "session.project" && decoded.path) {
       return decoded.path;
     }
@@ -245,23 +245,23 @@ export function sessionProjectPath(
 
 /** Projects one raw inventory row into the distilled SessionSummary read model. */
 export function summarizeSession(row: InventoryRow): SessionSummary {
-  const host = row.hostOnline ? decodeTrevorEvent(row.hostOnline) : null;
+  const host = row.hostOnline ? decodeBelayEvent(row.hostOnline) : null;
   const online = host?.type === "host.online" ? host : null;
   const cwd = online?.cwd ?? null;
   const workspace = online?.workspace ?? null;
 
   const presence: HostPresenceState = row.hostPresent ? "live" : row.hostOnline ? "stale" : "none";
 
-  const archivedEvent = row.archived ? decodeTrevorEvent(row.archived) : null;
+  const archivedEvent = row.archived ? decodeBelayEvent(row.archived) : null;
   const archived = archivedEvent?.type === "session.archived" ? archivedEvent.archived : false;
-  const deletedEvent = row.deleted ? decodeTrevorEvent(row.deleted) : null;
+  const deletedEvent = row.deleted ? decodeBelayEvent(row.deleted) : null;
   const deleted = deletedEvent?.type === "session.deleted" ? deletedEvent.deleted : false;
-  const forkedEvent = row.forkedFrom ? decodeTrevorEvent(row.forkedFrom) : null;
+  const forkedEvent = row.forkedFrom ? decodeBelayEvent(row.forkedFrom) : null;
   const forkedFrom: SessionLineage | null =
     forkedEvent?.type === "session.forkedFrom"
       ? { parentSessionId: forkedEvent.parentSessionId, forkSeq: forkedEvent.forkSeq }
       : null;
-  const tangentEvent = row.tangentOf ? decodeTrevorEvent(row.tangentOf) : null;
+  const tangentEvent = row.tangentOf ? decodeBelayEvent(row.tangentOf) : null;
   const tangentOf: TangentAnchor | null =
     tangentEvent?.type === "session.tangentOf"
       ? {
@@ -273,7 +273,7 @@ export function summarizeSession(row: InventoryRow): SessionSummary {
           createdAt: row.tangentOf?.createdAt ?? row.createdAt,
         }
       : null;
-  const worktreeEvent = row.worktreeMarker ? decodeTrevorEvent(row.worktreeMarker) : null;
+  const worktreeEvent = row.worktreeMarker ? decodeBelayEvent(row.worktreeMarker) : null;
   const worktree: WorktreeIdentity | null =
     worktreeEvent?.type === "session.worktree" && worktreeEvent.branch
       ? { id: worktreeEvent.id, branch: worktreeEvent.branch, path: worktreeEvent.path }

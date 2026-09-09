@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "../event";
-import { decodeTrevorEvent, events } from "../protocol";
+import { decodeBelayEvent, events } from "../protocol";
 
 /**
  * Round-trip tests for the plan 58 M4 `session.launch.requested` extension: the
@@ -10,7 +10,7 @@ import { decodeTrevorEvent, events } from "../protocol";
  * legacy shape stays byte-identical for existing callers).
  */
 
-/** Wraps a `TrevorEventInput` in a minimal `SessionEvent` for decode. */
+/** Wraps a `BelayEventInput` in a minimal `SessionEvent` for decode. */
 function wrap(input: ReturnType<typeof events.raw>): SessionEvent {
   return {
     eventId: "ev-0",
@@ -25,7 +25,7 @@ function wrap(input: ReturnType<typeof events.raw>): SessionEvent {
 
 test("sessionLaunchRequested round-trips the legacy shape (no optionals)", () => {
   const req = events.sessionLaunchRequested({ requestId: "r-1", root: "/work/app" });
-  const decoded = decodeTrevorEvent(wrap(req));
+  const decoded = decodeBelayEvent(wrap(req));
   assert.deepEqual(decoded, {
     type: "session.launch.requested",
     requestId: "r-1",
@@ -40,7 +40,7 @@ test("sessionLaunchRequested round-trips with sessionId + projectPath", () => {
     sessionId: "fresh-uuid",
     projectPath: "/work/app",
   });
-  const decoded = decodeTrevorEvent(wrap(req));
+  const decoded = decodeBelayEvent(wrap(req));
   assert.deepEqual(decoded, {
     type: "session.launch.requested",
     requestId: "r-2",
@@ -57,7 +57,7 @@ test("sessionLaunchRequested omits empty optionals (permissive decode)", () => {
     sessionId: "",
     projectPath: "",
   });
-  const decoded = decodeTrevorEvent(wrap(req));
+  const decoded = decodeBelayEvent(wrap(req));
   assert.deepEqual(decoded, {
     type: "session.launch.requested",
     requestId: "r-3",

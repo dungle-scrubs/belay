@@ -105,7 +105,7 @@ export function parseExportArgs(args: string): ParseResult {
 }
 
 /** Builds the `/belay-export` command (read-only; composes + prints the capability manifest). */
-export function buildTrevorExportCommand(): Command<void> {
+export function buildBelayExportCommand(): Command<void> {
   return {
     spec: {
       name: "/belay-export",

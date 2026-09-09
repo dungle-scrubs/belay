@@ -108,7 +108,7 @@ See [the renderer](https://example.com) and the \`markdown.css\` tokens.`;
 
 const FULL_MARKDOWN = `# Evidence
 
-Trevor already has the core job registry, and this paragraph checks the default prose color, line height, wrapping, **strong text**, *emphasis*, \`inline code\`, and [links](https://example.com).
+Belay already has the core job registry, and this paragraph checks the default prose color, line height, wrapping, **strong text**, *emphasis*, \`inline code\`, and [links](https://example.com).
 
 ## Existing behavior
 

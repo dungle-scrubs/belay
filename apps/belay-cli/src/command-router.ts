@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { basename, extname } from "node:path";
-import type { TrevorClient } from "@belay/sdk";
+import type { BelayClient } from "@belay/sdk";
 import { resolveModelConfig } from "./config";
 import {
   runArtifactGet,
@@ -135,7 +135,7 @@ export function inferMime(path: string, explicit?: string): string {
 }
 
 export interface CommandRouterDeps {
-  readonly client: TrevorClient;
+  readonly client: BelayClient;
   readonly lifecycleIo: LifecycleIo;
   readonly hostControlIo: HostControlIo;
   readonly projectName: () => string;

@@ -17,27 +17,27 @@ import { collapsePaths, redactSecrets } from "@belay/session/telemetry";
  * Responsible for: the `!command` interpolation trust gate - opt-in, allow-list, provenance, argv
  * split, output policy, and diagnostic records.
  * Not for: the shared parser (interpolation-engine.ts), the command-file runner/loader
- * (command-file.ts), or skill-load shell interpolation (TREVOR_SKILL_SHELL) - skills/skills.ts.
+ * (command-file.ts), or skill-load shell interpolation (BELAY_SKILL_SHELL) - skills/skills.ts.
  */
 
 /** The env var that gates general (command-file) interpolation. Only the exact opt-in "1" enables it. */
-export const INTERPOLATION_ENV = "TREVOR_ENABLE_INTERPOLATION";
+export const INTERPOLATION_ENV = "BELAY_ENABLE_INTERPOLATION";
 
 /**
  * Where an interpolated value originated + which SEPARATE gate authorized it (plan 40, M1). An
  * interpolated value carries its source so an untrusted file expansion can never be silently mistaken for
  * a trusted instruction. The two lanes are deliberately distinct trust surfaces:
  *   - `skill-shell`   : the pre-existing skill-load seam - an ARBITRARY command bounded by the runCommand
- *                       floor, opt-in via `TREVOR_SKILL_SHELL`.
+ *                       floor, opt-in via `BELAY_SKILL_SHELL`.
  *   - `command-file`  : the plan-40 runtime - only an ALLOW-LISTED, read-only, in-process command, opt-in
- *                       via `TREVOR_ENABLE_INTERPOLATION`.
+ *                       via `BELAY_ENABLE_INTERPOLATION`.
  * Because the gates are different env keys, enabling one can never enable the other.
  */
 export type InterpolationSource = "skill-shell" | "command-file";
 
 /** The env gate that authorizes each interpolation source. Distinct keys, so the two lanes never co-arm. */
 export const INTERPOLATION_GATE_ENV: Record<InterpolationSource, string> = {
-  "skill-shell": "TREVOR_SKILL_SHELL",
+  "skill-shell": "BELAY_SKILL_SHELL",
   "command-file": INTERPOLATION_ENV,
 };
 
@@ -67,7 +67,7 @@ export interface InterpolationConfig {
 }
 
 /**
- * Resolves the interpolation config from the environment. Disabled unless `TREVOR_ENABLE_INTERPOLATION`
+ * Resolves the interpolation config from the environment. Disabled unless `BELAY_ENABLE_INTERPOLATION`
  * is exactly "1"; when disabled the allow-list is empty, so no command can ever be an interpolation target.
  */
 export function resolveInterpolationConfig(
@@ -172,7 +172,7 @@ export type InterpolationStatus =
  */
 export interface InterpolationDiagnostic {
   readonly source: InterpolationSource;
-  /** The env gate for this source (e.g. `TREVOR_ENABLE_INTERPOLATION`). */
+  /** The env gate for this source (e.g. `BELAY_ENABLE_INTERPOLATION`). */
   readonly gate: string;
   readonly gateOpen: boolean;
   /** The attempted command name (argv[0]), redacted; `(block)` for a fenced script with no single name. */

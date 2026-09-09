@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # assistant-ui vendored-component drift check (plan 58.6.1 M3).
 #
-# Trevor OWNS copies of the assistant-ui components under
+# Belay OWNS copies of the assistant-ui components under
 # apps/web/src/components/assistant-ui/ (see CONTEXT.md "assistant-ui dependency
 # governance"). Upstream changes to those components reach us only through a
 # deliberate re-vendor - never automatically. This script runs the assistant-ui
@@ -19,7 +19,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 VENDOR_DIR="${SCRIPT_DIR}/../src/components/assistant-ui"
 
 # The vendored components that track an upstream assistant-ui source. Lazy wrappers,
-# Trevor-authored helpers, and *.test/*.stories files are intentionally excluded -
+# Belay-authored helpers, and *.test/*.stories files are intentionally excluded -
 # they are ours, not copies of an upstream registry component.
 COMPONENTS=(
   reasoning

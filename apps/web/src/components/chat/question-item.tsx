@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import type { QuestionMessage } from "@/transcript";
 
 /**
- * The slim transcript record of a resolved `ask_user` interaction (D-001/D-002): what Trevor asked and
+ * The slim transcript record of a resolved `ask_user` interaction (D-001/D-002): what Belay asked and
  * how the user answered, rendered compactly - a question-mark icon, an "asked" label, an outcome tag,
  * and one `question -> answer` row per asked question. It is intentionally restrained (no nested cards,
  * no interactive controls); the live pending question stays owned by `QuestionSurface`.

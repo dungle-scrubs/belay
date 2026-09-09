@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import {
   BELAY_HOME_DIRNAME,
-  LEGACY_TREVOR_DIRNAME,
+  BELAY_STATE_DIRNAME,
+  LEGACY_BELAY_DIRNAME,
   type RootCategoryId,
   resolveBelayHome,
   resolveBelayStateHome,
@@ -10,7 +11,6 @@ import {
   rootCategory,
   STORAGE_INVENTORY,
   storagePath,
-  TREVOR_STATE_DIRNAME,
 } from "./node-paths";
 
 test("resolveBelayHome defaults to the Belay config home", () => {
@@ -27,7 +27,7 @@ test("resolveBelayHome honors the BELAY_HOME override", () => {
 
 test("resolveBelayStateHome defaults under the XDG state base, not the config dir", () => {
   assert.equal(resolveBelayStateHome({}, "/Users/kevin"), "/Users/kevin/.local/state/belay");
-  assert.equal(TREVOR_STATE_DIRNAME, "belay");
+  assert.equal(BELAY_STATE_DIRNAME, "belay");
 });
 
 test("resolveBelayStateHome honors XDG_STATE_HOME", () => {
@@ -73,7 +73,7 @@ test("config and state categories resolve through the home/state owners", () => 
 
 test("legacy and external roots are read-only and correctly owned", () => {
   const legacy = rootCategory("legacy", {}, "/Users/kevin");
-  assert.equal(legacy.path, `/Users/kevin/${LEGACY_TREVOR_DIRNAME}`);
+  assert.equal(legacy.path, `/Users/kevin/${LEGACY_BELAY_DIRNAME}`);
   assert.equal(legacy.ownership, "belay");
   assert.equal(legacy.writable, false);
 
@@ -200,10 +200,10 @@ test("the observation corpus resolves under the state home and follows the state
   );
 });
 
-test("legacy-root resolves to ~/.belay_legacy and external entries stay read-only", () => {
+test("legacy-root resolves to ~/.trevor_legacy and external entries stay read-only", () => {
   const legacy = STORAGE_INVENTORY.find((entry) => entry.name === "legacy-root");
   assert.ok(legacy);
-  assert.equal(storagePath(legacy, {}, "/Users/kevin"), `/Users/kevin/${LEGACY_TREVOR_DIRNAME}`);
+  assert.equal(storagePath(legacy, {}, "/Users/kevin"), `/Users/kevin/${LEGACY_BELAY_DIRNAME}`);
 
   const piAuth = STORAGE_INVENTORY.find((entry) => entry.name === "pi-auth");
   assert.ok(piAuth);

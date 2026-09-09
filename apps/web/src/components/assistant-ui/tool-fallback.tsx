@@ -13,12 +13,12 @@ import { ANIMATION_DURATION, useCollapsibleDisclosure } from "./use-collapsible-
  * the assistant-ui vendored `tool-fallback`, but decoupled from the assistant-ui runtime (58.6.2 F7):
  * the vendored `useToolCallElapsed` timer and the `ToolFallbackApproval` sub-part - which drove
  * `addResult`/`resume`/`respondToApproval` and only worked inside the assistant-ui runtime, dead in
- * Trevor - are both gone. It now reads Trevor's own `ToolStatus`, drives the running clock from
+ * Belay - are both gone. It now reads Belay's own `ToolStatus`, drives the running clock from
  * `ToolMessage.startedAt` via the shared `useElapsedLabel` leaf clock (58.6.1 M2), and collapses the
  * result by default so a long `lsp_diagnostics`/`mcp`/`bash` body stays out of the DOM until opened.
  */
 
-/** Trevor's `ToolStatus` (running/done/error) mapped to the assistant-ui lifecycle-icon axis. */
+/** Belay's `ToolStatus` (running/done/error) mapped to the assistant-ui lifecycle-icon axis. */
 const STATUS_ICON_TYPE = {
   running: "running",
   done: "complete",

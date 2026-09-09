@@ -22,7 +22,7 @@ export type { UsageBreakdown };
  * Two sides:
  *   - `events.*` constructors build `{ type, payload }` for publishing, so the
  *     emit side never spells an event name or payload key by hand.
- *   - `decodeTrevorEvent` folds a raw SessionEvent into a typed, discriminated
+ *   - `decodeBelayEvent` folds a raw SessionEvent into a typed, discriminated
  *     `DecodedEvent`, coercing payload fields permissively (a malformed or
  *     forward-compat event yields defaults or `null`, never a throw). Consumers
  *     switch on `.type` instead of hand-guarding `typeof payload.x === "string"`.
@@ -385,7 +385,7 @@ export type HandoffMode = "generate" | "direct";
 export type TangentFoldMode = "quote" | "message" | "summary";
 
 /** A publishable event before a producerId is attached: `{ type, payload }`. */
-export interface TrevorEventInput {
+export interface BelayEventInput {
   readonly type: string;
   readonly payload: Record<string, unknown>;
 }
@@ -501,7 +501,7 @@ export const events = {
     /** Exact pasted-text payloads paired to the message's `[Pasted text #N +M lines]` tokens, in
      *  reading order (10-large-paste-placeholders). Expanded at the token position for the provider. */
     pastes?: readonly PastePayload[];
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "user.message",
     payload: {
       text: p.text,
@@ -517,19 +517,19 @@ export const events = {
     warm: boolean;
     model: string;
     provider: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "assistant.started",
     payload: { runId: p.runId, warm: p.warm, model: p.model, provider: p.provider },
   }),
-  assistantDelta: (p: { runId: string; text: string }): TrevorEventInput => ({
+  assistantDelta: (p: { runId: string; text: string }): BelayEventInput => ({
     type: "assistant.delta",
     payload: { runId: p.runId, text: p.text },
   }),
-  assistantThinking: (p: { runId: string; text: string }): TrevorEventInput => ({
+  assistantThinking: (p: { runId: string; text: string }): BelayEventInput => ({
     type: "assistant.thinking",
     payload: { runId: p.runId, text: p.text },
   }),
-  assistantOverflow: (p: { runId: string; reason: string }): TrevorEventInput => ({
+  assistantOverflow: (p: { runId: string; reason: string }): BelayEventInput => ({
     type: "assistant.overflow",
     payload: { runId: p.runId, reason: p.reason },
   }),
@@ -540,7 +540,7 @@ export const events = {
     action: "trim" | "reduce-thinking";
     detail: string;
     reclaimed: number;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "assistant.recovered",
     payload: { runId: p.runId, action: p.action, detail: p.detail, reclaimed: p.reclaimed },
   }),
@@ -555,7 +555,7 @@ export const events = {
     pressure: number;
     threshold: number;
     detail: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "assistant.continued",
     payload: {
       runId: p.runId,
@@ -578,7 +578,7 @@ export const events = {
     initiator: ModelSwitchInitiator;
     outcome: ModelSwitchOutcome;
     reason?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "model.switched",
     payload: {
       runId: p.runId,
@@ -602,7 +602,7 @@ export const events = {
     scope: string;
     resetsAt?: number;
     utilization?: number;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "assistant.limit",
     payload: {
       provider: p.provider,
@@ -623,7 +623,7 @@ export const events = {
     maxAttempts?: number;
     detail: string;
     diagnostic?: ProviderDiagnostic;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "assistant.reconnecting",
     payload: {
       runId: p.runId,
@@ -655,7 +655,7 @@ export const events = {
     result?: string;
     reasoningLevel?: string;
     tokens?: number;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "delegated.to",
     payload: {
       runId: p.runId,
@@ -677,7 +677,7 @@ export const events = {
    * fingerprint (the per-ordinal resume invalidation check) and the leaf's `Usage` (restored on resume
    * so budget-dependent loops replay). `workflow.leaf-failed` carries the fail-soft typed cause (D-008).
    */
-  workflowStarted: (p: { runId: string; workflow: string; args?: unknown }): TrevorEventInput => ({
+  workflowStarted: (p: { runId: string; workflow: string; args?: unknown }): BelayEventInput => ({
     type: "workflow.started",
     payload: {
       runId: p.runId,
@@ -685,7 +685,7 @@ export const events = {
       ...(p.args !== undefined ? { args: p.args } : {}),
     },
   }),
-  workflowPhase: (p: { runId: string; title: string }): TrevorEventInput => ({
+  workflowPhase: (p: { runId: string; title: string }): BelayEventInput => ({
     type: "workflow.phase",
     payload: { runId: p.runId, title: p.title },
   }),
@@ -697,7 +697,7 @@ export const events = {
     usage: { readonly input: number; readonly output: number };
     /** The serialized typed leaf result (success or typed failure) - the resume cache reconstructs it. */
     result: unknown;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "workflow.agent",
     payload: {
       runId: p.runId,
@@ -714,7 +714,7 @@ export const events = {
     cause: string;
     childSessionId: string;
     detail?: unknown;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "workflow.leaf-failed",
     payload: {
       runId: p.runId,
@@ -724,11 +724,11 @@ export const events = {
       ...(p.detail !== undefined ? { detail: p.detail } : {}),
     },
   }),
-  workflowLog: (p: { runId: string; message: string }): TrevorEventInput => ({
+  workflowLog: (p: { runId: string; message: string }): BelayEventInput => ({
     type: "workflow.log",
     payload: { runId: p.runId, message: p.message },
   }),
-  workflowCompleted: (p: { runId: string; ok: boolean; leaves: number }): TrevorEventInput => ({
+  workflowCompleted: (p: { runId: string; ok: boolean; leaves: number }): BelayEventInput => ({
     type: "workflow.completed",
     payload: { runId: p.runId, ok: p.ok, leaves: p.leaves },
   }),
@@ -747,7 +747,7 @@ export const events = {
     tokensBefore: number;
     tokensAfter: number;
     model: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "context.compacted",
     payload: {
       foldId: p.foldId,
@@ -767,7 +767,7 @@ export const events = {
    * this is advisory (need not be replay-perfect) - honest per tick (real tokens streamed so far),
    * never a predicted percentage.
    */
-  contextCompacting: (p: { foldId: string; tokens: number; budget: number }): TrevorEventInput => ({
+  contextCompacting: (p: { foldId: string; tokens: number; budget: number }): BelayEventInput => ({
     type: "context.compacting",
     payload: { foldId: p.foldId, tokens: p.tokens, budget: p.budget },
   }),
@@ -781,7 +781,7 @@ export const events = {
     runId: string;
     usage: Usage;
     breakdown?: UsageBreakdown;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "assistant.progress",
     payload: {
       runId: p.runId,
@@ -802,7 +802,7 @@ export const events = {
     stepLimit?: number;
     stop?: TurnStop;
     diagnostic?: ProviderDiagnostic;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "assistant.completed",
     payload: {
       runId: p.runId,
@@ -828,7 +828,7 @@ export const events = {
   /** User asked to cancel the active run (hard steering / ESC). When `steered` is true the
    *   cancel is part of a steer (fold + cancel + submit); the host closes the run as `steered`
    *   instead of `cancelled` so the transcript shows a muted note, not the alarming red. */
-  userCancel: (p: { runId: string; steered?: boolean }): TrevorEventInput => ({
+  userCancel: (p: { runId: string; steered?: boolean }): BelayEventInput => ({
     type: "user.cancel",
     payload: { runId: p.runId, ...(p.steered ? { steered: true } : {}) },
   }),
@@ -846,7 +846,7 @@ export const events = {
   userSupersede: (p: {
     supersedes: readonly string[];
     reason: SupersedeReason;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "user.supersede",
     payload: { supersedes: [...p.supersedes], reason: p.reason },
   }),
@@ -860,12 +860,12 @@ export const events = {
     runId: string;
     model: ModelRef;
     initiator: ModelSwitchInitiator;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "model.switch.requested",
     payload: { runId: p.runId, model: p.model, initiator: p.initiator },
   }),
   /** Browser invokes an immediate host command, bypassing the model/turn queue. */
-  userCommand: (p: { command: string; args: string }): TrevorEventInput => ({
+  userCommand: (p: { command: string; args: string }): BelayEventInput => ({
     type: "user.command",
     payload: { command: p.command, args: p.args },
   }),
@@ -877,7 +877,7 @@ export const events = {
     ok: boolean;
     menu?: CommandMenuPayload;
     focusSessionId?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "command.result",
     payload: {
       command: p.command,
@@ -895,7 +895,7 @@ export const events = {
   sessionSwitch: (p: {
     sessionId: string;
     reason: "clear" | "cd" | "resume" | "worktree" | "handoff";
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "session.switch",
     payload: { sessionId: p.sessionId, reason: p.reason },
   }),
@@ -905,7 +905,7 @@ export const events = {
    * LATEST `session.archived` event wins, so it doubles as an unarchive (`archived: false`). It is a
    * lifecycle marker, not transcript content.
    */
-  sessionArchived: (p: { archived: boolean }): TrevorEventInput => ({
+  sessionArchived: (p: { archived: boolean }): BelayEventInput => ({
     type: "session.archived",
     payload: { archived: p.archived },
   }),
@@ -914,7 +914,7 @@ export const events = {
    * title in the inventory. The LATEST `session.title` wins (latest rename), and an empty title falls
    * back to the derived one. A lifecycle marker, not transcript content - kept out of prompt history.
    */
-  sessionTitle: (p: { title: string }): TrevorEventInput => ({
+  sessionTitle: (p: { title: string }): BelayEventInput => ({
     type: "session.title",
     payload: { title: p.title },
   }),
@@ -924,7 +924,7 @@ export const events = {
    * is a future store operation). The LATEST `session.deleted` wins, so `deleted: false` is an undo. A
    * lifecycle marker, kept out of prompt history.
    */
-  sessionDeleted: (p: { deleted: boolean }): TrevorEventInput => ({
+  sessionDeleted: (p: { deleted: boolean }): BelayEventInput => ({
     type: "session.deleted",
     payload: { deleted: p.deleted },
   }),
@@ -934,7 +934,7 @@ export const events = {
    * event, so replaying the child alone recovers its origin and the inventory can surface parent→child
    * lineage - all through the generic append API, with no fork columns in the store.
    */
-  sessionForkedFrom: (p: { parentSessionId: string; forkSeq: number }): TrevorEventInput => ({
+  sessionForkedFrom: (p: { parentSessionId: string; forkSeq: number }): BelayEventInput => ({
     type: "session.forkedFrom",
     payload: { parentSessionId: p.parentSessionId, forkSeq: p.forkSeq },
   }),
@@ -952,7 +952,7 @@ export const events = {
     sourceMessageId: string;
     quote: string;
     label?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "session.tangentOf",
     payload: {
       parentSessionId: p.parentSessionId,
@@ -967,7 +967,7 @@ export const events = {
    * the inventory can group sessions by project without relying on host.online workspace/cwd. Immutable
    * once written - a fresh project-scoped session is created rather than moving an existing session.
    */
-  sessionProject: (p: { path: string }): TrevorEventInput => ({
+  sessionProject: (p: { path: string }): BelayEventInput => ({
     type: "session.project",
     payload: { path: p.path },
   }),
@@ -979,7 +979,7 @@ export const events = {
    * state (dirty/ahead/behind) still rides host.online when that host is up; this marker only carries
    * identity (is-this-a-worktree + branch + path), so the badge survives a host switch.
    */
-  sessionWorktree: (p: { id: string; branch: string; path: string }): TrevorEventInput => ({
+  sessionWorktree: (p: { id: string; branch: string; path: string }): BelayEventInput => ({
     type: "session.worktree",
     payload: { id: p.id, branch: p.branch, path: p.path },
   }),
@@ -996,7 +996,7 @@ export const events = {
     parentSessionId: string;
     mode: TangentFoldMode;
     preview: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "tangent.foldedBack",
     payload: {
       tangentSessionId: p.tangentSessionId,
@@ -1011,7 +1011,7 @@ export const events = {
    * only ids - never selected text, parent transcript content, or hidden prompt context. The durable
    * isolation source of truth remains the tangent session's own `session.tangentOf` marker.
    */
-  tangentCreated: (p: { tangentSessionId: string; sourceMessageId: string }): TrevorEventInput => ({
+  tangentCreated: (p: { tangentSessionId: string; sourceMessageId: string }): BelayEventInput => ({
     type: "tangent.created",
     payload: {
       tangentSessionId: p.tangentSessionId,
@@ -1032,7 +1032,7 @@ export const events = {
     htmlHash: string;
     provenance: LucidProvenance;
     title?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "lucid.published",
     payload: {
       lucidId: p.lucidId,
@@ -1055,7 +1055,7 @@ export const events = {
     cursor: number;
     annotations: readonly LucidDeliveredAnnotation[];
     message?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "lucid.feedback",
     payload: {
       lucidId: p.lucidId,
@@ -1071,7 +1071,7 @@ export const events = {
    * only the status transition - so the agent knows it can stop iterating (resolved) or that
    * post-approval feedback is coming (reopened). `cursor` orders it in the delivery stream.
    */
-  lucidReview: (p: { lucidId: string; resolved: boolean; cursor: number }): TrevorEventInput => ({
+  lucidReview: (p: { lucidId: string; resolved: boolean; cursor: number }): BelayEventInput => ({
     type: "lucid.review",
     payload: { lucidId: p.lucidId, resolved: p.resolved, cursor: p.cursor },
   }),
@@ -1081,7 +1081,7 @@ export const events = {
    * `requestId` pairs this with its `shell.result`. The output is user-visible only - it is NOT
    * fed back into the model context for this cut (history projection ignores both events).
    */
-  userShell: (p: { requestId: string; command: string }): TrevorEventInput => ({
+  userShell: (p: { requestId: string; command: string }): BelayEventInput => ({
     type: "user.shell",
     payload: { requestId: p.requestId, command: p.command },
   }),
@@ -1093,7 +1093,7 @@ export const events = {
     command: string;
     output: string;
     ok: boolean;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "shell.result",
     payload: { requestId: p.requestId, command: p.command, output: p.output, ok: p.ok },
   }),
@@ -1102,7 +1102,7 @@ export const events = {
    * action - not part of the conversation, so it never renders in the transcript
    * nor reaches the model. The host runs its configured editor CLI.
    */
-  editorOpen: (p: { path: string; line?: number; column?: number }): TrevorEventInput => ({
+  editorOpen: (p: { path: string; line?: number; column?: number }): BelayEventInput => ({
     type: "editor.open",
     payload: {
       path: p.path,
@@ -1117,7 +1117,7 @@ export const events = {
    * cached index locally per keystroke, so no per-keystroke traffic hits the log. It never reaches the
    * model or the transcript.
    */
-  fileIndexRequested: (p: { requestId: string }): TrevorEventInput => ({
+  fileIndexRequested: (p: { requestId: string }): BelayEventInput => ({
     type: "file.index.requested",
     payload: { requestId: p.requestId },
   }),
@@ -1132,7 +1132,7 @@ export const events = {
     requestId: string;
     files: readonly FileMatch[];
     truncated: boolean;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "file.index.result",
     payload: {
       requestId: p.requestId,
@@ -1160,7 +1160,7 @@ export const events = {
     /** The project path to stamp as a session.project marker on the new session before
      *  launch (plan 58 M4). Absent for the legacy bare-root launch (no marker). */
     projectPath?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "session.launch.requested",
     payload: {
       requestId: p.requestId,
@@ -1174,7 +1174,7 @@ export const events = {
     sessionId: string;
     status: SessionLaunchStatus;
     error?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "session.launch.result",
     payload: {
       requestId: p.requestId,
@@ -1189,7 +1189,7 @@ export const events = {
    * local-only - a non-local / headless supervisor answers `cancelled` so the browser falls back to
    * paste-a-path (44.2).
    */
-  folderPickRequested: (p: { requestId: string }): TrevorEventInput => ({
+  folderPickRequested: (p: { requestId: string }): BelayEventInput => ({
     type: "folder.pick.requested",
     payload: { requestId: p.requestId },
   }),
@@ -1197,7 +1197,7 @@ export const events = {
     requestId: string;
     path?: string;
     cancelled: boolean;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "folder.pick.result",
     payload: {
       requestId: p.requestId,
@@ -1210,14 +1210,14 @@ export const events = {
    * launcher's `projects.json`; the `result` returns them recency-sorted (newest `updatedAt` first),
    * empty when the registry is absent.
    */
-  projectsListRequested: (p: { requestId: string }): TrevorEventInput => ({
+  projectsListRequested: (p: { requestId: string }): BelayEventInput => ({
     type: "projects.list.requested",
     payload: { requestId: p.requestId },
   }),
   projectsListResult: (p: {
     requestId: string;
     projects: readonly SupervisorProject[];
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "projects.list.result",
     payload: {
       requestId: p.requestId,
@@ -1241,7 +1241,7 @@ export const events = {
   // The browser asks the supervisor to add/rename/collapse/remove a project in the canonical
   // path-keyed registry; each `result` carries the updated fields or an error. `add` first pops
   // the native folder picker (so `add.requested` reuses the same pickFolder path as folder.pick).
-  projectAddRequested: (p: { requestId: string }): TrevorEventInput => ({
+  projectAddRequested: (p: { requestId: string }): BelayEventInput => ({
     type: "project.add.requested",
     payload: { requestId: p.requestId },
   }),
@@ -1251,7 +1251,7 @@ export const events = {
     displayName?: string;
     cancelled: boolean;
     error?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "project.add.result",
     payload: {
       requestId: p.requestId,
@@ -1265,7 +1265,7 @@ export const events = {
     requestId: string;
     path: string;
     displayName: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "project.rename.requested",
     payload: { requestId: p.requestId, path: p.path, displayName: p.displayName },
   }),
@@ -1274,7 +1274,7 @@ export const events = {
     path?: string;
     displayName?: string;
     error?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "project.rename.result",
     payload: {
       requestId: p.requestId,
@@ -1287,7 +1287,7 @@ export const events = {
     requestId: string;
     path: string;
     collapsed: boolean;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "project.collapse.requested",
     payload: { requestId: p.requestId, path: p.path, collapsed: p.collapsed },
   }),
@@ -1296,7 +1296,7 @@ export const events = {
     path?: string;
     collapsed: boolean;
     error?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "project.collapse.result",
     payload: {
       requestId: p.requestId,
@@ -1305,7 +1305,7 @@ export const events = {
       ...(p.error ? { error: p.error } : {}),
     },
   }),
-  projectRemoveRequested: (p: { requestId: string; path: string }): TrevorEventInput => ({
+  projectRemoveRequested: (p: { requestId: string; path: string }): BelayEventInput => ({
     type: "project.remove.requested",
     payload: { requestId: p.requestId, path: p.path },
   }),
@@ -1315,7 +1315,7 @@ export const events = {
     removed: boolean;
     blockedBy?: readonly string[];
     error?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "project.remove.result",
     payload: {
       requestId: p.requestId,
@@ -1331,7 +1331,7 @@ export const events = {
    * later, e.g. on replay) is then rejected rather than clobbering newer state. Omitted for a legacy
    * caller, which decodes to LEGACY_TASK_REVISION. <!-- D-004 -->
    */
-  tasksCurrent: (p: { tasks: readonly TaskSnapshot[]; rev?: number }): TrevorEventInput => ({
+  tasksCurrent: (p: { tasks: readonly TaskSnapshot[]; rev?: number }): BelayEventInput => ({
     type: "tasks.current",
     payload: { tasks: p.tasks, ...(p.rev !== undefined ? { rev: p.rev } : {}) },
   }),
@@ -1340,7 +1340,7 @@ export const events = {
     callId: string;
     name: string;
     arguments: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "tool.started",
     payload: { runId: p.runId, callId: p.callId, name: p.name, arguments: p.arguments },
   }),
@@ -1349,7 +1349,7 @@ export const events = {
     callId: string;
     name: string;
     result: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "tool.completed",
     payload: { runId: p.runId, callId: p.callId, name: p.name, result: p.result },
   }),
@@ -1371,7 +1371,7 @@ export const events = {
     argsFingerprint: string;
     resultFingerprint?: string;
     failureFingerprint?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "tool.guardrail",
     payload: {
       runId: p.runId,
@@ -1399,7 +1399,7 @@ export const events = {
     decision: HookDecisionKind;
     toolName?: string;
     reason?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "hook.decision",
     payload: {
       runId: p.runId,
@@ -1410,15 +1410,15 @@ export const events = {
       ...(p.reason ? { reason: p.reason } : {}),
     },
   }),
-  hostBeat: (p: { instanceId: string }): TrevorEventInput => ({
+  hostBeat: (p: { instanceId: string }): BelayEventInput => ({
     type: "host.beat",
     payload: { instanceId: p.instanceId },
   }),
-  hostHello: (p: { instanceId: string }): TrevorEventInput => ({
+  hostHello: (p: { instanceId: string }): BelayEventInput => ({
     type: "host.hello",
     payload: { instanceId: p.instanceId },
   }),
-  hostRole: (p: { instanceId: string; role: string }): TrevorEventInput => ({
+  hostRole: (p: { instanceId: string; role: string }): BelayEventInput => ({
     type: "host.role",
     payload: { instanceId: p.instanceId, role: p.role },
   }),
@@ -1427,7 +1427,7 @@ export const events = {
    * status change, and a refresh completion. Advisory only - it drives no routing and is kept OUT of
    * conversation memory / prompt-history projection (a presence-style signal, like host.beat).
    */
-  hostInternet: (p: { snapshot: InternetSnapshot }): TrevorEventInput => ({
+  hostInternet: (p: { snapshot: InternetSnapshot }): BelayEventInput => ({
     type: "host.internet",
     payload: { internet: p.snapshot },
   }),
@@ -1437,7 +1437,7 @@ export const events = {
    * (the catalog re-announce flips the source to ready) or `error`. Advisory/presence-style, kept OUT
    * of conversation memory (like host.internet); carries a verification code, never an API key.
    */
-  hostSourceAuth: (p: { state: SourceSignInState }): TrevorEventInput => ({
+  hostSourceAuth: (p: { state: SourceSignInState }): BelayEventInput => ({
     type: "host.sourceAuth",
     payload: { ...p.state },
   }),
@@ -1456,7 +1456,7 @@ export const events = {
     priority: string;
     position?: number;
     refusal?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "admission.status",
     payload: {
       runId: p.runId,
@@ -1495,7 +1495,7 @@ export const events = {
      *  starts on) + the FAVORITES (pinned). The browser reads default/favorites from here instead of a
      *  per-browser localStorage blob; omitted by a host that predates the preference (back-compat). */
     modelPrefs?: { default: ModelRef | null; pinned: readonly ModelRef[] };
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "host.online",
     payload: {
       ...(p.branch ? { branch: p.branch } : {}),
@@ -1530,7 +1530,7 @@ export const events = {
     toolName: string;
     adapter: string;
     contract: ProviderQuestionContract;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "provider.question.requested",
     payload: {
       questionId: p.questionId,
@@ -1545,7 +1545,7 @@ export const events = {
   providerQuestionAnswer: (p: {
     questionId: string;
     answer: ProviderQuestionAnswer;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "provider.question.answer",
     payload: { questionId: p.questionId, answer: p.answer },
   }),
@@ -1559,7 +1559,7 @@ export const events = {
     toolCallId: string;
     outcome: "answered" | "declined" | "cancelled" | "expired";
     summary: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "provider.question.resolved",
     payload: {
       questionId: p.questionId,
@@ -1583,7 +1583,7 @@ export const events = {
     sourceSessionId: string;
     prompt?: string;
     proposed?: boolean;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "handoff.requested",
     payload: {
       handoffId: p.handoffId,
@@ -1594,7 +1594,7 @@ export const events = {
     },
   }),
   /** Advisory progress while the model generates the target prompt (source-session feedback). */
-  handoffGenerating: (p: { handoffId: string; detail?: string }): TrevorEventInput => ({
+  handoffGenerating: (p: { handoffId: string; detail?: string }): BelayEventInput => ({
     type: "handoff.generating",
     payload: { handoffId: p.handoffId, ...(p.detail ? { detail: p.detail } : {}) },
   }),
@@ -1603,7 +1603,7 @@ export const events = {
     handoffId: string;
     prompt: string;
     summary?: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "handoff.generated",
     payload: {
       handoffId: p.handoffId,
@@ -1612,17 +1612,17 @@ export const events = {
     },
   }),
   /** The user approved a model-initiated handoff; `prompt` overrides the generated text when edited. */
-  handoffApproved: (p: { handoffId: string; prompt?: string }): TrevorEventInput => ({
+  handoffApproved: (p: { handoffId: string; prompt?: string }): BelayEventInput => ({
     type: "handoff.approved",
     payload: { handoffId: p.handoffId, ...(p.prompt != null ? { prompt: p.prompt } : {}) },
   }),
   /** The user rejected a model-initiated handoff; the source session stays active. */
-  handoffRejected: (p: { handoffId: string; reason?: string }): TrevorEventInput => ({
+  handoffRejected: (p: { handoffId: string; reason?: string }): BelayEventInput => ({
     type: "handoff.rejected",
     payload: { handoffId: p.handoffId, ...(p.reason ? { reason: p.reason } : {}) },
   }),
   /** The handoff failed (empty direct prompt, generation error, target ensure/attach); source stays. */
-  handoffFailed: (p: { handoffId: string; code: string; detail?: string }): TrevorEventInput => ({
+  handoffFailed: (p: { handoffId: string; code: string; detail?: string }): BelayEventInput => ({
     type: "handoff.failed",
     payload: { handoffId: p.handoffId, code: p.code, ...(p.detail ? { detail: p.detail } : {}) },
   }),
@@ -1631,7 +1631,7 @@ export const events = {
     handoffId: string;
     targetSessionId: string;
     prompt: string;
-  }): TrevorEventInput => ({
+  }): BelayEventInput => ({
     type: "handoff.accepted",
     payload: { handoffId: p.handoffId, targetSessionId: p.targetSessionId, prompt: p.prompt },
   }),
@@ -1641,7 +1641,7 @@ export const events = {
    * terminal snapshot carries the stop reason/error. The client drives create/confirm/edit/cancel/controls
    * back through the command surface, and the host re-publishes the resulting status.
    */
-  loopStatus: (p: { snapshot: LoopSnapshot }): TrevorEventInput => ({
+  loopStatus: (p: { snapshot: LoopSnapshot }): BelayEventInput => ({
     type: "loop.status",
     payload: { snapshot: p.snapshot },
   }),
@@ -1651,7 +1651,7 @@ export const events = {
    * to emit forward-compat / not-yet-typed events through the production input pipeline rather
    * than hand-spelling the shape; it is NOT a substitute for a typed builder on the emit path.
    */
-  raw: (type: string, payload: Record<string, unknown>): TrevorEventInput => ({ type, payload }),
+  raw: (type: string, payload: Record<string, unknown>): BelayEventInput => ({ type, payload }),
 } as const;
 
 /**
@@ -1683,6 +1683,3 @@ export const INVENTORY_EVENT_TYPES = {
   sessionProject: "session.project",
   sessionWorktree: "session.worktree",
 } as const satisfies Readonly<Record<string, DecodedEvent["type"]>>;
-
-/** @deprecated Use TrevorEventInput */
-export type BelayEventInput = TrevorEventInput;

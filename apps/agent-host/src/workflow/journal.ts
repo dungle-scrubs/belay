@@ -12,7 +12,7 @@
  * (M5 - it wires `onUsage`).
  */
 
-import { events, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events } from "@belay/session";
 import { canonicalJson } from "@host/boot/canonical-json";
 import { Effect } from "effect";
 import type { LeafResult, TurnUsage } from "./leaf";
@@ -85,7 +85,7 @@ export function cacheFromEvents(
 export interface AgentJournal {
   readonly runId: string;
   readonly cache: RunCache;
-  readonly emit: (event: TrevorEventInput) => Effect.Effect<void>;
+  readonly emit: (event: BelayEventInput) => Effect.Effect<void>;
   readonly onUsage?: (usage: TurnUsage) => Effect.Effect<void>;
 }
 

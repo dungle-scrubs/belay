@@ -24,7 +24,7 @@ const PROTOCOL_DECODE = readFileSync(
 );
 
 /**
- * The characterized protocol: every event kind `decodeTrevorEvent` can produce, split by whether
+ * The characterized protocol: every event kind `decodeBelayEvent` can produce, split by whether
  * `handleEvent` routes it. A NEW protocol kind must be added to one of these sets - the
  * completeness test below fails until it is consciously categorized.
  */
@@ -146,7 +146,7 @@ function handleEventBody(): string {
   assert.fail("unbalanced braces scanning handleEvent");
 }
 
-test("the characterized protocol snapshot matches decodeTrevorEvent's actual event kinds", () => {
+test("the characterized protocol snapshot matches decodeBelayEvent's actual event kinds", () => {
   // Each decodable kind appears exactly once, as its wireEvent("...") spec name (the
   // single-source table that replaced the hand-written union + switch). Same character
   // class as before: camelCase legacy kinds stay outside this characterization.

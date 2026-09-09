@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, type SessionEvent, events as sessionEvents } from "@belay/session";
 import { recordingTransport } from "@belay/test-kit";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { test, vi } from "vitest";
@@ -21,7 +21,7 @@ const ACTIVE: ActiveTangent = {
 };
 
 let seq = 0;
-function stored(input: TrevorEventInput, producerId = "belay-web"): SessionEvent {
+function stored(input: BelayEventInput, producerId = "belay-web"): SessionEvent {
   seq += 1;
   return {
     sessionId: "tangent-1",
@@ -68,8 +68,8 @@ test("a tangent send publishes the seeded first prompt into the TANGENT, never t
   const prompt = published.find((e) => e.type === "user.message");
   assert.ok(prompt, "a user.message was published to the tangent");
   // The FIRST prompt folds the seed snapshot in.
-  assert.equal((prompt?.payload as { text?: string })?.text, `> ${QUOTE}\n\nwhy sha256?`);
-  assert.equal((prompt?.payload as { provider?: string })?.provider, "lmstudio");
+  assert.equal((prompt?.payload as { text?: string }).text, `> ${QUOTE}\n\nwhy sha256?`);
+  assert.equal((prompt?.payload as { provider?: string }).provider, "lmstudio");
   // Isolation: nothing was published into the parent session.
   assert.deepEqual(rec.publishedBy("parent"), [], "the parent transcript is never written to");
 });

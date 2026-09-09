@@ -7,7 +7,7 @@ import { ADMISSION_DEFAULT_CAPACITY, ADMISSION_STALE_MS } from "./store";
 /**
  * User-owned local-admission config (plan 11 M8): the conservative default is one active generation per
  * resource (D-003), but a runtime PROVEN to handle more can be raised explicitly - per resource key or
- * as a new default - in a hand-edited `<TREVOR_HOME>/admission.json`, mirroring how `models.json` carries
+ * as a new default - in a hand-edited `<BELAY_HOME>/admission.json`, mirroring how `models.json` carries
  * per-model overrides. Capacity must be opted into; it is never inferred. The stale-owner TTL is tunable
  * the same way. Pure decoder + resolver, so parsing + precedence are unit-tested without disk or env.
  *
@@ -60,7 +60,7 @@ export function parseAdmissionConfig(raw: unknown): AdmissionConfig {
 
 /**
  * Loads the effective admission config: the `admission.json` file (or defaults), with env overrides
- * (`TREVOR_ADMISSION_CAPACITY`, `TREVOR_ADMISSION_STALE_MS`) layered on top for an ops-level knob. `read`
+ * (`BELAY_ADMISSION_CAPACITY`, `BELAY_ADMISSION_STALE_MS`) layered on top for an ops-level knob. `read`
  * + the env getters are injectable so the load is unit-tested without disk or `process.env`.
  */
 export function loadAdmissionConfig(
@@ -77,8 +77,8 @@ export function loadAdmissionConfig(
     opts.read,
   );
   const capacityOverride =
-    opts.capacityOverride ?? envNumber("TREVOR_ADMISSION_CAPACITY", undefined);
-  const staleOverride = opts.staleOverride ?? envNumber("TREVOR_ADMISSION_STALE_MS", undefined);
+    opts.capacityOverride ?? envNumber("BELAY_ADMISSION_CAPACITY", undefined);
+  const staleOverride = opts.staleOverride ?? envNumber("BELAY_ADMISSION_STALE_MS", undefined);
   return {
     defaultCapacity:
       capacityOverride && capacityOverride > 0 ? capacityOverride : file.defaultCapacity,

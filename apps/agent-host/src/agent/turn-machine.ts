@@ -5,9 +5,9 @@
  */
 
 import {
+  type BelayEventInput,
   type DecodedEvent,
   events,
-  type TrevorEventInput,
   type Usage,
   type UsageBreakdown,
 } from "@belay/session";
@@ -75,7 +75,7 @@ export class TurnMachine {
    * dropping its last-known usage so the consumed tokens ride out and the per-run record is freed.
    * `cancelled` (ESC) and `interrupted` (host reap) differ only in the flag the UI renders.
    */
-  private terminalCompletion(runId: string, kind: CloseRunKind): TrevorEventInput {
+  private terminalCompletion(runId: string, kind: CloseRunKind): BelayEventInput {
     const last = this.lastUsageByRun.get(runId);
     this.lastUsageByRun.delete(runId);
     return events.assistantCompleted({
@@ -91,7 +91,7 @@ export class TurnMachine {
     }) satisfies CompletedEvent;
   }
 
-  close(runId: string, kind: CloseRunKind): TrevorEventInput | null {
+  close(runId: string, kind: CloseRunKind): BelayEventInput | null {
     if (!this.markCompleted(runId)) {
       return null;
     }
@@ -106,8 +106,8 @@ export class TurnMachine {
    * stops reading it as forever-"Working". It is driven by the IN-FLIGHT set (the log truth), not the
    * emit-dedup set, so a `markCompleted` that ran before a failed emit cannot suppress the re-emit.
    */
-  reapExcept(activeRunId: string | null): TrevorEventInput[] {
-    const out: TrevorEventInput[] = [];
+  reapExcept(activeRunId: string | null): BelayEventInput[] {
+    const out: BelayEventInput[] = [];
     for (const runId of [...this.inFlightRuns]) {
       if (runId === activeRunId) {
         continue;

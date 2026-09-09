@@ -8,7 +8,7 @@ import { afterAll, test } from "vitest";
 
 /**
  * Ripgrep-backed grep (Phase 6 M1 / D-062). The workspace root is read at module load, so
- * TREVOR_WORKSPACE is set before the dynamic import, against a throwaway tree with a gitignored
+ * BELAY_WORKSPACE is set before the dynamic import, against a throwaway tree with a gitignored
  * directory. These pin the new behavior: .gitignore is respected (overridable), literal vs regex,
  * case-insensitive, the match cap, an invalid regex as a typed input error, and the
  * workspace-relative `path:line:text` shape (no `./` prefix).
@@ -34,16 +34,16 @@ writeFileSync(join(ws, "src", "a.ts"), 'const greeting = "hello";\nconst pattern
 writeFileSync(join(ws, "src", "b.ts"), 'const greeting = "hi";\nconst other = "axb";\n');
 writeFileSync(join(ws, "ignored", "secret.ts"), 'const greeting = "ignored";\n');
 
-const prev = process.env.TREVOR_WORKSPACE;
-process.env.TREVOR_WORKSPACE = ws;
+const prev = process.env.BELAY_WORKSPACE;
+process.env.BELAY_WORKSPACE = ws;
 
 const { executeTool } = await import("./index");
 const grep = (args: Record<string, unknown>): Promise<string> =>
   Effect.runPromise(executeTool("grep", JSON.stringify(args)));
 
 afterAll(() => {
-  if (prev === undefined) delete process.env.TREVOR_WORKSPACE;
-  else process.env.TREVOR_WORKSPACE = prev;
+  if (prev === undefined) delete process.env.BELAY_WORKSPACE;
+  else process.env.BELAY_WORKSPACE = prev;
   rmSync(ws, { recursive: true, force: true });
 });
 

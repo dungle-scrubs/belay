@@ -3,7 +3,7 @@
 A registry of every key combination the browser UI must work around before
 claiming a new hotkey. Two reasons a combo is unavailable:
 
-1. **Trevor already binds it** - see [What the app binds today](#what-the-app-binds-today).
+1. **Belay already binds it** - see [What the app binds today](#what-the-app-binds-today).
 2. **The browser or OS owns it** - see the per-modifier reservation tables.
 
 Target platforms are **macOS, Windows, and Linux**. A hotkey is only "safe" if
@@ -24,7 +24,7 @@ exceptions. Behavior varies by browser version - re-verify before relying on a
 | ⚠️ | **Interceptable but rude** - `preventDefault()` works, but you are stomping a behavior users expect (find, save, print, history). Override only deliberately and ideally only while a specific element is focused. |
 | ⛔ | **Hard-reserved** - the OS or browser owns it; `preventDefault()` does not reliably stop it. Never depend on receiving the event. |
 | 📝 | **Text-editing** - the OS/browser consumes it *inside a focused text field* (caret moves, deletes, selection). Free outside inputs, unusable inside them. |
-| 🅰️ | **App** - already bound by Trevor (`apps/web`). |
+| 🅰️ | **App** - already bound by Belay (`apps/web`). |
 
 ---
 

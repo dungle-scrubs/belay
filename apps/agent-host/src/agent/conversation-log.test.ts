@@ -1,11 +1,11 @@
-import { events, type SessionEvent, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events, type SessionEvent } from "@belay/session";
 import { describe, expect, test } from "vitest";
 import { ConversationLog } from "./conversation-log";
 import { buildHistory } from "./history-projection";
 
 const SELF = "belay-host";
 
-function ev(event: TrevorEventInput, seq: number, producerId = "belay-web") {
+function ev(event: BelayEventInput, seq: number, producerId = "belay-web") {
   return {
     ...event,
     createdAt: `t${seq}`,

@@ -5,7 +5,7 @@ import {
   storedEvent,
 } from "@belay/test-kit";
 import { describe, expect, it, vi } from "vitest";
-import { createTrevorClient, type TrevorClient } from "./client";
+import { type BelayClient, createBelayClient } from "./client";
 
 const SESSION_URL = "http://127.0.0.1:17424";
 
@@ -31,7 +31,7 @@ async function replyToCommand(
 describe("runCommand (M4)", () => {
   it("publishes the user.command and resolves on the host's tail command.result", async () => {
     const rec = recordingTransport();
-    const client: TrevorClient = createTrevorClient({
+    const client: BelayClient = createBelayClient({
       sessionUrl: SESSION_URL,
       transport: rec.transport,
     });
@@ -51,7 +51,7 @@ describe("runCommand (M4)", () => {
   it("times out with a typed error when no host answers", async () => {
     const rec = recordingTransport();
     rec.seed("s1", []);
-    const client = createTrevorClient({ sessionUrl: SESSION_URL, transport: rec.transport });
+    const client = createBelayClient({ sessionUrl: SESSION_URL, transport: rec.transport });
     await expect(client.runCommand("s1", "/status", "", { timeoutMs: 20 })).rejects.toMatchObject({
       operation: "runCommand",
       backend: "session",
@@ -62,7 +62,7 @@ describe("runCommand (M4)", () => {
 describe("doctor (M4)", () => {
   it("decodes the /doctor command result into a structured snapshot", async () => {
     const rec = recordingTransport();
-    const client = createTrevorClient({ sessionUrl: SESSION_URL, transport: rec.transport });
+    const client = createBelayClient({ sessionUrl: SESSION_URL, transport: rec.transport });
     const snapshot = doctorSnapshotFixture({ state: "ready" });
 
     const pending = client.doctor("s1", { timeoutMs: 1_000 });
@@ -73,7 +73,7 @@ describe("doctor (M4)", () => {
 
   it("returns null when the host sent a legacy text dump", async () => {
     const rec = recordingTransport();
-    const client = createTrevorClient({ sessionUrl: SESSION_URL, transport: rec.transport });
+    const client = createBelayClient({ sessionUrl: SESSION_URL, transport: rec.transport });
     const pending = client.doctor("s1", { timeoutMs: 1_000 });
     await replyToCommand(rec, "s1", "/doctor", "plain text health dump");
     expect(await pending).toBeNull();
@@ -83,7 +83,7 @@ describe("doctor (M4)", () => {
 describe("exportCapabilities (M4)", () => {
   it("reads the structured manifest from /belay-export --json (not from prompt text)", async () => {
     const rec = recordingTransport();
-    const client = createTrevorClient({ sessionUrl: SESSION_URL, transport: rec.transport });
+    const client = createBelayClient({ sessionUrl: SESSION_URL, transport: rec.transport });
     const manifest = { version: 1, scope: "full", sections: [] };
 
     const pending = client.exportCapabilities("s1", { format: "json", timeoutMs: 1_000 });

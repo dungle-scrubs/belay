@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import type { TurnHooks } from "@host/agent/loop";
 import { publishTurn } from "@host/agent/turn";
 import { type ProviderEvent, ProviderUnavailable } from "@host/providers";
@@ -45,7 +45,7 @@ function turnHooks(h: HooksRuntimeHarness, overrides: Partial<TurnHooks> = {}): 
   };
 }
 
-const payloadOf = (events: TrevorEventInput[], type: string) =>
+const payloadOf = (events: BelayEventInput[], type: string) =>
   events.find((event) => event.type === type)?.payload as Record<string, unknown> | undefined;
 
 describe("Stop payload at the finalization seam", () => {

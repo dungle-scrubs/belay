@@ -7,7 +7,7 @@ import { afterAll, test } from "vitest";
 
 /**
  * write/edit/glob/grep and workspace confinement against a throwaway workspace. The tools'
- * workspace root is read at module load, so TREVOR_WORKSPACE is set BEFORE importing them
+ * workspace root is read at module load, so BELAY_WORKSPACE is set BEFORE importing them
  * (dynamic import below). Confinement is edit/glob/grep's guard - write is deliberately
  * unconfined (host-cwd), so it runs from the workspace to keep its output here. Ported from
  * scripts/verify-tools.ts.
@@ -15,8 +15,8 @@ import { afterAll, test } from "vitest";
 
 const ws = mkdtempSync(join(tmpdir(), "belay-ws-"));
 const prevCwd = process.cwd();
-const prevWorkspace = process.env.TREVOR_WORKSPACE;
-process.env.TREVOR_WORKSPACE = ws;
+const prevWorkspace = process.env.BELAY_WORKSPACE;
+process.env.BELAY_WORKSPACE = ws;
 process.chdir(ws);
 
 const { executeTool } = await import("../src/tools");
@@ -25,8 +25,8 @@ const call = (name: string, args: Record<string, unknown>) =>
 
 afterAll(() => {
   process.chdir(prevCwd);
-  if (prevWorkspace === undefined) delete process.env.TREVOR_WORKSPACE;
-  else process.env.TREVOR_WORKSPACE = prevWorkspace;
+  if (prevWorkspace === undefined) delete process.env.BELAY_WORKSPACE;
+  else process.env.BELAY_WORKSPACE = prevWorkspace;
   rmSync(ws, { recursive: true, force: true });
 });
 

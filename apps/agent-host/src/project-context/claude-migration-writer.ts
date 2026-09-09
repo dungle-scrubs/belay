@@ -33,12 +33,12 @@ export interface MigrationOutcome {
   readonly note?: string;
 }
 
-const MERGE_BEGIN = "<!-- BEGIN migrated from CLAUDE.md (Trevor) -->";
-const MERGE_END = "<!-- END migrated from CLAUDE.md (Trevor) -->";
+const MERGE_BEGIN = "<!-- BEGIN migrated from CLAUDE.md (Belay) -->";
+const MERGE_END = "<!-- END migrated from CLAUDE.md (Belay) -->";
 
 /** The provenance header stamped atop a created AGENTS.md so the origin is auditable (D-011). */
 function provenanceHeader(claudePath: string): string {
-  return `<!-- Migrated from ${claudePath} by Trevor. Original content preserved in git history. -->`;
+  return `<!-- Migrated from ${claudePath} by Belay. Original content preserved in git history. -->`;
 }
 
 /** The pointer body left in place of a converted CLAUDE.md. Carries the sentinel `isClaudePointer`
@@ -46,7 +46,7 @@ function provenanceHeader(claudePath: string): string {
 function pointerBody(agentsPath: string): string {
   return (
     `# CLAUDE.md\n\n${CLAUDE_POINTER_SENTINEL}\n\n` +
-    `This file has moved. Trevor uses \`${agentsPath}\` as the source of truth for agent ` +
+    `This file has moved. Belay uses \`${agentsPath}\` as the source of truth for agent ` +
     `instructions; see that file. This pointer is safe to leave in place.\n`
   );
 }

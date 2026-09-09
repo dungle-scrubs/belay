@@ -1,11 +1,11 @@
 /**
- * The host-owned registry of local models THIS Trevor instance loaded (plan 11.1 M2).
+ * The host-owned registry of local models THIS Belay instance loaded (plan 11.1 M2).
  *
- * LM Studio keeps every loaded model resident, and Trevor loads a local model on demand
+ * LM Studio keeps every loaded model resident, and Belay loads a local model on demand
  * (`ensureMaxContext` -> `lms load`) but only ever unloads the SAME model to resize it - so models
  * accumulate and contend for unified memory / GPU. Bounding that footprint safely requires knowing which
- * models TREVOR loaded, because eviction must NEVER unload a model loaded outside Trevor (a manually-
- * loaded model, another app's model). This registry is that authority: `isTrevorLoaded` gates eviction
+ * models BELAY loaded, because eviction must NEVER unload a model loaded outside Belay (a manually-
+ * loaded model, another app's model). This registry is that authority: `isBelayLoaded` gates eviction
  * eligibility (D-004), and `resident()` is the per-instance view /doctor renders and the eviction sweep
  * consults.
  *
@@ -59,13 +59,13 @@ export class LocalResidencyRegistry implements ResidencyRecorder {
     });
   }
 
-  /** Records that this instance unloaded `model` on `endpoint` (it is no longer Trevor-resident). */
+  /** Records that this instance unloaded `model` on `endpoint` (it is no longer Belay-resident). */
   recordUnload(endpoint: string, model: string): void {
     this.loaded.delete(residentKey(endpoint, model));
   }
 
   /** Whether THIS instance loaded `model` on `endpoint` (eviction eligibility - D-004). */
-  isTrevorLoaded(endpoint: string, model: string): boolean {
+  isBelayLoaded(endpoint: string, model: string): boolean {
     return this.loaded.has(residentKey(endpoint, model));
   }
 

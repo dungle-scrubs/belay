@@ -61,6 +61,6 @@ test("the iframe sandbox is scripts-only with NO allow-same-origin (opaque origi
   assert.ok(LUCID_IFRAME_SANDBOX.includes("allow-scripts"));
   assert.ok(
     !LUCID_IFRAME_SANDBOX.includes("allow-same-origin"),
-    "same-origin would let the artifact reach Trevor's realm - it must NOT be granted",
+    "same-origin would let the artifact reach Belay's realm - it must NOT be granted",
   );
 });

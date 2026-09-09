@@ -1,11 +1,11 @@
-import type { PromptInput, TrevorClient } from "@belay/sdk";
+import type { BelayClient, PromptInput } from "@belay/sdk";
 import { type ArtifactRef, formatDoctorReport } from "@belay/session";
 
 /**
  * The headless `belay` commands (plan 28 M8): scriptable, host-agnostic verbs built ENTIRELY on the
  * `@belay/sdk` workflows - prompt/stream/cancel a turn, read a transcript, run capabilities/doctor, and
  * put/get artifacts. Every command supports a machine `--json` mode (pure JSON to stdout, no spinners or
- * human noise) and a human mode. They are pure over an injected `TrevorClient`, so they unit-test against
+ * human noise) and a human mode. They are pure over an injected `BelayClient`, so they unit-test against
  * a recording transport without a running store; `main.ts` supplies the real SDK client + service URLs.
  *
  * These are deliberately NOT in the SDK: command names, argument parsing, output formatting, and exit
@@ -39,7 +39,7 @@ export interface PromptCommandOptions {
  * arrive); JSON mode returns the structured turn record `{ runId, text, cancelled, timedOut }`.
  */
 export async function runPrompt(
-  client: TrevorClient,
+  client: BelayClient,
   options: PromptCommandOptions,
 ): Promise<HeadlessResult> {
   await client.ensureSession(options.sessionId);
@@ -83,7 +83,7 @@ export async function runPrompt(
 
 /** `belay cancel <session> <runId>`: publishes the D-094 `user.cancel` control event (not a signal). */
 export async function runCancel(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   runId: string,
 ): Promise<HeadlessResult> {
@@ -96,7 +96,7 @@ export async function runCancel(
 
 /** `belay transcript <session>`: prints the projected transcript, JSON or one line per entry. */
 export async function runTranscript(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   json: boolean,
 ): Promise<HeadlessResult> {
@@ -116,7 +116,7 @@ export async function runTranscript(
 
 /** `belay doctor <session>`: prints the host's `/doctor` snapshot as JSON or the human report. */
 export async function runDoctor(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   json: boolean,
   timeoutMs?: number,
@@ -130,7 +130,7 @@ export async function runDoctor(
 
 /** `belay capabilities <session>`: prints the host's capability manifest export (JSON or text). */
 export async function runCapabilities(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   options: { readonly json: boolean; readonly section?: string; readonly timeoutMs?: number },
 ): Promise<HeadlessResult> {
@@ -144,7 +144,7 @@ export async function runCapabilities(
 
 /** `belay artifact put <file>`: uploads bytes and prints the content-addressed ref. */
 export async function runArtifactPut(
-  client: TrevorClient,
+  client: BelayClient,
   bytes: Uint8Array,
   mimeType: string,
   options: { readonly name?: string; readonly json: boolean },
@@ -159,6 +159,6 @@ export async function runArtifactPut(
 }
 
 /** `belay artifact get <hash>`: downloads the raw bytes (returned to the caller to write out). */
-export async function runArtifactGet(client: TrevorClient, hash: string): Promise<Uint8Array> {
+export async function runArtifactGet(client: BelayClient, hash: string): Promise<Uint8Array> {
   return client.downloadArtifact(hash);
 }

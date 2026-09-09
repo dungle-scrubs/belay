@@ -6,7 +6,7 @@ import { afterAll, test } from "vitest";
 import type { AgentDefinition } from "./discovery";
 
 /**
- * Subagent discovery + allow-list resolution (M1 / D-045). TREVOR_AGENTS_DIR points at a temp
+ * Subagent discovery + allow-list resolution (M1 / D-045). BELAY_AGENTS_DIR points at a temp
  * fixture (set before the dynamic import, since the root is read at module load) so discovery is
  * hermetic: it yields the two built-ins plus the one user agent fixture, and the explorer flavor is
  * clamped to read-only tools.
@@ -34,16 +34,16 @@ writeFileSync(
   "---\ndescription: x\ndisabled: true\n---\nbody",
 );
 
-const prev = process.env.TREVOR_AGENTS_DIR;
-process.env.TREVOR_AGENTS_DIR = dir;
+const prev = process.env.BELAY_AGENTS_DIR;
+process.env.BELAY_AGENTS_DIR = dir;
 
 const { discoverAgents, resolveAgentTools, resolveAgentSkills, describeAgent } = await import(
   "./discovery"
 );
 
 afterAll(() => {
-  if (prev === undefined) delete process.env.TREVOR_AGENTS_DIR;
-  else process.env.TREVOR_AGENTS_DIR = prev;
+  if (prev === undefined) delete process.env.BELAY_AGENTS_DIR;
+  else process.env.BELAY_AGENTS_DIR = prev;
   rmSync(dir, { recursive: true, force: true });
 });
 

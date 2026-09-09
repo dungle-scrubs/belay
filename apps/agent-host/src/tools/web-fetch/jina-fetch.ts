@@ -46,7 +46,7 @@ const READER_ORIGIN = "https://r.jina.ai/";
 
 const REQUEST_HEADERS: Record<string, string> = {
   accept: "text/plain,text/markdown,*/*;q=0.8",
-  "user-agent": "TrevorWebFetch/1.0 (+read-only public source fetch)",
+  "user-agent": "BelayWebFetch/1.0 (+read-only public source fetch)",
 };
 
 const THIN_MARKDOWN_THRESHOLD = 200;

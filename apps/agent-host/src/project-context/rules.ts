@@ -423,8 +423,3 @@ export class RuleCollector {
     return ruleToReportSource(rule);
   }
 }
-
-/** @deprecated Use BelayRuleSource */
-export type TrevorRuleSource = BelayRuleSource;
-/** @deprecated Use collectBelayRuleSources */
-export const collectTrevorRuleSources = collectBelayRuleSources;

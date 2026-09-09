@@ -18,7 +18,7 @@ import { resolveInterpolationConfig } from "./interpolation";
  * exercises the real default runner (the allow-listed `/belay-export` wiring) over a registered manifest.
  */
 
-const ON = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
+const ON = resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" });
 const OFF = resolveInterpolationConfig({});
 
 function file(body: string, rootKind: CommandFileRootKind = "builtin"): CommandFile {
@@ -123,7 +123,7 @@ describe("command-file interpolation diagnostics + failure handling (M6)", () =>
     expect(out.diagnostics).toHaveLength(1);
     const d = out.diagnostics[0];
     expect(d?.source).toBe("command-file");
-    expect(d?.gate).toBe("TREVOR_ENABLE_INTERPOLATION");
+    expect(d?.gate).toBe("BELAY_ENABLE_INTERPOLATION");
     expect(d?.gateOpen).toBe(true);
     expect(d?.target).toBe("/belay-export");
     expect(d?.allowed).toBe(true);

@@ -9,7 +9,7 @@ import { redactHookText } from "./redact";
  * The hook command runner (plan 25 M3): executes ONE approved hook definition as a child
  * process - `spawn(command, args)` with NO shell ever (D-005), cwd pinned to the workspace
  * root, and the secret-minimal child env shared with the MCP/LSP spawners (D-004; provider
- * keys and TREVOR_* state never reach a hook). The payload is delivered as JSON on stdin and
+ * keys and BELAY_* state never reach a hook). The payload is delivered as JSON on stdin and
  * stdin is closed after the write; stdout/stderr are hard-capped with a truncation marker; the
  * per-hook timeout (low default, config-capped) escalates SIGTERM -> grace -> SIGKILL,
  * mirroring lsp/client's reap ladder. The returned execution NEVER rejects - spawn failure,

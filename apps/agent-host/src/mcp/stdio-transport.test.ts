@@ -14,7 +14,7 @@ describe("stdioChildEnv (D-004 secret-minimal child environment)", () => {
     ZAI_API_KEY: "zai-nope",
     MINIMAX_API_KEY: "mm-nope",
     OPENROUTER_API_KEY: "or-nope",
-    TREVOR_WORKSPACE: "/somewhere",
+    BELAY_WORKSPACE: "/somewhere",
     SESSION_ID: "sess-1",
     RANDOM_OTHER: "value",
   };
@@ -29,7 +29,7 @@ describe("stdioChildEnv (D-004 secret-minimal child environment)", () => {
     });
   });
 
-  test("never includes provider keys, TREVOR_*, or SESSION_ID", () => {
+  test("never includes provider keys, BELAY_*, or SESSION_ID", () => {
     const env = stdioChildEnv(hostEnv, {});
     for (const name of Object.keys(env)) {
       expect(STDIO_CHILD_ENV_ALLOWLIST).toContain(name);

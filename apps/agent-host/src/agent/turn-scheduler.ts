@@ -3,7 +3,7 @@
  * catch-up, and holding turns behind a compaction fold.
  * Not for: building the prompt the model sees - history-projection.ts.
  */
-import { decodeTrevorEvent, isAnswerableProducer, type SessionEvent } from "@belay/session";
+import { decodeBelayEvent, isAnswerableProducer, type SessionEvent } from "@belay/session";
 
 /**
  * Whether this host should ANSWER a `user.message`, i.e. it is not the host's own echo. A browser
@@ -121,7 +121,7 @@ export class TurnScheduler {
    * are ignored. The caller's own producer/relevance filtering still decides which events reach here.
    */
   noteTurn(event: SessionEvent): void {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type === "user.message") {
       this.submit(event);
     } else if (decoded?.type === "assistant.started") {

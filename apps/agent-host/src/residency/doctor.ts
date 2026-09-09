@@ -2,7 +2,7 @@ import type { LastEviction } from "./eviction";
 import type { ResidentModel } from "./registry";
 
 /**
- * The /doctor projection for local-model residency (plan 11.1 M6): folds the host's Trevor-loaded set
+ * The /doctor projection for local-model residency (plan 11.1 M6): folds the host's Belay-loaded set
  * (M2) plus its cross-instance claim counts (M3) and last eviction (M4) into the redaction-safe summary
  * the doctor Local-admission area renders alongside admission leases. Pure read model - it never loads,
  * unloads, or claims. Every field is bounded and carries no secret: a model id and an LM Studio endpoint

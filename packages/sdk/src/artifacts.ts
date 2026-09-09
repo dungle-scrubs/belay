@@ -1,5 +1,5 @@
 import { type ArtifactRef, type BlobMetaProbe, createArtifactRuntime, HEX64 } from "@belay/session";
-import type { TrevorClient } from "./client";
+import type { BelayClient } from "./client";
 
 /**
  * The SDK artifact workflow (plan 28 M3): upload/download/probe over the content-addressed blob store's
@@ -17,7 +17,7 @@ export type ArtifactSource = Blob | Uint8Array;
 
 /** Uploads bytes to the blob store and returns a structured `ArtifactRef` (content-addressed). */
 export function uploadArtifact(
-  client: TrevorClient,
+  client: BelayClient,
   source: ArtifactSource,
   mimeType: string,
   options?: { readonly kind?: ArtifactRef["kind"]; readonly name?: string },
@@ -33,7 +33,7 @@ export function uploadArtifact(
 
 /** Downloads an artifact's raw bytes by hash or ref. Rejects a malformed hash before any request. */
 export function downloadArtifact(
-  client: TrevorClient,
+  client: BelayClient,
   ref: string | ArtifactRef,
 ): Promise<Uint8Array> {
   const hash = typeof ref === "string" ? ref : ref.hash;
@@ -47,7 +47,7 @@ export function downloadArtifact(
 }
 
 /** Probes an artifact's size + content type by hash (HEAD), or null when the blob is absent. */
-export function headArtifact(client: TrevorClient, hash: string): Promise<BlobMetaProbe | null> {
+export function headArtifact(client: BelayClient, hash: string): Promise<BlobMetaProbe | null> {
   return client.blobOp("headArtifact", async () =>
     createArtifactRuntime({ blobStoreUrl: client.requireBlobUrl("headArtifact") }).head(hash),
   );

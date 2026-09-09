@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SessionEvent } from "./event";
 import { PRODUCER_IDS } from "./identity";
 import { events } from "./protocol";
-import { decodeTrevorEvent } from "./protocol-decode";
+import { decodeBelayEvent } from "./protocol-decode";
 import { isTangentReady, planTangent, seedTangentPrompt } from "./tangent";
 
 function ev(seq: number, type: string, payload: Record<string, unknown> = {}): SessionEvent {
@@ -41,7 +41,7 @@ describe("tangent lineage + fold-back events", () => {
     });
 
     expect(input.type).toBe("session.tangentOf");
-    expect(decodeTrevorEvent(ev(1, "session.tangentOf", input.payload))).toEqual({
+    expect(decodeBelayEvent(ev(1, "session.tangentOf", input.payload))).toEqual({
       type: "session.tangentOf",
       parentSessionId: "parent",
       sourceMessageId: "e2",
@@ -56,7 +56,7 @@ describe("tangent lineage + fold-back events", () => {
       sourceMessageId: "e2",
       quote: "snippet",
     });
-    const decoded = decodeTrevorEvent(ev(1, "session.tangentOf", input.payload));
+    const decoded = decodeBelayEvent(ev(1, "session.tangentOf", input.payload));
     expect(decoded).toEqual({
       type: "session.tangentOf",
       parentSessionId: "parent",
@@ -74,7 +74,7 @@ describe("tangent lineage + fold-back events", () => {
     });
 
     expect(input.type).toBe("tangent.foldedBack");
-    expect(decodeTrevorEvent(ev(9, "tangent.foldedBack", input.payload))).toEqual({
+    expect(decodeBelayEvent(ev(9, "tangent.foldedBack", input.payload))).toEqual({
       type: "tangent.foldedBack",
       tangentSessionId: "tangent-1",
       parentSessionId: "parent",
@@ -90,7 +90,7 @@ describe("tangent lineage + fold-back events", () => {
     });
 
     expect(input.type).toBe("tangent.created");
-    expect(decodeTrevorEvent(ev(10, "tangent.created", input.payload))).toEqual({
+    expect(decodeBelayEvent(ev(10, "tangent.created", input.payload))).toEqual({
       type: "tangent.created",
       tangentSessionId: "tangent-1",
       sourceMessageId: "e2",

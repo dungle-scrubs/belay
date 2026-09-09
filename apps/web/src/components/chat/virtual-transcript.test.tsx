@@ -442,7 +442,10 @@ describe("VirtualTranscript", () => {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     });
 
-    assert.ok(follows.follow > 0, "a pinned append must follow the live edge");
+    // Same async-settle reasoning as the sibling test below: wait for the follow write, not for frames.
+    await waitFor(() => {
+      assert.ok(follows.follow > 0, "a pinned append must follow the live edge");
+    });
   });
 
   test("while pinned, a same-row thinking collapse and answer start follows the live edge", async () => {
@@ -487,10 +490,18 @@ describe("VirtualTranscript", () => {
       await raf();
     });
 
-    assert.ok(
-      follows.follow > 0,
-      "settling the existing assistant row must keep a pinned transcript on the live edge",
-    );
+    // The follow write is the END of an async chain: ResizeObserver fires, the virtualizer re-measures
+    // on an animation frame (`useAnimationFrameWithResizeObserver`), and its `flushSync` rerender is
+    // dropped when React is already rendering - costing another frame. A fixed frame count is enough on
+    // an idle machine and not enough under a loaded suite, which is why this passed alone and failed in
+    // the full run. Wait for the CONDITION, not for a number of frames; a genuine regression (no follow
+    // at all) still fails, on the timeout.
+    await waitFor(() => {
+      assert.ok(
+        follows.follow > 0,
+        "settling the existing assistant row must keep a pinned transcript on the live edge",
+      );
+    });
   });
 
   test("the settle loop terminates on user intent instead of force-scrolling to the edge", async () => {

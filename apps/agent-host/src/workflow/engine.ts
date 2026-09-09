@@ -11,7 +11,7 @@
  * Not for: the detached durable-run spawn/notify (lifecycle.ts), the DSL interpreter (interpreter.ts),
  * or running a single leaf (leaf-host.ts).
  */
-import { events, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events } from "@belay/session";
 import { Effect, Either, Ref } from "effect";
 import { makeBudget } from "./budget";
 import {
@@ -82,7 +82,7 @@ export type RunResult =
 export interface EngineDeps {
   readonly runId: string;
   /** Sink for every `workflow.*` event (the journal + progress). */
-  readonly emit: (event: TrevorEventInput) => Effect.Effect<void>;
+  readonly emit: (event: BelayEventInput) => Effect.Effect<void>;
   readonly leafRunner: LeafRunner;
   /** A prior run's cache for resume; omit for a fresh run. */
   readonly cache?: RunCache;

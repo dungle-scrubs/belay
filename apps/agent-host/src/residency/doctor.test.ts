@@ -6,7 +6,7 @@ import type { LastEviction } from "./eviction";
 import type { ResidentModel } from "./registry";
 
 /**
- * The /doctor residency projection (plan 11.1 M6): resident Trevor-loaded models, their context caps and
+ * The /doctor residency projection (plan 11.1 M6): resident Belay-loaded models, their context caps and
  * live claim counts, and the last eviction. Pure read model; every surfaced field is bounded + secret-free.
  */
 

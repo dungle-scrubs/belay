@@ -1,20 +1,23 @@
 import { execFileSync } from "node:child_process";
 import { basename, dirname, join } from "node:path/posix";
 
+/** Names that are conventions rather than choices. The community-health files at the end are matched
+ *  EXACTLY by GitHub - renaming them to kebab-case silently costs license detection, the Security tab,
+ *  the contribution prompt, and PR template pickup - so they are exempt from the kebab-case rule. */
 const CONVENTIONAL_DOCUMENT_NAMES = new Set([
   "AGENTS.md",
   "ARCHITECTURE.md",
   "CHANGELOG.md",
   "CLAUDE.md",
-  "CONTRIBUTING.md",
   "CONTEXT.md",
   "FEATURES.md",
   "HOTKEYS.md",
+  "README.md",
+  "SECURITY_RISKS.md",
+  "CONTRIBUTING.md",
   "LICENSE",
   "PULL_REQUEST_TEMPLATE.md",
-  "README.md",
   "SECURITY.md",
-  "SECURITY_RISKS.md",
 ]);
 
 const GENERATED_FILE_PATTERNS: readonly RegExp[] = [
@@ -28,13 +31,6 @@ const SKILL_FILE_PATTERNS: readonly RegExp[] = [
   /^\.belay\/skills\/[^/]+\/SKILL\.md$/,
 ];
 
-const GITHUB_TEMPLATE_PATTERNS: readonly RegExp[] = [
-  /^\.github\/ISSUE_TEMPLATE\/.+\.yml$/,
-  /^\.github\/PULL_REQUEST_TEMPLATE\.md$/,
-  /^\.github\/workflows\/.+\.yml$/,
-  /^\.github\/dependabot\.yml$/,
-];
-
 export interface FilenameViolation {
   readonly expectedPath: string;
   readonly path: string;
@@ -44,8 +40,7 @@ export const isConventionalDocument = (path: string): boolean => {
   const filename = basename(path);
   return (
     CONVENTIONAL_DOCUMENT_NAMES.has(filename) ||
-    SKILL_FILE_PATTERNS.some((pattern) => pattern.test(path)) ||
-    GITHUB_TEMPLATE_PATTERNS.some((pattern) => pattern.test(path))
+    SKILL_FILE_PATTERNS.some((pattern) => pattern.test(path))
   );
 };
 

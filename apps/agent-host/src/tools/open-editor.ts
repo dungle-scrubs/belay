@@ -1,5 +1,5 @@
 /**
- * Responsible for: launching the local editor CLI (zed or TREVOR_EDITOR) at path:line:column
+ * Responsible for: launching the local editor CLI (zed or BELAY_EDITOR) at path:line:column
  * for the browser's editor.open side-channel requests.
  */
 import { execFile } from "node:child_process";
@@ -9,13 +9,13 @@ import { execFile } from "node:child_process";
  * this via the `editor.open` side-channel event; the host (which shares the
  * user's machine) runs the editor's CLI.
  *
- * Defaults to `zed`; override with the `TREVOR_EDITOR` env var (a binary name on
+ * Defaults to `zed`; override with the `BELAY_EDITOR` env var (a binary name on
  * PATH or an absolute path). The target is passed as a single `path:line:column`
  * argument - Zed's accepted form. The path is passed directly to `execFile` (no
  * shell), so it can never be interpreted as a command.
  */
 export function openInEditor(path: string, line?: number, column?: number): Promise<void> {
-  const editor = process.env.TREVOR_EDITOR?.trim() || "zed";
+  const editor = process.env.BELAY_EDITOR?.trim() || "zed";
   const target = line != null ? `${path}:${line}${column != null ? `:${column}` : ""}` : path;
 
   return new Promise((resolve, reject) => {

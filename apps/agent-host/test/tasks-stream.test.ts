@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import {
-  decodeTrevorEvent,
+  type BelayEventInput,
+  decodeBelayEvent,
   events,
   type TaskSnapshot,
-  type TrevorEventInput,
   taskSnapshotReplaces,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
@@ -21,9 +21,9 @@ import { test } from "vitest";
  */
 
 /** Mirrors main.ts: every registry mutation publishes a revisioned tasks.current snapshot. */
-function wireStream(): { registry: TaskRegistry; emitted: TrevorEventInput[] } {
+function wireStream(): { registry: TaskRegistry; emitted: BelayEventInput[] } {
   const registry = new TaskRegistry();
-  const emitted: TrevorEventInput[] = [];
+  const emitted: BelayEventInput[] = [];
 
   registry.onChange(() => {
     emitted.push(events.tasksCurrent({ tasks: registry.snapshot(), rev: registry.revision() }));
@@ -33,12 +33,12 @@ function wireStream(): { registry: TaskRegistry; emitted: TrevorEventInput[] } {
 }
 
 /** Folds an event stream the way a consumer does: the freshest valid tasks.current wins (D-004). */
-function freshestTasks(stream: readonly TrevorEventInput[]): readonly TaskSnapshot[] {
+function freshestTasks(stream: readonly BelayEventInput[]): readonly TaskSnapshot[] {
   let bestRev = Number.NEGATIVE_INFINITY;
   let best: readonly TaskSnapshot[] = [];
 
   stream.forEach((input, index) => {
-    const decoded = decodeTrevorEvent(storedEvent(input, { seq: index + 1 }));
+    const decoded = decodeBelayEvent(storedEvent(input, { seq: index + 1 }));
 
     if (decoded?.type === "tasks.current" && taskSnapshotReplaces(decoded.rev, bestRev)) {
       bestRev = decoded.rev;
@@ -63,7 +63,7 @@ test("driving task_create/task_update emits revisioned tasks.current snapshots, 
   // One snapshot per mutation, each decoding with a revision present on the wire.
   assert.equal(emitted.length, 4);
   const revs = emitted.map((input) => {
-    const decoded = decodeTrevorEvent(storedEvent(input));
+    const decoded = decodeBelayEvent(storedEvent(input));
     assert.equal(decoded?.type, "tasks.current");
     return decoded?.type === "tasks.current" ? decoded.rev : -1;
   });

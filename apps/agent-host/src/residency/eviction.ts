@@ -72,7 +72,7 @@ export class LocalResidencyEviction {
   /** Whether `target` is currently evictable: Belay-loaded, no live claim, no active generation. Returns
    *  the blocking skip reason otherwise. Pure read (no lease, no unload). */
   private blockedReason(target: ResidencyClaimTarget): EvictionSkip | null {
-    if (!this.deps.registry.isTrevorLoaded(target.baseUrl, target.model)) {
+    if (!this.deps.registry.isBelayLoaded(target.baseUrl, target.model)) {
       return "not-belay-loaded";
     }
     if (this.deps.claims.liveClaims(target) > 0) {

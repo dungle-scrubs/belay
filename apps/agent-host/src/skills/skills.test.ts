@@ -182,7 +182,7 @@ test("the skill tool description frames skills as optional, not mandatory (D-075
 
 test("a project-local skill body does NOT auto-run shell interpolation while the gate is off", async () => {
   const r = roots();
-  // SKILL_SHELL_INTERPOLATION is off by default (TREVOR_SKILL_SHELL unset in the test env), so the
+  // SKILL_SHELL_INTERPOLATION is off by default (BELAY_SKILL_SHELL unset in the test env), so the
   // `!` line must survive verbatim rather than executing.
   writeSkill(
     r.project,

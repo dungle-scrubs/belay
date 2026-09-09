@@ -1,17 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "../event";
-import { decodeTrevorEvent, events } from "../protocol";
+import { decodeBelayEvent, events } from "../protocol";
 
 /**
  * Round-trip tests for the plan 58 M2 project operation events: each constructor
- * builds a `TrevorEventInput`, it is wrapped in a `SessionEvent`, decoded back, and
+ * builds a `BelayEventInput`, it is wrapped in a `SessionEvent`, decoded back, and
  * the decoded shape must survive the wire intact. Optional fields are omitted (not
  * emitted as null/undefined) so the wire stays minimal, and the decoder coerces
  * permissively (missing optionals stay absent).
  */
 
-/** Wraps a `TrevorEventInput` in a minimal `SessionEvent` for decode. */
+/** Wraps a `BelayEventInput` in a minimal `SessionEvent` for decode. */
 function wrap(input: ReturnType<typeof events.raw>): SessionEvent {
   return {
     eventId: "ev-0",
@@ -26,7 +26,7 @@ function wrap(input: ReturnType<typeof events.raw>): SessionEvent {
 
 test("projectAddRequested / projectAddResult round-trip with a picked path", () => {
   const req = events.projectAddRequested({ requestId: "pa-1" });
-  const decodedReq = decodeTrevorEvent(wrap(req));
+  const decodedReq = decodeBelayEvent(wrap(req));
   assert.deepEqual(decodedReq, { type: "project.add.requested", requestId: "pa-1" });
 
   const res = events.projectAddResult({
@@ -35,7 +35,7 @@ test("projectAddRequested / projectAddResult round-trip with a picked path", () 
     displayName: "proj",
     cancelled: false,
   });
-  const decodedRes = decodeTrevorEvent(wrap(res));
+  const decodedRes = decodeBelayEvent(wrap(res));
   assert.deepEqual(decodedRes, {
     type: "project.add.result",
     requestId: "pa-1",
@@ -47,7 +47,7 @@ test("projectAddRequested / projectAddResult round-trip with a picked path", () 
 
 test("projectAddResult round-trip when cancelled (path/displayName omitted)", () => {
   const res = events.projectAddResult({ requestId: "pa-2", cancelled: true });
-  const decoded = decodeTrevorEvent(wrap(res));
+  const decoded = decodeBelayEvent(wrap(res));
   assert.deepEqual(decoded, {
     type: "project.add.result",
     requestId: "pa-2",
@@ -61,7 +61,7 @@ test("projectAddResult round-trip with an error", () => {
     cancelled: false,
     error: "disk full",
   });
-  const decoded = decodeTrevorEvent(wrap(res));
+  const decoded = decodeBelayEvent(wrap(res));
   assert.deepEqual(decoded, {
     type: "project.add.result",
     requestId: "pa-3",
@@ -76,7 +76,7 @@ test("projectRenameRequested / projectRenameResult round-trip", () => {
     path: "/Users/me/proj",
     displayName: "My Project",
   });
-  const decodedReq = decodeTrevorEvent(wrap(req));
+  const decodedReq = decodeBelayEvent(wrap(req));
   assert.deepEqual(decodedReq, {
     type: "project.rename.requested",
     requestId: "pr-1",
@@ -89,7 +89,7 @@ test("projectRenameRequested / projectRenameResult round-trip", () => {
     path: "/Users/me/proj",
     displayName: "My Project",
   });
-  const decodedRes = decodeTrevorEvent(wrap(res));
+  const decodedRes = decodeBelayEvent(wrap(res));
   assert.deepEqual(decodedRes, {
     type: "project.rename.result",
     requestId: "pr-1",
@@ -104,7 +104,7 @@ test("projectRenameResult round-trip with an error (unknown path)", () => {
     path: "/nope",
     error: "project not found",
   });
-  const decoded = decodeTrevorEvent(wrap(res));
+  const decoded = decodeBelayEvent(wrap(res));
   assert.deepEqual(decoded, {
     type: "project.rename.result",
     requestId: "pr-2",
@@ -119,7 +119,7 @@ test("projectCollapseRequested / projectCollapseResult round-trip", () => {
     path: "/Users/me/proj",
     collapsed: true,
   });
-  const decodedReq = decodeTrevorEvent(wrap(req));
+  const decodedReq = decodeBelayEvent(wrap(req));
   assert.deepEqual(decodedReq, {
     type: "project.collapse.requested",
     requestId: "pc-1",
@@ -132,7 +132,7 @@ test("projectCollapseRequested / projectCollapseResult round-trip", () => {
     path: "/Users/me/proj",
     collapsed: true,
   });
-  const decodedRes = decodeTrevorEvent(wrap(res));
+  const decodedRes = decodeBelayEvent(wrap(res));
   assert.deepEqual(decodedRes, {
     type: "project.collapse.result",
     requestId: "pc-1",
@@ -148,7 +148,7 @@ test("projectCollapseResult round-trip with an error", () => {
     collapsed: false,
     error: "project not found",
   });
-  const decoded = decodeTrevorEvent(wrap(res));
+  const decoded = decodeBelayEvent(wrap(res));
   assert.deepEqual(decoded, {
     type: "project.collapse.result",
     requestId: "pc-2",
@@ -160,7 +160,7 @@ test("projectCollapseResult round-trip with an error", () => {
 
 test("projectRemoveRequested / projectRemoveResult round-trip", () => {
   const req = events.projectRemoveRequested({ requestId: "prm-1", path: "/Users/me/proj" });
-  const decodedReq = decodeTrevorEvent(wrap(req));
+  const decodedReq = decodeBelayEvent(wrap(req));
   assert.deepEqual(decodedReq, {
     type: "project.remove.requested",
     requestId: "prm-1",
@@ -172,7 +172,7 @@ test("projectRemoveRequested / projectRemoveResult round-trip", () => {
     path: "/Users/me/proj",
     removed: true,
   });
-  const decodedRes = decodeTrevorEvent(wrap(res));
+  const decodedRes = decodeBelayEvent(wrap(res));
   assert.deepEqual(decodedRes, {
     type: "project.remove.result",
     requestId: "prm-1",
@@ -188,7 +188,7 @@ test("projectRemoveResult round-trip with an error", () => {
     removed: false,
     error: "project not found",
   });
-  const decoded = decodeTrevorEvent(wrap(res));
+  const decoded = decodeBelayEvent(wrap(res));
   assert.deepEqual(decoded, {
     type: "project.remove.result",
     requestId: "prm-2",
@@ -205,7 +205,7 @@ test("projectRemoveResult round-trip with blockedBy", () => {
     removed: false,
     blockedBy: ["session-a", "session-b"],
   });
-  const decoded = decodeTrevorEvent(wrap(res));
+  const decoded = decodeBelayEvent(wrap(res));
   assert.deepEqual(decoded, {
     type: "project.remove.result",
     requestId: "prm-3",

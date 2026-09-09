@@ -128,8 +128,3 @@ export async function answerExpertQuery(
   const body = renderManifestSections(manifest, selectExpertSections(question));
   return `belay-expert (from the live capability manifest):\n\n${body}\n\n${EXPERT_AREAS_FOOTER}`;
 }
-
-/** @deprecated Use BELAY_EXPERT_NAME */
-export const TREVOR_EXPERT_NAME = BELAY_EXPERT_NAME;
-/** @deprecated Use BELAY_EXPERT_DESCRIPTION */
-export const TREVOR_EXPERT_DESCRIPTION = BELAY_EXPERT_DESCRIPTION;

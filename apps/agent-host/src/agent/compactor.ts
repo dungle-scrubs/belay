@@ -1,4 +1,4 @@
-import { type SessionEvent, events as sessionEvents, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, type SessionEvent, events as sessionEvents } from "@belay/session";
 import { CHARS_PER_TOKEN } from "@host/metrics/breakdown";
 import { Effect } from "effect";
 import type { ChatMessage, Provider, ProviderError } from "../providers";
@@ -58,7 +58,7 @@ export function runCompaction(
   foldId: string,
   onProgress?: (tokens: number, budget: number) => void,
   force = false,
-): Effect.Effect<TrevorEventInput | null, ProviderError> {
+): Effect.Effect<BelayEventInput | null, ProviderError> {
   const plan = planCompaction(events, window, selfProducerId, tokensBefore, force);
   if (!plan) {
     return Effect.succeed(null);

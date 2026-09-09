@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 /**
- * The session event: the durable, ordered unit every Trevor participant produces
+ * The session event: the durable, ordered unit every Belay participant produces
  * and replays. Owned here in Effect Schema as the decode boundary for untrusted
  * socket input, and shared by every participant (web client + host) and every
  * transport (local or Tether) - the event shape is the contract; the transport

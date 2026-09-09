@@ -1,6 +1,6 @@
 import type { SessionEvent } from "./event";
 import { isAnswerableProducer } from "./identity";
-import { decodeTrevorEvent } from "./protocol-decode";
+import { decodeBelayEvent } from "./protocol-decode";
 
 /**
  * The durable follow-up queue, derived purely from the session event log (plan 47). A prompt submitted
@@ -25,7 +25,7 @@ import { decodeTrevorEvent } from "./protocol-decode";
 export function supersededMessageIds(events: readonly SessionEvent[]): Set<string> {
   const ids = new Set<string>();
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type === "user.supersede") {
       for (const id of decoded.supersedes) {
         ids.add(id);
@@ -56,7 +56,7 @@ export function pendingFollowUps(
   const unclaimed: SessionEvent[] = [];
   const claimedRuns = new Set<string>();
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }
@@ -110,7 +110,7 @@ function hasInFlightTurn(events: readonly SessionEvent[]): boolean {
   const started = new Set<string>();
   const completed = new Set<string>();
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type === "assistant.started") {
       started.add(decoded.runId);
     } else if (decoded?.type === "assistant.completed") {

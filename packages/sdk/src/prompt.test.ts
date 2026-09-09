@@ -1,13 +1,13 @@
 import { events, PRODUCER_IDS, type SessionEvent } from "@belay/session";
 import { recordingTransport, storedLog } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
-import { createTrevorClient } from "./client";
+import { createBelayClient } from "./client";
 import { readModelSwitches } from "./prompt";
 
 const SESSION_URL = "http://127.0.0.1:17424";
 
 function client(transport: ReturnType<typeof recordingTransport>["transport"]) {
-  return createTrevorClient({ sessionUrl: SESSION_URL, producerId: PRODUCER_IDS.web, transport });
+  return createBelayClient({ sessionUrl: SESSION_URL, producerId: PRODUCER_IDS.web, transport });
 }
 
 describe("prompt / cancel / switch workflows (M5)", () => {

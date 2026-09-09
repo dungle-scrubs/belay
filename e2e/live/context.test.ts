@@ -13,7 +13,7 @@ import { test } from "vitest";
 const base = process.env.TETHER_URL;
 const sid = process.env.SESSION_ID;
 const provider = process.env.PROVIDER_KEY ?? "gpt";
-const enabled = process.env.TREVOR_LIVE === "1" && Boolean(base) && Boolean(sid);
+const enabled = process.env.BELAY_LIVE === "1" && Boolean(base) && Boolean(sid);
 
 test.skipIf(!enabled)(
   "live: context is retained across turns",

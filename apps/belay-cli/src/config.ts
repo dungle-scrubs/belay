@@ -23,8 +23,8 @@ export interface ResolvedModelConfig {
 export function resolveModelConfig(input: ModelConfigInput): ResolvedModelConfig {
   const env = input.env ?? process.env;
   const loadedConfig = input.loadedConfig ?? loadBelayConfig({ env });
-  const model = input.flagModel ?? env.TREVOR_MODEL ?? loadedConfig.config.model;
-  const reasoning = input.flagReasoning ?? env.TREVOR_REASONING ?? loadedConfig.config.reasoning;
+  const model = input.flagModel ?? env.BELAY_MODEL ?? loadedConfig.config.model;
+  const reasoning = input.flagReasoning ?? env.BELAY_REASONING ?? loadedConfig.config.reasoning;
   return {
     ...(model ? { model } : {}),
     ...(reasoning ? { reasoning } : {}),

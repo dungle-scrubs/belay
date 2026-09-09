@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { events, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events } from "@belay/session";
 import type { EmitEvent } from "@host/transport/services";
 import { describe, test } from "vitest";
 import { makeSessionSwitch, type SessionSwitchDeps, type WorkspaceTarget } from "./session-switch";
@@ -98,9 +98,7 @@ describe("switchToWorkspace worktree stamping (plan 58.2 M1)", () => {
       workspace: TARGET.workspace,
     });
 
-    const switchEvent = calls.find((c) => c.name === "emit")?.detail as
-      | TrevorEventInput
-      | undefined;
+    const switchEvent = calls.find((c) => c.name === "emit")?.detail as BelayEventInput | undefined;
     assert.equal(switchEvent?.type, "session.switch");
     const switchPayload = (
       switchEvent as { payload?: { sessionId?: string; reason?: string } } | undefined
@@ -208,7 +206,7 @@ describe("createWorktreeSession concurrent path (plan 58.7 M1)", () => {
 
     const publishes = calls.filter((c) => c.name === "publishToSession");
     assert.equal(publishes.length, 1);
-    const firstPublish = publishes[0]?.detail as { event: TrevorEventInput } | undefined;
+    const firstPublish = publishes[0]?.detail as { event: BelayEventInput } | undefined;
     assert.equal(firstPublish?.event.type, "session.project");
   });
 

@@ -17,7 +17,7 @@ import {
 /**
  * Cross-instance residency CLAIMS (plan 11.1 M3), layered on plan 11's shared admission store.
  *
- * A Trevor-loaded local model stays resident while ANY live instance claims it; the actual `lms unload`
+ * A Belay-loaded local model stays resident while ANY live instance claims it; the actual `lms unload`
  * fires only when the LAST claim is released (D-002). Each instance registers ONE claim on the model it
  * currently wants resident (its active local model), and the claim's live COUNT across instances is the
  * reference count the eviction sweep (M4) reads. Claims ride plan 11's lease store, so a crashed

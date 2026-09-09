@@ -1,12 +1,12 @@
 import { recordingTransport } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
-import { createTrevorClient } from "./client";
+import { createBelayClient } from "./client";
 
 const SESSION_URL = "http://127.0.0.1:17424";
 
 describe("artifact workflow guards (M3)", () => {
   it("uploading without a configured blob URL throws a typed SdkError", async () => {
-    const client = createTrevorClient({
+    const client = createBelayClient({
       sessionUrl: SESSION_URL,
       transport: recordingTransport().transport,
     });
@@ -19,7 +19,7 @@ describe("artifact workflow guards (M3)", () => {
   });
 
   it("downloading a malformed hash is rejected before any request", async () => {
-    const client = createTrevorClient({
+    const client = createBelayClient({
       sessionUrl: SESSION_URL,
       blobUrl: "http://127.0.0.1:17423",
       transport: recordingTransport().transport,

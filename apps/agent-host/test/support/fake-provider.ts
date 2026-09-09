@@ -1,4 +1,4 @@
-import { events, type SessionTransport, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events, type SessionTransport } from "@belay/session";
 import { publishTurn } from "@host/agent/turn";
 import type { ChatMessage, Provider, ProviderError, ProviderEvent, ToolDef } from "@host/providers";
 import { Emit } from "@host/transport/services";
@@ -138,9 +138,9 @@ export function hangingProvider(): Provider {
 /** A collecting Emit layer plus the array it appends every published event to. */
 export function collectingEmit(): {
   readonly layer: Layer.Layer<Emit>;
-  readonly events: TrevorEventInput[];
+  readonly events: BelayEventInput[];
 } {
-  const events: TrevorEventInput[] = [];
+  const events: BelayEventInput[] = [];
   const layer = Layer.succeed(Emit, {
     publish: (event) => Effect.sync(() => void events.push(event)),
   });
@@ -157,7 +157,7 @@ export async function runTurn(
     readonly loop?: Parameters<typeof publishTurn>[2]["loop"];
     readonly hooks?: Parameters<typeof publishTurn>[2]["hooks"];
   },
-): Promise<TrevorEventInput[]> {
+): Promise<BelayEventInput[]> {
   const { layer, events } = collectingEmit();
   await Effect.runPromise(publishTurn(provider, history, options).pipe(Effect.provide(layer)));
   return events;

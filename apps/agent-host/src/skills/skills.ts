@@ -17,7 +17,7 @@ import { Effect, Schema } from "effect";
  * A skill is a `<root>/<id>/SKILL.md`: YAML frontmatter (name, description, optional `meta` with an
  * icon) followed by a markdown instruction body. Skills are discovered across an ORDERED list of
  * roots (D-087), highest precedence first: the PROJECT-LOCAL `<workspace>/.belay/skills`, then the
- * configured/global root (`TREVOR_SKILLS_DIR`, else the shared agents/skills home). An enabled project-local
+ * configured/global root (`BELAY_SKILLS_DIR`, else the shared agents/skills home). An enabled project-local
  * skill shadows a global one with the same id; a disabled project file is simply absent (it leaves no
  * tombstone, so the global skill of that id still surfaces).
  *
@@ -33,9 +33,9 @@ import { Effect, Schema } from "effect";
  * Not for: the `!command` interpolation trust gate - commands/interpolation.ts.
  */
 
-/** The configured/global skills root: TREVOR_SKILLS_DIR when set, else the shared agents/skills home. */
+/** The configured/global skills root: BELAY_SKILLS_DIR when set, else the shared agents/skills home. */
 export const SKILLS_DIR = resolve(
-  process.env.TREVOR_SKILLS_DIR ?? join(homedir(), ".belay", "skills"),
+  process.env.BELAY_SKILLS_DIR ?? join(homedir(), ".belay", "skills"),
 );
 
 /** The project-local skills root: `<workspace>/.belay/skills`, the same workspace authority the
@@ -44,7 +44,7 @@ export const PROJECT_SKILLS_DIR = resolve(WORKSPACE_ROOT, ".belay", "skills");
 
 /** Skill shell-interpolation is opt-in (it runs commands when a skill is loaded). */
 export const SKILL_SHELL_INTERPOLATION =
-  process.env.TREVOR_SKILL_SHELL === "1" || process.env.TREVOR_SKILL_SHELL === "true";
+  process.env.BELAY_SKILL_SHELL === "1" || process.env.BELAY_SKILL_SHELL === "true";
 
 /** Which root a discovered skill came from: a project-local skill shadows a global one of the same id. */
 export type SkillRootKind = "project" | "global";
@@ -260,7 +260,7 @@ export function buildSkillCommand(): Command {
  * The skill-shell execution policy (provenance `skill-shell`, plan 40 M1): every runnable segment - a
  * fenced ```` ```! ```` script or a whole-line `!command` - runs through the shared runCommand floor, so
  * the always-prevented classification, timeout, and output cap apply. Unlike the command-file lane this
- * runs an ARBITRARY command (bounded, not allow-listed); it is a SEPARATE opt-in seam (TREVOR_SKILL_SHELL)
+ * runs an ARBITRARY command (bounded, not allow-listed); it is a SEPARATE opt-in seam (BELAY_SKILL_SHELL)
  * and never armed by the command-file gate. Parsing is shared with command files; only this policy differs.
  */
 const skillShellExecutor: SegmentExecutor = async (segment) =>

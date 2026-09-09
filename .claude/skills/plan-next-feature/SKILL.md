@@ -3,7 +3,7 @@ name: plan-next-feature
 as_slash_command: true
 argument-hint: [topic]
 allowed-tools: Read, Grep, Glob, Bash, Edit, Write
-description: "Spec a new Belay plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present the current Belay evidence and the existing numbered-plan constraints under /Users/kevin/dev/belay/.plans, adding Belay legacy comparison only when the user explicitly asks for it, then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. After writing it, thread the new plan into any later plans whose assumptions it changes (forward-dependency + accommodation), skipping any plan with a live feature branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
+description: "Spec a new Belay plan when a need arises - typically a fix or follow-up discovered while another plan is being implemented - decide its shape, then record it through the planner. There is no umbrella plan to extract from; new plans are simply created as needed. Numbering default: a decimal off the plan currently being implemented (current plan 03 -> 03.1, then 03.2, ...), so the fix is queued right after the work in flight. Exception: if the new plan depends on an existing plan, slot it as a decimal off that dependency instead (depends on 40 -> 40.1). Gather and present the current Belay evidence and the existing numbered-plan constraints under /Users/kevin/dev/belay/.plans, adding Trevor legacy comparison only when the user explicitly asks for it, then decide collaboratively with the user. Only AFTER the design is agreed: run the planner plan-db workflow to create the numbered plan under .plans/<NN.n>-<name>/ with RED/GREEN/REFACTOR milestones, and commit the plan docs to the main branch through a throwaway worktree WITHOUT switching the current branch. After writing it, thread the new plan into any later plans whose assumptions it changes (forward-dependency + accommodation), skipping any plan with a live feature branch. Triggers: plan the next feature, new plan, spec a feature, decide the next feature, fix discovered during implementation, slot in a plan, discuss a topic for the plan, /plan-next-feature."
 ---
 
 # Plan the Next Belay Feature
@@ -25,13 +25,13 @@ flight (see "Plan placement, numbering, and git policy").
 
 ## Paths
 
-- **Belay legacy** (optional prior art): `~/dev/belay_legacy` - read only when the user explicitly
+- **Trevor legacy** (optional prior art): `~/dev/trevor_legacy` - read only when the user explicitly
   asks to compare against legacy Belay.
 - **Belay** (this project): `/Users/kevin/dev/belay` - what does it already do?
 - **Plans**: `/Users/kevin/dev/belay/.plans/` - **numbered plan directories** `<NN[.n]>-<name>/`
   (integer slots like `03-...`, decimal slots like `03.1-...`), each a self-contained plan-db
   (`implementation.md`, `progress-report.md`, `plan.db`, `artifacts/`). There is **no single umbrella
-  plan**: the former `.plans/belay-v2` is retired. Cross-cutting domain vocabulary lives in
+  plan**: the former `.plans/trevor-v2` is retired. Cross-cutting domain vocabulary lives in
   `/Users/kevin/dev/belay/CONTEXT.md`; the plan *policy* (not a per-plan index) lives in
   `/Users/kevin/dev/belay/AGENTS.md`.
 - **Planner skill**: `~/.agents/skills/planner` - the lifecycle, decision ledger, RED/GREEN/REFACTOR
@@ -151,7 +151,7 @@ do not assume from names.
 2. **Plans - what the existing numbered plans say.** What the relevant numbered plans under `.plans/`
    (and `CONTEXT.md` vocabulary) already record about this topic - decisions, constraints, sequencing,
    hard dependencies - if anything. Note any plan this work depends on or overlaps with.
-3. **Belay legacy - optional prior art.** Include `~/dev/belay_legacy` only when the user explicitly
+3. **Trevor legacy - optional prior art.** Include `~/dev/trevor_legacy` only when the user explicitly
    asks to compare with legacy Belay. Otherwise skip it entirely.
 
 Present these as a compact comparison (Belay / plans, plus legacy only when requested), then surface the open design questions and
@@ -271,7 +271,7 @@ the later plans that will need to accommodate it (threaded in Phase 4 step 9).
 
 - This skill DECIDES and PLANS; it does not implement. Stop at the plan write.
 - Always read the real Belay code before claiming what it does - current state is evidence, not a guess.
-  Read Belay legacy only when the user explicitly requests a legacy comparison.
+  Read Trevor legacy only when the user explicitly requests a legacy comparison.
 - The decision gate is the point of the skill: the value is deciding the right shape together before
   it becomes plan debt. Never front-run the user's decision by writing the plan early.
 - The planner owns lifecycle integrity. Do not bypass `plan-db`, `check-progress`, or convergence checks when

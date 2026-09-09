@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  type BelayEventInput,
   events,
   PRODUCER_IDS,
   type ProducerId,
   type SessionEvent,
-  type TrevorEventInput,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
@@ -20,7 +20,7 @@ const SELF: ProducerId = PRODUCER_IDS.host;
 const WEB: ProducerId = PRODUCER_IDS.web;
 
 let seq = 0;
-const ev = (input: TrevorEventInput, producerId: ProducerId = WEB): SessionEvent =>
+const ev = (input: BelayEventInput, producerId: ProducerId = WEB): SessionEvent =>
   storedEvent(input, { seq: seq++, producerId });
 
 const project = (log: SessionEvent[]) => buildHistory(log, { selfProducerId: SELF });

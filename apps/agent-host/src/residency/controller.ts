@@ -53,7 +53,7 @@ export class KeepCurrentResidency implements ResidencyController {
     }
     const prev = this.current;
     // Claim the NEW model BEFORE releasing/sweeping, so the sweep that follows never evicts it (it is
-    // already claimed, and a shared-endpoint sweep considers every Trevor-loaded model there).
+    // already claimed, and a shared-endpoint sweep considers every Belay-loaded model there).
     if (next) {
       await this.claims.claim(next);
     }

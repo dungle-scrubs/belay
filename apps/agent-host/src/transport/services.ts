@@ -3,12 +3,12 @@
  * the seams for publishing events to the Tether log.
  */
 
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import { Context, Effect, Layer } from "effect";
 
 /** Publishes one host-authored event to the durable log - the shape of main.ts's `emit`, threaded
  *  into the command/factory modules as a plain async callback (the imperative sibling of {@link Emit}). */
-export type EmitEvent = (event: TrevorEventInput) => Promise<void>;
+export type EmitEvent = (event: BelayEventInput) => Promise<void>;
 
 /**
  * Publishes one belay event to the durable Tether log. Modeled as a service (not a
@@ -19,7 +19,7 @@ export type EmitEvent = (event: TrevorEventInput) => Promise<void>;
  */
 export class Emit extends Context.Tag("Emit")<
   Emit,
-  { readonly publish: (event: TrevorEventInput) => Effect.Effect<void> }
+  { readonly publish: (event: BelayEventInput) => Effect.Effect<void> }
 >() {}
 
 /**

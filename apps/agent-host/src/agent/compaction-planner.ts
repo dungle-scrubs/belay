@@ -7,7 +7,7 @@
 import {
   type CompactionManifest,
   type DecodedEvent,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   isAnswerableProducer,
   type SessionEvent,
 } from "@belay/session";
@@ -53,7 +53,7 @@ export function analyzeCompactionLog(
   events: readonly SessionEvent[],
   selfProducerId: string | undefined,
 ): AnalyzedLog {
-  const decoded = events.map((event) => decodeTrevorEvent(event));
+  const decoded = events.map((event) => decodeBelayEvent(event));
   const { start, fold, goal, tasks } = analyzeBaseline(events, decoded, selfProducerId);
   return {
     decoded,

@@ -3,12 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   awaitSessionEvent,
+  type BelayEventInput,
   type ConnectSessionOptions,
   type DoctorArea,
   type DoctorAreaId,
   type DoctorSnapshot,
   type DoctorStatus,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   PRODUCER_IDS,
   type ProviderQuestionAnswer,
   type PublishInput,
@@ -16,7 +17,6 @@ import {
   type SessionEvent,
   type SessionSummary,
   type SessionTransport,
-  type TrevorEventInput,
 } from "@belay/session";
 import type { MetricRecord, SpanRecord, TelemetrySink } from "@belay/session/telemetry";
 import { subscribe, testIdentity, waitFor } from "@belay/session/testing";
@@ -54,7 +54,7 @@ const STORED_EVENT_TIME = "2026-01-01T00:00:00.000Z";
  * field a test cares about (its own `producerId`/`createdAt`, or a specific `seq`/`sessionId`). The
  * canonical envelope is session-store's `EventLog.append`.
  */
-export function storedEvent(input: TrevorEventInput, over?: Partial<SessionEvent>): SessionEvent {
+export function storedEvent(input: BelayEventInput, over?: Partial<SessionEvent>): SessionEvent {
   const seq = over?.seq ?? 1;
   return {
     sessionId: "test",
@@ -69,7 +69,7 @@ export function storedEvent(input: TrevorEventInput, over?: Partial<SessionEvent
 }
 
 /** Stamps a list of `events.*` inputs into a durable log, auto-sequencing `seq`/`eventId` from 1. */
-export function storedLog(...inputs: readonly TrevorEventInput[]): SessionEvent[] {
+export function storedLog(...inputs: readonly BelayEventInput[]): SessionEvent[] {
   return inputs.map((input, index) => storedEvent(input, { seq: index + 1 }));
 }
 
@@ -181,7 +181,7 @@ export function questionAnswerDrain(
   let consumed = 0;
   return () => {
     for (; consumed < events.length; consumed += 1) {
-      const decoded = decodeTrevorEvent(events[consumed] as SessionEvent);
+      const decoded = decodeBelayEvent(events[consumed] as SessionEvent);
       if (decoded?.type === "provider.question.answer") {
         submit(decoded.questionId, decoded.answer);
       }

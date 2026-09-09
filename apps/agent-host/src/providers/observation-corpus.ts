@@ -1,6 +1,6 @@
 import { access, appendFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { resolveTrevorHome, storagePathByName } from "@belay/session/node-paths";
+import { resolveBelayHome, storagePathByName } from "@belay/session/node-paths";
 import { writeFileAtomicVia } from "@host/io/atomic-write";
 import type { ProviderFailureClass } from "./failure-taxonomy";
 import {
@@ -263,7 +263,7 @@ function legacySources(): readonly string[] {
   return [
     // The pre-corpus state-home single file, and the even-older config-home location.
     storagePathByName("provider-observations"),
-    join(resolveTrevorHome(), "provider-observations.json"),
+    join(resolveBelayHome(), "provider-observations.json"),
   ];
 }
 

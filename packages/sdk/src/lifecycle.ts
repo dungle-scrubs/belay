@@ -1,5 +1,5 @@
 import { events, type SessionSummary, sessionsForProject } from "@belay/session";
-import type { TrevorClient } from "./client";
+import type { BelayClient } from "./client";
 
 /**
  * The SDK session-lifecycle workflow (plan 28 M6). The PURE selection/resolution logic - which sessions
@@ -35,7 +35,7 @@ export function selectSessions(
 
 /** Fetches the inventory and returns the project-scoped, active-or-archived selection. */
 export function listSessions(
-  client: TrevorClient,
+  client: BelayClient,
   options: ListSessionsOptions = {},
 ): Promise<readonly SessionSummary[]> {
   return client.sessionOp("fetchInventory", undefined, async () => {
@@ -45,11 +45,7 @@ export function listSessions(
 }
 
 /** Publishes the durable `session.archived` marker (true = archive, false = unarchive). */
-function publishArchived(
-  client: TrevorClient,
-  sessionId: string,
-  archived: boolean,
-): Promise<void> {
+function publishArchived(client: BelayClient, sessionId: string, archived: boolean): Promise<void> {
   return client.publishEvent(
     sessionId,
     events.sessionArchived({ archived }),
@@ -58,12 +54,12 @@ function publishArchived(
 }
 
 /** Archives a session (hides it from default views; keeps its log). */
-export function archiveSession(client: TrevorClient, sessionId: string): Promise<void> {
+export function archiveSession(client: BelayClient, sessionId: string): Promise<void> {
   return publishArchived(client, sessionId, true);
 }
 
 /** Unarchives a session. */
-export function unarchiveSession(client: TrevorClient, sessionId: string): Promise<void> {
+export function unarchiveSession(client: BelayClient, sessionId: string): Promise<void> {
   return publishArchived(client, sessionId, false);
 }
 

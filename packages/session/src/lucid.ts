@@ -3,9 +3,9 @@ import type { SessionEvent } from "./event";
 import type { ArtifactRef } from "./protocol";
 
 /**
- * The LUCID domain core (plan 27): the pure, DOM-free half of Trevor's Lucid integration. Lucid is a
+ * The LUCID domain core (plan 27): the pure, DOM-free half of Belay's Lucid integration. Lucid is a
  * free-form ADDRESSABLE HTML artifact the human reviews and marks up at the level of individual
- * elements and text ranges; located feedback flows back to the agent as STRUCTURED DATA. In Trevor a
+ * elements and text ranges; located feedback flows back to the agent as STRUCTURED DATA. In Belay a
  * Lucid artifact renders as a first-class artifact inside the reusable artifact panel (plan 18) - NOT
  * a separate `lucid open` browser tab.
  *
@@ -24,7 +24,7 @@ import type { ArtifactRef } from "./protocol";
 // --- artifact metadata (M1) ------------------------------------------------
 
 /**
- * The review lifecycle of a Lucid artifact in Trevor. `open` = awaiting or receiving located
+ * The review lifecycle of a Lucid artifact in Belay. `open` = awaiting or receiving located
  * feedback; `resolved` = the human approved/marked the review done (winds the review chrome down).
  * A reopen returns it to `open`. Mirrors Lucid's `review_resolved`/`review_reopened` (D-046/D-059).
  */

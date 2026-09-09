@@ -6,7 +6,7 @@ import { PARSED_SHORTCUTS, type ShortcutId } from "./registry";
 const MAC = isMac();
 
 /**
- * The central shortcut router (plan 07). A single `window` keydown listener owns every Trevor `Mod`
+ * The central shortcut router (plan 07). A single `window` keydown listener owns every Belay `Mod`
  * binding, so a key can only affect the FRONTMOST eligible surface - never a surface behind a modal,
  * menu, or panel (the bug class this plan kills). The decision is the pure {@link routeKey}; the hook
  * {@link useShortcutRouter} wires it to the window + the App-owned handlers.

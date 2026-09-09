@@ -31,7 +31,7 @@ test("shortcut ids are unique and every entry has a label + valid policy", () =>
   }
 });
 
-test("every shortcut's keys parse to a Mod chord (Trevor's primary modifier)", () => {
+test("every shortcut's keys parse to a Mod chord (Belay's primary modifier)", () => {
   for (const s of SHORTCUTS) {
     const chord = parseChord(s.keys);
     assert.equal(chord.mod, true, `${s.id} (${s.keys}) must be a Mod binding`);

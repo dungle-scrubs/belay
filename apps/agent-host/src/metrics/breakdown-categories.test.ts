@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import {
+  type BelayEventInput,
   BREAKDOWN_CATEGORIES,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   type SessionEvent,
-  type TrevorEventInput,
   type UsageBreakdown,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
@@ -20,7 +20,7 @@ import { BreakdownAccumulator } from "./breakdown";
  * field names are a hard constraint - the round-trip test fails if any change.
  */
 
-const ev = (input: TrevorEventInput): SessionEvent =>
+const ev = (input: BelayEventInput): SessionEvent =>
   storedEvent(input, { seq: 0, eventId: "e0", producerId: "belay-host" });
 
 const SAMPLE: UsageBreakdown = {
@@ -80,7 +80,7 @@ test("a host snapshot carries exactly the descriptor's categories (+ image/byToo
 
 test("the wire UsageBreakdown round-trips through encode/decode unchanged", () => {
   const event = ev(events.assistantCompleted({ runId: "r1", text: "done", breakdown: SAMPLE }));
-  const decoded = decodeTrevorEvent(event);
+  const decoded = decodeBelayEvent(event);
   assert.ok(decoded && decoded.type === "assistant.completed");
   assert.deepEqual(decoded.breakdown, SAMPLE);
 });

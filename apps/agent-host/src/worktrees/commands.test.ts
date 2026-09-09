@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
-import { decodeTrevorEvent, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, decodeBelayEvent } from "@belay/session";
 import type { EmitEvent } from "@host/transport/services";
 import { test } from "vitest";
 import { makeWorktreeCommands } from "./commands";
 import type { WorktreeManager } from "./manager";
 
 test("/worktree-new creates a concurrent session and emits a focus command result", async () => {
-  const emitted: TrevorEventInput[] = [];
+  const emitted: BelayEventInput[] = [];
   const concurrentTargets: unknown[] = [];
   const serialTargets: unknown[] = [];
   const emit: EmitEvent = async (event) => {
@@ -62,7 +62,7 @@ test("/worktree-new creates a concurrent session and emits a focus command resul
   ]);
   const result = emitted
     .map((event) =>
-      decodeTrevorEvent({
+      decodeBelayEvent({
         ...event,
         createdAt: "2026-07-09T00:00:00.000Z",
         eventId: "e",

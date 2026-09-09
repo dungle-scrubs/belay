@@ -67,7 +67,7 @@ test("switching the active model releases the prior claim and evicts the now-orp
   assert.equal(self.claims.liveClaims(target(Y)), 1, "Y is now claimed (cap 1)");
   assert.equal(self.claims.liveClaims(target(X)), 0, "the prior claim on X was released");
   assert.deepEqual(self.unloaded, [X], "X, now orphaned, was evicted on the switch");
-  assert.equal(self.registry.isTrevorLoaded(EP, Y), true, "Y stays resident");
+  assert.equal(self.registry.isBelayLoaded(EP, Y), true, "Y stays resident");
 });
 
 test("a model another instance still uses is NOT evicted when this instance switches away (no thrash)", async () => {

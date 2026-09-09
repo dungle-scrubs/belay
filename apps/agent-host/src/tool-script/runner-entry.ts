@@ -9,7 +9,7 @@ import { createRunnerCore } from "./runner-core";
 /**
  * The `tool_script` child-runner ENTRY POINT (plan 16, M3): the spawnable process that runs user script
  * code. It is intentionally MINIMAL and imports only the protocol + the runner core (never the agent-host
- * tool registry), so the process carries no ambient Trevor authority. It wires the runner core to stdio -
+ * tool registry), so the process carries no ambient Belay authority. It wires the runner core to stdio -
  * host messages arrive on stdin (newline-delimited JSON, buffer-capped), the core's messages go out on
  * stdout - announces `start`, and exits when stdin closes.
  *

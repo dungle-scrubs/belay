@@ -18,7 +18,7 @@ import { Clock, Deferred, Duration, Effect, Ref, Stream } from "effect";
  * tokens, close, or error. Env-overridable; set to 0 to disable. Default 90s (xhigh reasoning can
  * pause for a while, so the gap is generous - it only catches a genuinely dead stream).
  */
-export const DEFAULT_STREAM_STALL_MS = envNumber("TREVOR_STREAM_STALL_MS", 90_000);
+export const DEFAULT_STREAM_STALL_MS = envNumber("BELAY_STREAM_STALL_MS", 90_000);
 
 /**
  * Per-tool-call wall-clock watchdog (ms): the tool-side analog of the provider-stream idle watchdog
@@ -29,7 +29,7 @@ export const DEFAULT_STREAM_STALL_MS = envNumber("TREVOR_STREAM_STALL_MS", 90_00
  * trips on a genuine hang, never on legitimately slow work. Env-overridable; set to 0 to disable.
  * Default 300s.
  */
-export const DEFAULT_TOOL_STALL_MS = envNumber("TREVOR_TOOL_STALL_MS", 300_000);
+export const DEFAULT_TOOL_STALL_MS = envNumber("BELAY_TOOL_STALL_MS", 300_000);
 
 /**
  * Tools that block by design and must be EXEMPT from the per-tool stall watchdog: `ask_user` pauses the

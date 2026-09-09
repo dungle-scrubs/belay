@@ -1,8 +1,8 @@
 import {
-  decodeTrevorEvent,
+  type BelayEventInput,
+  decodeBelayEvent,
   type SessionEvent,
   events as sessionEvents,
-  type TrevorEventInput,
 } from "@belay/session";
 import type { Lease } from "@host/session/lease";
 import { warn } from "@host/transport/log";
@@ -37,7 +37,7 @@ const TITLE_CHAR_CAP = 60;
 export function needsAutoTitle(events: readonly SessionEvent[]): boolean {
   let completedTurns = 0;
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }
@@ -104,7 +104,7 @@ export function distillTitle(
  * The `session.title` event for a generated title, or null when the sanitized title is empty (a
  * failed/garbled job emits nothing). Keeps the emit-or-not decision in one testable place.
  */
-export function autoTitleEvent(rawTitle: string): TrevorEventInput | null {
+export function autoTitleEvent(rawTitle: string): BelayEventInput | null {
   const title = sanitizeTitle(rawTitle);
   return title ? sessionEvents.sessionTitle({ title }) : null;
 }

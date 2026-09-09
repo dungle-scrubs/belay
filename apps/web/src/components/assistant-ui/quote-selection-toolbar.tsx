@@ -104,7 +104,7 @@ const captureSelection = (point: Anchor | null): SelectionSnapshot | null => {
 };
 
 /**
- * Keeps the Trevor-owned highlight painted from the logical `range` for as long as the
+ * Keeps the Belay-owned highlight painted from the logical `range` for as long as the
  * snapshot lives. Two signals drive a repaint: `selectionchange` (so the highlight takes
  * over the instant the native selection collapses on a re-render) and a MutationObserver on
  * the virtual list (so the highlight re-resolves when a virtualized row remounts with fresh

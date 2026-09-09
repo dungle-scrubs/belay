@@ -1,4 +1,5 @@
 import {
+  type BelayEventInput,
   decodeModelRef,
   events,
   type ModelRef,
@@ -6,7 +7,6 @@ import {
   pinModel,
   sameModel,
   setDefaultModel,
-  type TrevorEventInput,
   unpinModel,
 } from "@belay/session";
 import type { ModelPrefsFile } from "./model-prefs-store";
@@ -73,7 +73,7 @@ export function applyModelPrefsCommand(
 export interface ModelPrefsCommandDeps {
   readonly load: () => ModelPrefsFile;
   readonly save: (next: ModelPrefsFile) => void;
-  readonly emit: (event: TrevorEventInput) => Promise<void> | void;
+  readonly emit: (event: BelayEventInput) => Promise<void> | void;
   readonly announce: () => void;
 }
 

@@ -10,8 +10,8 @@ import { createLspManager, type LspManager, type LspManagerOptions } from "./man
  * explicit close (their stdin pipe closes), so a hard exit cannot orphan them.
  *
  * Timeouts, the publish-wait deadline, and the stale threshold are env-tunable (plan 24 M7,
- * D-006): the host reads pure env, so `TREVOR_LSP_REQUEST_TIMEOUT_MS`,
- * `TREVOR_LSP_INIT_TIMEOUT_MS`, `TREVOR_LSP_PUBLISH_WAIT_MS`, and `TREVOR_LSP_STALE_AFTER_MS`
+ * D-006): the host reads pure env, so `BELAY_LSP_REQUEST_TIMEOUT_MS`,
+ * `BELAY_LSP_INIT_TIMEOUT_MS`, `BELAY_LSP_PUBLISH_WAIT_MS`, and `BELAY_LSP_STALE_AFTER_MS`
  * override the manager defaults per machine (a slow language server, a hermetic test bounding
  * its wall time). Absent or malformed values contribute nothing (boot/env's envPositiveMs).
  *
@@ -21,12 +21,12 @@ import { createLspManager, type LspManager, type LspManagerOptions } from "./man
  * idiom (@host/boot/env), or the model-facing tool surfaces (@host/tools/lsp-*).
  */
 
-/** The manager options the TREVOR_LSP_* env knobs contribute; {} leaves every default in place. */
+/** The manager options the BELAY_LSP_* env knobs contribute; {} leaves every default in place. */
 export function lspManagerEnvOptions(env: NodeJS.ProcessEnv): LspManagerOptions {
-  const requestTimeoutMs = envPositiveMs(env, "TREVOR_LSP_REQUEST_TIMEOUT_MS");
-  const initTimeoutMs = envPositiveMs(env, "TREVOR_LSP_INIT_TIMEOUT_MS");
-  const publishWaitMs = envPositiveMs(env, "TREVOR_LSP_PUBLISH_WAIT_MS");
-  const staleAfterMs = envPositiveMs(env, "TREVOR_LSP_STALE_AFTER_MS");
+  const requestTimeoutMs = envPositiveMs(env, "BELAY_LSP_REQUEST_TIMEOUT_MS");
+  const initTimeoutMs = envPositiveMs(env, "BELAY_LSP_INIT_TIMEOUT_MS");
+  const publishWaitMs = envPositiveMs(env, "BELAY_LSP_PUBLISH_WAIT_MS");
+  const staleAfterMs = envPositiveMs(env, "BELAY_LSP_STALE_AFTER_MS");
   return {
     ...(requestTimeoutMs !== undefined ? { requestTimeoutMs } : {}),
     ...(initTimeoutMs !== undefined ? { initTimeoutMs } : {}),

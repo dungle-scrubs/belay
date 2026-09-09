@@ -1,8 +1,8 @@
 import {
+  type BelayEventInput,
   events,
   type HookDecisionEventName,
   type HookDecisionKind,
-  type TrevorEventInput,
 } from "@belay/session";
 import { redactHookText } from "@host/hooks/redact";
 import type { PreToolUseOutcome, StopOutcome } from "@host/hooks/runtime";
@@ -52,7 +52,7 @@ function diagnosticEvent(
   event: HookDecisionEventName,
   diagnostic: { readonly hook: string; readonly reason: string; readonly detail: string },
   toolName?: string,
-): TrevorEventInput {
+): BelayEventInput {
   return events.hookDecision({
     runId,
     hookId: diagnostic.hook,
@@ -68,8 +68,8 @@ export function preToolUseDecisionEvents(
   runId: string,
   toolName: string,
   outcome: PreToolUseOutcome,
-): TrevorEventInput[] {
-  const out: TrevorEventInput[] = [];
+): BelayEventInput[] {
+  const out: BelayEventInput[] = [];
   for (const note of outcome.contexts) {
     out.push(
       events.hookDecision({
@@ -117,8 +117,8 @@ export function preToolUseDecisionEvents(
  * continuation request and emit as `continuation` - unless this is the exhausted re-ask, whose
  * ignored contexts surface only through their `continuation_exhausted` diagnostic.
  */
-export function stopDecisionEvents(runId: string, outcome: StopOutcome): TrevorEventInput[] {
-  const out: TrevorEventInput[] = [];
+export function stopDecisionEvents(runId: string, outcome: StopOutcome): BelayEventInput[] {
+  const out: BelayEventInput[] = [];
   const exhausted = outcome.diagnostics.some((d) => d.reason === "continuation_exhausted");
 
   if (outcome.decision === "halt") {
@@ -159,10 +159,10 @@ export function stopDecisionEvents(runId: string, outcome: StopOutcome): TrevorE
 export function withHookDecisionEvents(
   hooks: TurnHooks,
   runId: string,
-  publish: (event: TrevorEventInput) => void,
+  publish: (event: BelayEventInput) => void,
 ): TurnHooks {
   const seenDiagnostics = new Set<string>();
-  const emit = (input: TrevorEventInput): void => {
+  const emit = (input: BelayEventInput): void => {
     const decision = String(input.payload.decision);
     if (DEDUPED_VERBS.has(decision)) {
       const key = `${String(input.payload.hookId)}|${decision}`;

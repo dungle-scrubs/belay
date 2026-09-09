@@ -3,9 +3,9 @@ import { USER_VIM_JSON } from "@host/boot/paths";
 
 /**
  * The Vim-mode prompt preference store (plan 06). Whether the opt-in Vim motions are enabled persists as
- * a small `{ enabled }` JSON under the config home (`<TREVOR_HOME>/vim.json`), the approved Trevor
+ * a small `{ enabled }` JSON under the config home (`<BELAY_HOME>/vim.json`), the approved Belay
  * settings root - portable, separate from the browser. Read once at host startup and announced to the
- * web on `host.online`, so the preference follows Trevor sessions on this machine instead of living in
+ * web on `host.online`, so the preference follows Belay sessions on this machine instead of living in
  * per-tab browser state. Disabled by default: a missing, malformed, or `{ enabled: false }` file all
  * resolve to off, and a malformed file is reported (by the shared config scaffold) without blocking
  * startup. Read/write are injectable so the store is unit-tested without touching disk.

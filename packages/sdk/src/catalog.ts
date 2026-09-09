@@ -1,11 +1,11 @@
 import {
   type CatalogEntry,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   type ReadLogOptions,
   type SessionEvent,
   type SourceSummary,
 } from "@belay/session";
-import type { TrevorClient } from "./client";
+import type { BelayClient } from "./client";
 
 /**
  * Projects the host-announced model catalog from the durable session log.
@@ -30,7 +30,7 @@ export function projectCatalog(events: readonly SessionEvent[]): CatalogSnapshot
     if (!event) {
       continue;
     }
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type === "host.online") {
       return {
         sources: decoded.sources,
@@ -42,7 +42,7 @@ export function projectCatalog(events: readonly SessionEvent[]): CatalogSnapshot
 }
 
 export async function listCatalog(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   options?: ReadLogOptions,
 ): Promise<CatalogSnapshot> {

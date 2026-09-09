@@ -130,7 +130,7 @@ export function failureFingerprint(result: string): string {
   return sha(result.trim().replace(/^error:\s*/i, ""));
 }
 
-/** Trevor's local tool-failure convention: the executor renders every failure as an `error: …` line. */
+/** Belay's local tool-failure convention: the executor renders every failure as an `error: …` line. */
 export function isFailureResult(result: string): boolean {
   return /^error:/i.test(result.trimStart());
 }

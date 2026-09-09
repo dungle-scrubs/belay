@@ -8,7 +8,7 @@ import { finalAnswer, scriptedProvider, toolResult } from "./scripted-turn";
 
 /**
  * Plan 24 M7 fixture evals (D-009): full fake-provider turns through the PRODUCTION path
- * (TREVOR_WORKSPACE -> boot/paths -> host LSP singleton -> tool registry -> turn pipeline)
+ * (BELAY_WORKSPACE -> boot/paths -> host LSP singleton -> tool registry -> turn pipeline)
  * against a real fixture TS workspace whose language server answers from workspace content
  * (./fixture-eval-lsp-server.ts). Each eval renders the plan's value claim as a measured
  * assertion:
@@ -20,7 +20,7 @@ import { finalAnswer, scriptedProvider, toolResult } from "./scripted-turn";
  * - typed repair: `lsp_diagnostics` pinpoints the offending file+line and `lsp_hover` returns
  *   the exact declared signature - the tool results carry the precise fact needed.
  *
- * The workspace root is read at host-module load, so TREVOR_WORKSPACE binds before the dynamic
+ * The workspace root is read at host-module load, so BELAY_WORKSPACE binds before the dynamic
  * import (the grep.test.ts precedent).
  */
 
@@ -118,8 +118,8 @@ const ws = createEvalWorkspace({
   },
 });
 
-const prevWorkspace = process.env.TREVOR_WORKSPACE;
-process.env.TREVOR_WORKSPACE = ws;
+const prevWorkspace = process.env.BELAY_WORKSPACE;
+process.env.BELAY_WORKSPACE = ws;
 
 const { runTurn } = await import("../support/fake-provider");
 const { executeTool } = await import("@host/tools/index");
@@ -127,8 +127,8 @@ const { lspManager } = await import("@host/lsp/host-runtime");
 
 afterAll(async () => {
   await lspManager.close();
-  if (prevWorkspace === undefined) delete process.env.TREVOR_WORKSPACE;
-  else process.env.TREVOR_WORKSPACE = prevWorkspace;
+  if (prevWorkspace === undefined) delete process.env.BELAY_WORKSPACE;
+  else process.env.BELAY_WORKSPACE = prevWorkspace;
   rmSync(ws, { recursive: true, force: true });
 });
 

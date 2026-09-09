@@ -1,4 +1,4 @@
-import { decodeTrevorEvent, type SessionEvent } from "@belay/session";
+import { decodeBelayEvent, type SessionEvent } from "@belay/session";
 import type { RecallRecord, RecallSessionRef } from "./types";
 
 /**
@@ -35,7 +35,7 @@ function point(seq: number): { readonly fromSeq: number; readonly toSeq: number 
 /**
  * Projects one session's durable events into recall records, dropping events that carry no
  * recallable conversational content (lifecycle, presence, progress, deltas). Decoding is the
- * shared permissive `decodeTrevorEvent`, so an unknown or malformed event is simply skipped.
+ * shared permissive `decodeBelayEvent`, so an unknown or malformed event is simply skipped.
  */
 export function buildRecords(
   events: readonly SessionEvent[],
@@ -44,7 +44,7 @@ export function buildRecords(
   const records: RecallRecord[] = [];
 
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }

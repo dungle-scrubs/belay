@@ -1,7 +1,7 @@
 /**
  * `@belay/sdk` - the ergonomic, browser-safe headless workflow layer above `@belay/session` (plan 28).
  *
- * Build a client with {@link createTrevorClient}, bound to a session backend (and optionally a blob
+ * Build a client with {@link createBelayClient}, bound to a session backend (and optionally a blob
  * store) by URL, then use the workflows: read the inventory/transcript, prompt/stream/cancel a turn,
  * switch the model mid-turn, upload/download artifacts, read capabilities/doctor, and run session
  * lifecycle. It speaks the `@belay/session` protocol only - it never runs the CLI and never recreates
@@ -28,9 +28,9 @@ export {
   projectCatalog,
 } from "./catalog";
 export {
-  createTrevorClient,
-  TrevorClient,
-  type TrevorClientConfig,
+  BelayClient,
+  type BelayClientConfig,
+  createBelayClient,
 } from "./client";
 export {
   isSdkError,

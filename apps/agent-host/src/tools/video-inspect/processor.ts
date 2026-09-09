@@ -8,7 +8,7 @@
  * per-frame extraction/write failure degrades to a warning; only cancellation propagates.
  *
  * Not for: the tool envelope (tool.ts), provider continuation (continuation.ts), or blob transport
- * (@belay/session/blob). Binary paths are configurable via TREVOR_FFPROBE_PATH / TREVOR_FFMPEG_PATH.
+ * (@belay/session/blob). Binary paths are configurable via BELAY_FFPROBE_PATH / BELAY_FFMPEG_PATH.
  */
 import { execFile as execFileCallback } from "node:child_process";
 import { access, mkdtemp, readFile, rm } from "node:fs/promises";
@@ -60,8 +60,8 @@ export async function inspectVideoFile(
   options: VideoInspectOptions,
 ): Promise<VideoInspectResult> {
   const env = options.env ?? process.env;
-  const ffprobe = env.TREVOR_FFPROBE_PATH || "ffprobe";
-  const ffmpeg = env.TREVOR_FFMPEG_PATH || "ffmpeg";
+  const ffprobe = env.BELAY_FFPROBE_PATH || "ffprobe";
+  const ffmpeg = env.BELAY_FFMPEG_PATH || "ffmpeg";
 
   throwIfAborted(options.signal);
 

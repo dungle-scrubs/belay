@@ -1,4 +1,5 @@
 import {
+  type BelayEventInput,
   type ConnectionStatus,
   freshSessionId,
   type HostPresence,
@@ -18,7 +19,6 @@ import {
   streamTransport,
   type TangentAnchorSeed,
   type TangentFoldMode,
-  type TrevorEventInput,
   toPublishInput,
   viewerIdentity,
 } from "@belay/session";
@@ -139,7 +139,7 @@ function publishEvent(
 export function publishWebEvent(
   sessionTransport: SessionTransport,
   sessionId: string,
-  built: TrevorEventInput,
+  built: BelayEventInput,
 ): Promise<void> {
   return sessionTransport.publishEvent(sessionId, toPublishInput(built, PRODUCER_IDS.web));
 }
@@ -499,7 +499,7 @@ export interface SessionActions {
   readonly setLucidReview: (lucidId: string, resolved: boolean, cursor: number) => Promise<void>;
 }
 
-type PublishVia = (built: TrevorEventInput) => Promise<void>;
+type PublishVia = (built: BelayEventInput) => Promise<void>;
 
 export function createSessionActions(publishVia: PublishVia): SessionActions {
   const command = (command: string, args: string) =>
@@ -597,7 +597,7 @@ export function useSessionActionsWithTransport(
   // in @belay/session) and gated on a live session, so that guard lives here once and the public
   // methods below are one-line delegations to the matching event builder.
   const publishVia = useCallback(
-    async (built: TrevorEventInput) => {
+    async (built: BelayEventInput) => {
       if (!sessionId) {
         return;
       }

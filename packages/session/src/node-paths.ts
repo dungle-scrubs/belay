@@ -97,8 +97,8 @@ export interface RootCategory {
   readonly description: string;
 }
 
-/** The legacy `~/.belay_legacy` dotdir from pre-XDG-split runs - detect-only, never a new-write target. */
-export const LEGACY_BELAY_DIRNAME = ".belay_legacy";
+/** The legacy `~/.trevor_legacy` dotdir from pre-XDG-split runs - detect-only, never a new-write target. */
+export const LEGACY_BELAY_DIRNAME = ".trevor_legacy";
 
 /**
  * Resolves the full root taxonomy from injected env + home (pure, so diagnostics and tests stay
@@ -142,7 +142,7 @@ export function resolveRootPolicy(
       envOverride: null,
       writable: false,
       description:
-        "Old ~/.belay_legacy data from pre-XDG-split runs; detect-only, never a new-write target.",
+        "Old ~/.trevor_legacy data from pre-XDG-split runs; detect-only, never a new-write target.",
     },
     {
       id: "temp",
@@ -415,12 +415,12 @@ export const STORAGE_INVENTORY: readonly StorageEntry[] = [
     description:
       "Per-project permanently-ignored CLAUDE.md migration paths (plan 26): { <projectRoot>: [relPath, ...] }.",
   },
-  // legacy (~/.belay_legacy) - detect-only
+  // legacy (~/.trevor_legacy) - detect-only
   {
     name: "legacy-root",
     category: "legacy",
     relativePath: "",
-    description: "Old ~/.belay_legacy data (sessions.db, blobs) from pre-XDG-split runs.",
+    description: "Old ~/.trevor_legacy data (sessions.db, blobs) from pre-XDG-split runs.",
   },
   // external (read-only)
   {
@@ -480,18 +480,3 @@ export function storagePathByName(
   }
   return path;
 }
-
-/** @deprecated Use LEGACY_BELAY_DIRNAME */
-export const LEGACY_TREVOR_DIRNAME = LEGACY_BELAY_DIRNAME;
-
-/** @deprecated Use resolveBelayHome */
-export const resolveTrevorHome = resolveBelayHome;
-
-/** @deprecated Use resolveBelayStateHome */
-export const resolveTrevorStateHome = resolveBelayStateHome;
-
-/** @deprecated Use BelayPathEnv */
-export type TrevorPathEnv = BelayPathEnv;
-
-/** @deprecated Use BELAY_STATE_DIRNAME */
-export const TREVOR_STATE_DIRNAME = BELAY_STATE_DIRNAME;

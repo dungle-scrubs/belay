@@ -1,6 +1,6 @@
 import {
   type ArtifactRef,
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   type ModelRef,
   type ModelSwitchEndpoint,
@@ -9,7 +9,7 @@ import {
   type SessionEvent,
 } from "@belay/session";
 import { awaitStreamResult } from "./await-stream";
-import type { TrevorClient } from "./client";
+import type { BelayClient } from "./client";
 import { SdkError, urlClass } from "./errors";
 
 /**
@@ -35,7 +35,7 @@ export interface PromptInput {
 
 /** Submits a user prompt into an existing session (publishes `user.message`). Does not wait for a turn. */
 export function submitPrompt(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   input: PromptInput,
 ): Promise<void> {
@@ -43,7 +43,7 @@ export function submitPrompt(
 }
 
 /** Cancels the active run (D-094 cancel): publishes `user.cancel` for `runId`, never an OS signal. */
-export function cancelRun(client: TrevorClient, sessionId: string, runId: string): Promise<void> {
+export function cancelRun(client: BelayClient, sessionId: string, runId: string): Promise<void> {
   return client.publishEvent(sessionId, events.userCancel({ runId }), "cancel");
 }
 
@@ -61,7 +61,7 @@ export interface SwitchModelInput {
  * default initiator is `auto` (a programmatic switch), distinct from a human `manual` selection.
  */
 export function switchModel(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   input: SwitchModelInput,
 ): Promise<void> {
@@ -91,7 +91,7 @@ export interface ModelSwitchRecord {
 export function readModelSwitches(log: readonly SessionEvent[]): readonly ModelSwitchRecord[] {
   const records: ModelSwitchRecord[] = [];
   for (const event of log) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type === "model.switched") {
       records.push({
         runId: decoded.runId,
@@ -142,7 +142,7 @@ const DEFAULT_TURN_TIMEOUT_MS = 60_000;
  * separately (so streaming and prompting compose without a hidden one-shot API).
  */
 export function streamTurn(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   options: StreamTurnOptions = {},
 ): Promise<TurnResult> {
@@ -158,7 +158,7 @@ export function streamTurn(
       ({ settle, resolve, reject }) => ({
         onEvent: (event) => {
           options.onEvent?.(event);
-          const decoded = decodeTrevorEvent(event);
+          const decoded = decodeBelayEvent(event);
           if (!decoded) {
             return;
           }

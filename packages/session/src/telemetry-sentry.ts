@@ -29,7 +29,7 @@ export interface SanitizableSentryEvent {
   };
   /** `@sentry/node` populates this with `os.hostname()` by default - deanonymizing, so it is dropped. */
   server_name?: string;
-  /** User identity (id/email/ip) - dropped; Trevor never attaches a user, but defend anyway. */
+  /** User identity (id/email/ip) - dropped; Belay never attaches a user, but defend anyway. */
   user?: Record<string, unknown>;
 }
 

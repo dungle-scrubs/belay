@@ -1,7 +1,7 @@
 import { answerProvider, attachFakeHost, hangingProvider } from "@belay/agent-host/testing";
 import { runCancel, runPrompt, runTranscript } from "@belay/cli/headless";
-import { createTrevorClient } from "@belay/sdk";
-import { decodeTrevorEvent, PRODUCER_IDS, streamTransport } from "@belay/session";
+import { createBelayClient } from "@belay/sdk";
+import { decodeBelayEvent, PRODUCER_IDS, streamTransport } from "@belay/session";
 import { subscribe, waitFor } from "@belay/test-kit";
 import { bootBlob, bootStore } from "@belay/test-kit/boot";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -27,7 +27,7 @@ describe("headless CLI over local stores", () => {
   });
 
   function cliClient() {
-    return createTrevorClient({
+    return createBelayClient({
       sessionUrl: store.url,
       blobUrl: blob.url,
       producerId: PRODUCER_IDS.cli,
@@ -90,7 +90,7 @@ describe("headless CLI over local stores", () => {
         label: "assistant.started",
       });
       const started = watcher.events.find((e) => e.type === "assistant.started");
-      const decoded = started ? decodeTrevorEvent(started) : null;
+      const decoded = started ? decodeBelayEvent(started) : null;
       const runId = decoded?.type === "assistant.started" ? decoded.runId : "";
       expect(runId).toBeTruthy();
 

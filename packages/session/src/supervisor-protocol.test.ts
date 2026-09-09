@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
 import { SUPERVISOR_SESSION_ID } from "./identity";
-import { decodeTrevorEvent, events, type TrevorEventInput } from "./protocol";
+import { type BelayEventInput, decodeBelayEvent, events } from "./protocol";
 
 /**
  * The supervisor side-channel contract (plan 44.1): three request/result event pairs the browser and
  * the supervisor daemon share, modeled on `file.index.*`. These pin that each `events.*` constructor
- * round-trips through `decodeTrevorEvent` (emit/consume stay in lockstep), that `requestId` correlates
+ * round-trips through `decodeBelayEvent` (emit/consume stay in lockstep), that `requestId` correlates
  * a result to its request, and that a malformed request decodes safely to sane defaults rather than
  * throwing or partially dispatching.
  */
 
-/** Wrap an emit-side input into a full stored SessionEvent (what decodeTrevorEvent reads). */
-const stored = (input: TrevorEventInput, over: Partial<SessionEvent> = {}): SessionEvent => ({
+/** Wrap an emit-side input into a full stored SessionEvent (what decodeBelayEvent reads). */
+const stored = (input: BelayEventInput, over: Partial<SessionEvent> = {}): SessionEvent => ({
   sessionId: SUPERVISOR_SESSION_ID,
   seq: 1,
   eventId: "ev-1",
@@ -29,7 +29,7 @@ test("SUPERVISOR_SESSION_ID is the reserved control session constant", () => {
 });
 
 test("session.launch.requested round-trips its requestId + root", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(events.sessionLaunchRequested({ requestId: "req-1", root: "/work/app" })),
   );
   assert.deepEqual(decoded, {
@@ -40,7 +40,7 @@ test("session.launch.requested round-trips its requestId + root", () => {
 });
 
 test("session.launch.result round-trips each status, paired by requestId", () => {
-  const launched = decodeTrevorEvent(
+  const launched = decodeBelayEvent(
     stored(
       events.sessionLaunchResult({
         requestId: "req-2",
@@ -56,14 +56,14 @@ test("session.launch.result round-trips each status, paired by requestId", () =>
     status: "launched",
   });
 
-  const reused = decodeTrevorEvent(
+  const reused = decodeBelayEvent(
     stored(
       events.sessionLaunchResult({ requestId: "req-3", sessionId: "app-abc123", status: "reused" }),
     ),
   );
   assert.equal(reused?.type === "session.launch.result" ? reused.status : null, "reused");
 
-  const failed = decodeTrevorEvent(
+  const failed = decodeBelayEvent(
     stored(
       events.sessionLaunchResult({
         requestId: "req-4",
@@ -83,13 +83,13 @@ test("session.launch.result round-trips each status, paired by requestId", () =>
 });
 
 test("folder.pick.requested + result round-trip (path and cancel)", () => {
-  assert.deepEqual(decodeTrevorEvent(stored(events.folderPickRequested({ requestId: "fp-1" }))), {
+  assert.deepEqual(decodeBelayEvent(stored(events.folderPickRequested({ requestId: "fp-1" }))), {
     type: "folder.pick.requested",
     requestId: "fp-1",
   });
 
   assert.deepEqual(
-    decodeTrevorEvent(
+    decodeBelayEvent(
       stored(
         events.folderPickResult({ requestId: "fp-2", path: "/Users/me/proj", cancelled: false }),
       ),
@@ -98,13 +98,13 @@ test("folder.pick.requested + result round-trip (path and cancel)", () => {
   );
 
   assert.deepEqual(
-    decodeTrevorEvent(stored(events.folderPickResult({ requestId: "fp-3", cancelled: true }))),
+    decodeBelayEvent(stored(events.folderPickResult({ requestId: "fp-3", cancelled: true }))),
     { type: "folder.pick.result", requestId: "fp-3", cancelled: true },
   );
 });
 
 test("projects.list.requested + result round-trip a recency-sorted list", () => {
-  assert.deepEqual(decodeTrevorEvent(stored(events.projectsListRequested({ requestId: "pl-1" }))), {
+  assert.deepEqual(decodeBelayEvent(stored(events.projectsListRequested({ requestId: "pl-1" }))), {
     type: "projects.list.requested",
     requestId: "pl-1",
   });
@@ -113,7 +113,7 @@ test("projects.list.requested + result round-trip a recency-sorted list", () => 
     { root: "/work/b", sessionId: "b-2", updatedAt: "2026-07-04T10:00:00Z" },
     { root: "/work/a", sessionId: "a-1", updatedAt: "2026-07-03T10:00:00Z" },
   ];
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(events.projectsListResult({ requestId: "pl-2", projects })),
   );
   assert.deepEqual(decoded, {
@@ -124,7 +124,7 @@ test("projects.list.requested + result round-trip a recency-sorted list", () => 
 });
 
 test("a request missing its requestId falls back to the event id (no throw)", () => {
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored({ type: "session.launch.requested", payload: {} }, { eventId: "ev-fallback" }),
   );
   assert.deepEqual(decoded, {
@@ -135,7 +135,7 @@ test("a request missing its requestId falls back to the event id (no throw)", ()
 });
 
 test("a malformed result decodes safely: unknown status -> failed, junk projects dropped", () => {
-  const badStatus = decodeTrevorEvent(
+  const badStatus = decodeBelayEvent(
     stored({
       type: "session.launch.result",
       payload: { sessionId: 42, status: "exploded" },
@@ -148,7 +148,7 @@ test("a malformed result decodes safely: unknown status -> failed, junk projects
     status: "failed", // unknown status -> failed-safe default
   });
 
-  const junkProjects = decodeTrevorEvent(
+  const junkProjects = decodeBelayEvent(
     stored({
       type: "projects.list.result",
       payload: {

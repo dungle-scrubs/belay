@@ -14,7 +14,7 @@ import {
   resolveProjectRoot,
   serviceUrl,
 } from "@belay/launcher";
-import { createTrevorClient, resolveOpenTarget } from "@belay/sdk";
+import { createBelayClient, resolveOpenTarget } from "@belay/sdk";
 import {
   errorMessage,
   events,
@@ -37,7 +37,7 @@ const BLOB_URL = process.env.BLOB_STORE_URL ?? serviceUrl("blob");
 
 // One SDK client per process, bound to the local session-store + blob-store. Every headless verb and the
 // lifecycle IO route through it, stamping the CLI producer id on the events they publish (plan 28 M7).
-const client = createTrevorClient({
+const client = createBelayClient({
   sessionUrl: STORE_URL,
   blobUrl: BLOB_URL,
   producerId: PRODUCER_IDS.cli,
@@ -81,7 +81,7 @@ const commandRouter = createCommandRouter({
 /**
  * The `belay` CLI entrypoint (D-085): run from any project directory to resolve the project root,
  * reuse-or-derive its session, ready the shared local services, spawn-or-reuse the matching agent-host
- * (with SESSION_ID + TREVOR_WORKSPACE + cwd all pointing at the project), and open the browser at the
+ * (with SESSION_ID + BELAY_WORKSPACE + cwd all pointing at the project), and open the browser at the
  * session URL. The no-arg ordinary path; explicit `--session` / `--new` overrides are a later
  * extension. All orchestration lives in launch.ts; this only wires the real platform and prints the
  * secret-free status line.

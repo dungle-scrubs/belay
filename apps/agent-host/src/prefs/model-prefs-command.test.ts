@@ -1,4 +1,4 @@
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import { describe, expect, test } from "vitest";
 import {
   applyModelPrefsCommand,
@@ -49,14 +49,14 @@ describe("applyModelPrefsCommand (pure)", () => {
 /** A fake store + sink capturing writes, results, and re-announces. */
 function harness(initial: ModelPrefsFile = EMPTY) {
   let stored = initial;
-  const results: TrevorEventInput[] = [];
+  const results: BelayEventInput[] = [];
   let announces = 0;
   const deps = {
     load: () => stored,
     save: (next: ModelPrefsFile) => {
       stored = next;
     },
-    emit: (event: TrevorEventInput) => {
+    emit: (event: BelayEventInput) => {
       results.push(event);
     },
     announce: () => {
@@ -75,7 +75,7 @@ describe("runModelPrefsCommand", () => {
     expect(h.announces()).toBe(1);
     const result = h.results.at(-1);
     expect(result?.type).toBe("command.result");
-    expect((result?.payload as { ok: boolean })?.ok).toBe(true);
+    expect((result?.payload as { ok: boolean }).ok).toBe(true);
   });
 
   test("adding a favorite persists it; a second toggle persists the removal (each re-announces)", async () => {
@@ -95,6 +95,6 @@ describe("runModelPrefsCommand", () => {
     expect(h.get()).toEqual({ default: OTHER, pinned: [OTHER] });
     expect(h.announces()).toBe(0);
     const result = h.results.at(-1);
-    expect((result?.payload as { ok: boolean })?.ok).toBe(false);
+    expect((result?.payload as { ok: boolean }).ok).toBe(false);
   });
 });

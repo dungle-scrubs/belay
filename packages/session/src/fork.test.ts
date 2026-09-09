@@ -3,7 +3,7 @@ import type { SessionEvent } from "./event";
 import { hasForkOrigin, isForkReady, planFork } from "./fork";
 import { PRODUCER_IDS } from "./identity";
 import { events } from "./protocol";
-import { decodeTrevorEvent } from "./protocol-decode";
+import { decodeBelayEvent } from "./protocol-decode";
 
 function ev(seq: number, type: string, payload: Record<string, unknown> = {}): SessionEvent {
   return {
@@ -32,7 +32,7 @@ describe("session.forkedFrom lineage event", () => {
     const input = events.sessionForkedFrom({ parentSessionId: "parent", forkSeq: 5 });
 
     expect(input.type).toBe("session.forkedFrom");
-    expect(decodeTrevorEvent(ev(1, "session.forkedFrom", input.payload))).toEqual({
+    expect(decodeBelayEvent(ev(1, "session.forkedFrom", input.payload))).toEqual({
       type: "session.forkedFrom",
       parentSessionId: "parent",
       forkSeq: 5,

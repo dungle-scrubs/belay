@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   PRODUCER_IDS,
   type SessionConnection,
@@ -129,7 +129,7 @@ function awaitResult(requestId: string) {
     SUPERVISOR_SESSION_ID,
     viewerIdentity({ displayName: "reader", instanceId: "reader-1", participantId: "reader-1" }),
     (event) => {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       if (!decoded) return false;
       if (!decoded.type.startsWith("project") || !decoded.type.endsWith(".result")) return false;
       return "requestId" in decoded && decoded.requestId === requestId;
@@ -151,7 +151,7 @@ test("project.add.requested with a picked folder publishes result with path and 
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("pa-1")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("pa-1")) ?? throwUnresolved());
   assert.deepEqual(decoded, {
     type: "project.add.result",
     requestId: "pa-1",
@@ -168,7 +168,7 @@ test("project.add.requested when folder pick is cancelled publishes result with 
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("pa-2")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("pa-2")) ?? throwUnresolved());
   assert.deepEqual(decoded, {
     type: "project.add.result",
     requestId: "pa-2",
@@ -197,7 +197,7 @@ test("project.rename.requested publishes result with the new name", async () => 
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("pr-1")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("pr-1")) ?? throwUnresolved());
   assert.deepEqual(decoded, {
     type: "project.rename.result",
     requestId: "pr-1",
@@ -218,7 +218,7 @@ test("project.rename.requested for unknown path publishes result with error", as
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("pr-2")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("pr-2")) ?? throwUnresolved());
   assert.deepEqual(decoded, {
     type: "project.rename.result",
     requestId: "pr-2",
@@ -248,7 +248,7 @@ test("project.collapse.requested publishes result with collapsed: true", async (
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("pc-1")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("pc-1")) ?? throwUnresolved());
   assert.deepEqual(decoded, {
     type: "project.collapse.result",
     requestId: "pc-1",
@@ -274,7 +274,7 @@ test("project.remove.requested publishes result with removed: true", async () =>
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("prm-1")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("prm-1")) ?? throwUnresolved());
   assert.deepEqual(decoded, {
     type: "project.remove.result",
     requestId: "prm-1",
@@ -307,7 +307,7 @@ test("projects.list.result marks dead-path records missing (live ones not) witho
     producerId: PRODUCER_IDS.web,
   });
 
-  const decoded = decodeTrevorEvent((await awaitResult("pl-1")) ?? throwUnresolved());
+  const decoded = decodeBelayEvent((await awaitResult("pl-1")) ?? throwUnresolved());
   assert.equal(decoded?.type, "projects.list.result");
   if (decoded?.type === "projects.list.result") {
     assert.deepEqual(

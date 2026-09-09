@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import { METRIC_NAMES, SPAN_NAMES } from "@belay/session/telemetry";
 import type {
   ProviderAttemptRecord,
@@ -23,7 +23,7 @@ import { collectingEmit, fakeProvider, runTurn } from "./support/fake-provider";
  */
 
 const history: ChatMessage[] = [{ role: "user", content: "Please run echo hello-from-tool." }];
-const payloadOf = (events: TrevorEventInput[], type: string) =>
+const payloadOf = (events: BelayEventInput[], type: string) =>
   events.find((e) => e.type === type)?.payload;
 
 function lowContextBackstopProvider(): Provider {

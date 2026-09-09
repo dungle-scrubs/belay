@@ -1,4 +1,4 @@
-import { decodeTrevorEvent, type SessionEvent } from "@belay/session";
+import { decodeBelayEvent, type SessionEvent } from "@belay/session";
 import type { ChatMessage } from "../providers";
 import { clipLine } from "../tools/shared";
 import { buildHistory } from "./history-projection";
@@ -64,7 +64,7 @@ export class ConversationLog {
   /** A short session label from the first user prompt, falling back to the session id. */
   label(fallback: string): string {
     for (const event of this.durableEvents) {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       if (decoded?.type === "user.message" && decoded.text.trim()) {
         return clipLine(decoded.text, 60);
       }

@@ -14,7 +14,7 @@ import {
   parseInterpolation,
   type RunnableSegment,
 } from "@host/commands/interpolation-engine";
-import { buildTrevorExportCommand } from "@host/manifest/export-command";
+import { buildBelayExportCommand } from "@host/manifest/export-command";
 
 /**
  * The V2 COMMAND-FILE concept + interpolation loader (plan 40, M2 + M5). A command file is a trusted,
@@ -22,7 +22,7 @@ import { buildTrevorExportCommand } from "@host/manifest/export-command";
  * immediate TypeScript slash command (commands.ts) or a user's leading-`!` prompt-shell command - neither
  * of which is a file and neither of which interpolates. Interpolation applies to a command file ONLY when
  * (a) the file is TRUSTED (a configured/built-in root, never arbitrary or downloaded content) AND (b) the
- * command-file gate `TREVOR_ENABLE_INTERPOLATION` is open. On any other combination the body loads
+ * command-file gate `BELAY_ENABLE_INTERPOLATION` is open. On any other combination the body loads
  * literally, so the feature is impossible to trigger accidentally.
  *
  * The runtime NEVER spawns a shell for command-file content. The only interpolation targets are
@@ -83,7 +83,7 @@ export interface InterpolationCommandRunner {
  * on construction so the executable map and the string allow-list can never drift apart.
  */
 const INTERPOLATION_COMMAND_BUILDERS: Readonly<Record<string, () => Command<void>>> = {
-  "/belay-export": buildTrevorExportCommand,
+  "/belay-export": buildBelayExportCommand,
 };
 
 /**
@@ -151,7 +151,7 @@ function makeCommandFileExecutor(
     ): string => {
       diagnostics.push({
         source: "command-file",
-        gate: "TREVOR_ENABLE_INTERPOLATION",
+        gate: "BELAY_ENABLE_INTERPOLATION",
         gateOpen: gate,
         target,
         allowed,
@@ -208,7 +208,7 @@ export async function expandCommandFile(
           : [
               {
                 source: "command-file",
-                gate: "TREVOR_ENABLE_INTERPOLATION",
+                gate: "BELAY_ENABLE_INTERPOLATION",
                 gateOpen: config.enabled,
                 target: "(literal)",
                 allowed: false,

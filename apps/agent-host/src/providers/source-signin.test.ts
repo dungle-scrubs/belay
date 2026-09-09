@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import { test, vi } from "vitest";
 import type { LoginCallbacks } from "./provider-auth";
 import { makeSourceSignIn } from "./source-signin";
@@ -24,7 +24,7 @@ interface FakeFlow {
 }
 
 function harness() {
-  const emitted: TrevorEventInput[] = [];
+  const emitted: BelayEventInput[] = [];
   const flows: FakeFlow[] = [];
   let refreshes = 0;
   const authPathPromise = mkdtemp(join(tmpdir(), "belay-signin-")).then(async (dir) => {

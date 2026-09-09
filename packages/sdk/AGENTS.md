@@ -16,7 +16,7 @@ lifecycle.
 - **The SDK does not recreate the web UI.** It exposes data and operations (transcript projection,
   workflows), not visual surfaces like the artifact panel or model chooser (they stay web-owned).
 - **Backend selection is URL-based.** A local session-store and a Tether service speak the identical
-  `/sessions` wire, so the choice is just the URL passed to `createTrevorClient`. There is no
+  `/sessions` wire, so the choice is just the URL passed to `createBelayClient`. There is no
   `@belay/tether` adapter package (D-004).
 - **Local process orchestration is NOT here.** Starting services, spawning/reusing hosts, opening the
   browser, and OS signals (stop/kill) live in `apps/belay-cli`, not in this browser-safe core (D-003).
@@ -27,7 +27,7 @@ lifecycle.
 
 ## Structure
 
-- `client.ts` - `createTrevorClient` + the `TrevorClient` facade over the bound transport.
+- `client.ts` - `createBelayClient` + the `BelayClient` facade over the bound transport.
 - `errors.ts` - the structured `SdkError` (operation, backend, session id, redacted URL class, detail).
 - `identity.ts` - the default non-host viewer identity + producer a headless client presents.
 - `artifacts.ts` / `transcript.ts` / `capabilities.ts` / `prompt.ts` / `lifecycle.ts` - the workflows,
@@ -42,13 +42,13 @@ The package barrel `src/index.ts` IS the public surface. Everything exported the
 consumers (automation, evals, the CLI, harnesses) and is covered by the package-boundary test
 (`src/boundary.test.ts`):
 
-- **Public / stable:** `createTrevorClient` + `TrevorClient` and its methods; the workflow functions and
+- **Public / stable:** `createBelayClient` + `BelayClient` and its methods; the workflow functions and
   their input/result types (`PromptInput`, `StreamTurnOptions`, `TurnResult`, `SwitchModelInput`,
   `ModelSwitchRecord`, `Transcript`/`TranscriptEntry`, `CommandResult`, `ManifestExport`,
   `ArtifactSource`); the structured `SdkError` + `isSdkError`; and the identity constants
   (`DEFAULT_SDK_PRODUCER_ID`, `SDK_DISPLAY_NAME`, `sdkIdentity`).
 - **Internal (not exported from the barrel):** the per-workflow module internals that only the
-  `TrevorClient` composes, and `errors.ts` helpers `withSdkError` / `urlClass` (used by the client and
+  `BelayClient` composes, and `errors.ts` helpers `withSdkError` / `urlClass` (used by the client and
   workflows, not part of the consumer contract). Import wire types from `@belay/session`, not from here.
 
 Consumers that drive Belay end-to-end (the eval/automation harness, the headless CLI) build ONLY on

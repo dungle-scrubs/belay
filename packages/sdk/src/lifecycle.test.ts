@@ -1,7 +1,7 @@
 import { PRODUCER_IDS } from "@belay/session";
 import { recordingTransport, sessionSummary } from "@belay/test-kit";
 import { describe, expect, it } from "vitest";
-import { createTrevorClient } from "./client";
+import { createBelayClient } from "./client";
 import { expandHome, resolveOpenTarget, selectSessions } from "./lifecycle";
 
 const SESSION_URL = "http://127.0.0.1:17424";
@@ -81,7 +81,7 @@ describe("expandHome (M6)", () => {
 describe("archive / unarchive / listSessions (M6)", () => {
   it("archive and unarchive publish the durable session.archived marker under the client producer", async () => {
     const rec = recordingTransport();
-    const client = createTrevorClient({
+    const client = createBelayClient({
       sessionUrl: SESSION_URL,
       producerId: PRODUCER_IDS.cli,
       transport: rec.transport,
@@ -100,7 +100,7 @@ describe("archive / unarchive / listSessions (M6)", () => {
       sessionSummary({ sessionId: "a", project: "x" }),
       sessionSummary({ sessionId: "b", project: "y" }),
     ]);
-    const client = createTrevorClient({ sessionUrl: SESSION_URL, transport: rec.transport });
+    const client = createBelayClient({ sessionUrl: SESSION_URL, transport: rec.transport });
     const listed = await client.listSessions({ project: "x" });
     expect(listed.map((s) => s.sessionId)).toEqual(["a"]);
   });

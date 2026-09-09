@@ -4,7 +4,7 @@ import { redactAttributeValue } from "./telemetry-contract";
 import { createCappedJsonlWriter } from "./telemetry-jsonl";
 
 /**
- * Opt-in LOCAL provider-attempt tracing (plan 13 M6). When `TREVOR_PROVIDER_TRACE=1`, each provider
+ * Opt-in LOCAL provider-attempt tracing (plan 13 M6). When `BELAY_PROVIDER_TRACE=1`, each provider
  * attempt (one model step) is appended as a bounded, redacted JSON line to
  * `BELAY_STATE_HOME/otel/provider-attempts.jsonl` - the deep-telemetry evidence for debugging a flaky
  * provider (failure class, attempt/retry state, token counts, timing) WITHOUT the raw prompt, transcript,

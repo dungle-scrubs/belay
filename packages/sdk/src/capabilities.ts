@@ -1,13 +1,13 @@
 import {
   type CapabilityManifest,
   type DoctorSnapshot,
+  decodeBelayEvent,
   decodeDoctorSnapshot,
-  decodeTrevorEvent,
   events,
   toPublishInput,
 } from "@belay/session";
 import { awaitStreamResult } from "./await-stream";
-import type { TrevorClient } from "./client";
+import type { BelayClient } from "./client";
 import { SdkError, urlClass } from "./errors";
 
 /**
@@ -36,7 +36,7 @@ export interface CommandResult {
  * run two of the same command concurrently on one session.
  */
 export function runCommand(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   command: string,
   args = "",
@@ -56,7 +56,7 @@ export function runCommand(
           if (!replayed) {
             return;
           }
-          const decoded = decodeTrevorEvent(event);
+          const decoded = decodeBelayEvent(event);
           if (decoded?.type === "command.result" && decoded.command === command) {
             settle(() => resolve({ command: decoded.command, text: decoded.text, ok: decoded.ok }));
           }
@@ -100,7 +100,7 @@ export type ManifestExport =
  * the human-readable block verbatim. An optional `section` narrows the export.
  */
 export function exportCapabilities(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   request?: {
     readonly format?: "json" | "text";
@@ -143,7 +143,7 @@ export function exportCapabilities(
  * host sent a legacy text dump / error line (the same tolerant decode the web uses).
  */
 export function doctorSnapshot(
-  client: TrevorClient,
+  client: BelayClient,
   sessionId: string,
   options?: { readonly timeoutMs?: number },
 ): Promise<DoctorSnapshot | null> {

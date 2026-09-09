@@ -68,10 +68,3 @@ export function loadBelayConfig(
   }
   return { path, config: parseBelayConfig(parsed), warning: null };
 }
-
-/** @deprecated Use LoadedBelayConfig */
-export type LoadedTrevorConfig = LoadedBelayConfig;
-/** @deprecated Use loadBelayConfig */
-export const loadTrevorConfig = loadBelayConfig;
-/** @deprecated Use belayConfigPath */
-export const trevorConfigPath = belayConfigPath;

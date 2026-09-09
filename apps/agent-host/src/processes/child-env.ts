@@ -1,7 +1,7 @@
 /**
  * The host's ONE secret-minimal child-environment policy (D-004): a long-lived protocol child
  * (an MCP stdio server, a language server) inherits ONLY these host env vars - never provider
- * keys, TREVOR_* state, or anything else in the host's environment. Extracted from
+ * keys, BELAY_* state, or anything else in the host's environment. Extracted from
  * mcp/stdio-transport + lsp/client because a security allowlist duplicated per spawner is a
  * policy waiting to drift; both spawners now share this single definition.
  *

@@ -79,9 +79,9 @@ const MAX_LEGACY_FRONTMATTER_CHARS = 4_096;
 /** The two V1 HOOK.md locations, relative to their anchors. */
 const LEGACY_PROJECT_HOOKS_DIR = join(".belay", "hooks");
 
-/** The legacy user hooks home, `~/.belay_legacy/hooks` (not active BELAY_HOME). */
+/** The legacy user hooks home, `~/.trevor_legacy/hooks` (not active BELAY_HOME). */
 function defaultLegacyUserHooksDir(): string {
-  return join(homedir(), ".belay_legacy", "hooks");
+  return join(homedir(), ".trevor_legacy", "hooks");
 }
 
 export interface LegacyHookScanRoots {

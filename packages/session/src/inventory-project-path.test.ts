@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "vitest";
 import type { SessionEvent } from "./event";
 import { type InventoryRow, sessionProjectPath, summarizeSession } from "./inventory";
-import { events, type TrevorEventInput } from "./protocol";
+import { type BelayEventInput, events } from "./protocol";
 
 /**
  * The canonical project-path selection (plan 58 M3): the durable `session.project` marker wins over
@@ -10,8 +10,8 @@ import { events, type TrevorEventInput } from "./protocol";
  * host. Pins the pure helper and the summarizeSession projection that consumes it.
  */
 
-/** Wrap an emit-side input into a full stored SessionEvent (what decodeTrevorEvent reads). */
-const stored = (input: TrevorEventInput, over: Partial<SessionEvent> = {}): SessionEvent => ({
+/** Wrap an emit-side input into a full stored SessionEvent (what decodeBelayEvent reads). */
+const stored = (input: BelayEventInput, over: Partial<SessionEvent> = {}): SessionEvent => ({
   sessionId: "s",
   seq: 1,
   eventId: "ev-1",

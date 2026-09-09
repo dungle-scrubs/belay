@@ -24,21 +24,21 @@ function fakeStream(): NodeJS.WriteStream & { lines: string[] } {
 test("on a non-TTY, each step prints one line and succeed marks the final line", () => {
   const stream = fakeStream();
   const spinner = createSpinner(stream);
-  spinner.step("starting Trevor…");
+  spinner.step("starting Belay…");
   spinner.step("waiting for host…");
-  spinner.succeed("Trevor ready");
+  spinner.succeed("Belay ready");
 
   assert.equal(stream.lines.length, 3);
-  assert.ok(stream.lines[0]?.includes("•") && stream.lines[0]?.includes("starting Trevor…"));
+  assert.ok(stream.lines[0]?.includes("•") && stream.lines[0]?.includes("starting Belay…"));
   assert.ok(stream.lines[1]?.includes("waiting for host…"));
-  assert.ok(stream.lines[2]?.includes("✔") && stream.lines[2]?.includes("Trevor ready"));
+  assert.ok(stream.lines[2]?.includes("✔") && stream.lines[2]?.includes("Belay ready"));
 });
 
 test("fail marks the final line", () => {
   const stream = fakeStream();
   const spinner = createSpinner(stream);
-  spinner.step("starting Trevor…");
-  spinner.fail("Trevor failed to start");
+  spinner.step("starting Belay…");
+  spinner.fail("Belay failed to start");
   const last = stream.lines.at(-1) ?? "";
-  assert.ok(last.includes("✖") && last.includes("Trevor failed to start"));
+  assert.ok(last.includes("✖") && last.includes("Belay failed to start"));
 });

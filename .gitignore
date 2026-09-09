@@ -1,6 +1,3 @@
-.env
-.env.*
-!.env.example
 node_modules/
 dist/
 storybook-static/
@@ -11,6 +8,7 @@ playwright-report/
 blob-report/
 .playwright/
 *.log
+.env*
 .DS_Store
 .turbo/
 # SQLite write-ahead-log / shared-memory sidecar files (transient)
@@ -18,8 +16,9 @@ blob-report/
 *.db-wal
 # agent-host local scratch workspace
 apps/agent-host/tmp/
-# Local agent instruction overrides (private)
+# numbered plan working dirs
+.plans/
+# Local agent instructions (unanchored: covers the root and every nested scope).
+# The shared AGENTS.md / CLAUDE.md siblings stay tracked.
 AGENTS.local.md
 CLAUDE.local.md
-**/AGENTS.local.md
-**/CLAUDE.local.md

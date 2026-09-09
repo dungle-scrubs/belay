@@ -2,7 +2,7 @@
  * Responsible for: resolving the model/provider a host-issued control prompt resumes a turn on.
  */
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   isControlProducer,
   type ModelRef,
   type SessionEvent,
@@ -83,7 +83,7 @@ export function buildControlTurns(
 ): ControlTurn[] {
   const turns: ControlTurn[] = [];
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (decoded?.type === "user.message") {
       turns.push({
         provider: decoded.provider,

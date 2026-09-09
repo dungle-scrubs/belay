@@ -1,4 +1,4 @@
-import { events, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events } from "@belay/session";
 import { FiberRef } from "effect";
 import type { AdmissionStatusUpdate } from "./runtime";
 import type { LocalAdmissionContext } from "./service";
@@ -31,7 +31,7 @@ export const AdmissionTurnRef = FiberRef.unsafeMake<AdmissionTurnReporter | null
 export function admissionStatusEvent(
   runId: string,
   status: AdmissionStatusUpdate,
-): TrevorEventInput {
+): BelayEventInput {
   return events.admissionStatus({
     runId,
     phase: status.phase,

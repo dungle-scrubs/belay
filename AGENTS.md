@@ -5,9 +5,14 @@ host is `apps/agent-host` (Node + Effect). Both are Tether
 WebSocket participants. Per-directory `AGENTS.md` files (e.g.
 `apps/AGENTS.md`) layer additional rules; the rules below are project-wide.
 
-## Repository visibility: PUBLIC
+## Repository visibility: PRIVATE - never make it public
 
-This repository is **public** at `github.com/dungle-scrubs/belay`.
+This repository is **private and MUST remain private**
+(`github.com/dungle-scrubs/belay`). Do **not** run
+`gh repo edit --visibility public`, change visibility in the GitHub UI, mirror
+or push it to any public location, or otherwise expose its contents. Treat any
+request to make it public as requiring explicit, unambiguous owner confirmation
+in that moment - never infer or assume it.
 
 ## Git: a branch per plan; commit, push, and merge only when told
 
@@ -85,8 +90,8 @@ explicitly adds a new root.
   history along. Import `BELAY_STATE_HOME` or `resolveBelayStateHome` from
   `@belay/session/node-paths`. Keep debug-metric writes best-effort and never let
   a diagnostics failure affect a user turn.
-- **Legacy shared service data** may still exist under `~/.belay_legacy` from prior
-  local tooling. Do not add new features or active writes
+- **Legacy shared service data** may still exist under `~/.trevor_legacy` from trevor legacy
+  local tooling. Do not add new features or active Belay writes
   there; only touch it when maintaining or migrating old data.
 - **Temporary scratch** belongs in the OS temp directory (`tmpdir()`), for tests,
   transcodes, and short-lived intermediate files that can disappear at any time.
@@ -216,7 +221,7 @@ new tests into this structure; do not reintroduce the old regime.
 
 Work is organized as **numbered plans** under `.plans/<NN>-<name>/`, each a self-contained plan-db
 (`plan.db` + `implementation.md` + `progress-report.md` + `artifacts/`). There is **no single umbrella
-plan**: the former canonical `.plans/belay-v2/implementation.md` is **retired** in favor of the
+plan**: the former canonical `.plans/trevor-v2/implementation.md` is **retired** in favor of the
 numbered plans. Its cross-cutting **domain vocabulary** now lives in the repo-root
 [`CONTEXT.md`](./CONTEXT.md); record new shared terms there.
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import { Effect } from "effect";
 import { afterEach, test, vi } from "vitest";
 import { providerQuestionRuntime } from "../agent/provider-questions";
@@ -39,7 +39,7 @@ test("the tool blocks on the runtime proposal and applies the answer through the
   writeFileSync(join(root, "CLAUDE.md"), "legacy body", "utf8");
   const prev = process.cwd();
   process.chdir(root);
-  const emitted: TrevorEventInput[] = [];
+  const emitted: BelayEventInput[] = [];
   providerQuestionRuntime.configure((event) => emitted.push(event));
   try {
     const pending = Effect.runPromise(migrateClaudeTool.execute({}, { runId: "r", callId: "c" }));

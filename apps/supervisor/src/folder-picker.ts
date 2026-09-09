@@ -27,7 +27,7 @@ export interface FolderPicker {
 // AppleScript that pops the native folder chooser and prints the chosen directory as a POSIX path.
 // A user cancel exits non-zero (osascript error -128), which we read as `cancelled`.
 const CHOOSE_FOLDER_SCRIPT =
-  'POSIX path of (choose folder with prompt "Choose a project folder to open in Trevor")';
+  'POSIX path of (choose folder with prompt "Choose a project folder to open in Belay")';
 
 /** The real picker: `osascript choose folder` on macOS; `cancelled` on any other platform or failure. */
 class OsascriptFolderPicker implements FolderPicker {

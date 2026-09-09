@@ -30,7 +30,7 @@ import {
  * async at the I/O edge (per the host's transport-edge convention), but every failure is a
  * typed ./errors class, never a bare string. D-004: the child receives ONLY the
  * {@link STDIO_CHILD_ENV_ALLOWLIST} vars plus the server config's explicit env - provider/API
- * keys and TREVOR_* state never reach an MCP child - and any server env VALUE that leaks into
+ * keys and BELAY_* state never reach an MCP child - and any server env VALUE that leaks into
  * the child's stderr is scrubbed before the tail reaches crash details.
  *
  * Responsible for: the stdio child lifecycle, the MCP handshake, and framed JSON-RPC

@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import {
   type ArtifactRef,
+  type BelayEventInput,
   controlProducerId,
   events,
   type PastePayload,
   PRODUCER_IDS,
   pendingFollowUps,
   type SessionEvent,
-  type TrevorEventInput,
 } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
@@ -218,7 +218,7 @@ test("a queued prompt round-trips its pasted payloads through the reducer (survi
 
 /** A durable log event with a stable eventId (the id a supersede references), web-authored by default. */
 let queueSeq = 0;
-const logEv = (input: TrevorEventInput, eventId = `ev-${queueSeq}`): SessionEvent =>
+const logEv = (input: BelayEventInput, eventId = `ev-${queueSeq}`): SessionEvent =>
   storedEvent(input, { seq: queueSeq++, eventId, producerId: PRODUCER_IDS.web });
 
 test("queuedPromptsFrom projects the durable follow-up queue, id = the durable eventId", () => {

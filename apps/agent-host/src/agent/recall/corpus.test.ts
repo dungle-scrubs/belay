@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { events, PRODUCER_IDS, type SessionEvent, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events, PRODUCER_IDS, type SessionEvent } from "@belay/session";
 import { storedEvent } from "@belay/test-kit";
 import { test } from "vitest";
 import { assembleCorpus, buildRecords } from "./corpus";
@@ -16,7 +16,7 @@ const SELF = PRODUCER_IDS.host;
 const WEB = PRODUCER_IDS.web;
 
 const ev = (
-  input: TrevorEventInput,
+  input: BelayEventInput,
   opts: { seq: number; producerId?: string; sessionId?: string },
 ): SessionEvent =>
   storedEvent(input, {

@@ -8,7 +8,7 @@ import { simpleTool, toolInput } from "./shared";
  * intends to use - never for every listed skill. Unknown ids return a structured not-found; a
  * disabled or malformed skill is reported as such rather than pretending it is usable. Read-only:
  * existing shell-interpolation trust gating inside the body loader is preserved (it never runs here
- * unless the operator opted in via TREVOR_SKILL_SHELL).
+ * unless the operator opted in via BELAY_SKILL_SHELL).
  *
  * Responsible for: the skill_view tool - loading one skill's full body with provenance.
  * Not for: listing/searching skill metadata - skills-list.ts.

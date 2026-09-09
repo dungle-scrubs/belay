@@ -1,4 +1,4 @@
-import { events, type ModelRef, type TrevorEventInput } from "@belay/session";
+import { type BelayEventInput, events, type ModelRef } from "@belay/session";
 
 /**
  * The continuation-handoff orchestration (02, M2: direct flow), kept pure over injected effects so the
@@ -36,14 +36,14 @@ export interface DirectHandoffDeps {
   /** The provider/model to carry onto the target's first prompt (so it resumes the user's model). */
   targetModel(): HandoffModel;
   /** Publish a host-authored lifecycle event (handoff.*) to a session log. */
-  publish(sessionId: string, event: TrevorEventInput): Promise<void>;
+  publish(sessionId: string, event: BelayEventInput): Promise<void>;
   /**
    * Publish a RUNNABLE prompt (the target's first user.message). It must be stamped with a producer
    * the target host will schedule a turn for - NOT the host's own producer id, which the turn loop
    * treats as a self-echo and ignores (the same control-producer path host-issued control prompts
    * use). Separate from `publish` precisely so the prompt actually runs.
    */
-  publishPrompt(sessionId: string, event: TrevorEventInput): Promise<void>;
+  publishPrompt(sessionId: string, event: BelayEventInput): Promise<void>;
   /** Create the target session in the store before any event is written to it. */
   ensureSession(sessionId: string): Promise<void>;
   /** Spawn/attach a host for the target session so it can run the injected prompt. */

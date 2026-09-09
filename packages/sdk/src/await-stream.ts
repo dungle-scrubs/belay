@@ -1,5 +1,5 @@
 import type { ConnectSessionOptions, SessionConnection } from "@belay/session";
-import type { TrevorClient } from "./client";
+import type { BelayClient } from "./client";
 
 /**
  * The stream-result lifecycle both `streamTurn` and `runCommand` are built on: open a `connectSession`
@@ -22,7 +22,7 @@ export interface StreamResultContext<T> {
 type StreamHandlers = Pick<ConnectSessionOptions, "onEvent" | "onReplayComplete" | "onStatus">;
 
 export function awaitStreamResult<T>(
-  client: TrevorClient,
+  client: BelayClient,
   connect: { readonly sessionId: string; readonly afterSeq?: number },
   timeoutMs: number,
   build: (ctx: StreamResultContext<T>) => StreamHandlers,

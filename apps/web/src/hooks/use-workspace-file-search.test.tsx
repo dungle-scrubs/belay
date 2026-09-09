@@ -10,7 +10,7 @@ import {
   type WorkspaceFileIndex,
 } from "./use-workspace-file-search";
 
-// Partial mock: keep every real export (events builders, decodeTrevorEvent, ...) but wrap
+// Partial mock: keep every real export (events builders, decodeBelayEvent, ...) but wrap
 // searchWorkspaceFiles in a spy so a regression test can assert its CALL COUNT (not just its output)
 // without depending on whether the workspace-package's live bindings are spy-able as plain ESM exports.
 vi.mock("@belay/session", async (importOriginal) => {

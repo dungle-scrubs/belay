@@ -1,7 +1,7 @@
 /**
  * Pure dynamic turn-budget policy (D-009…D-013).
  *
- * Trevor used to cap every turn at a static 32-step backstop regardless of the model, so a
+ * Belay used to cap every turn at a static 32-step backstop regardless of the model, so a
  * large-context model paused at exactly 32 steps even at trivial context pressure with plenty of room
  * left. This module derives an adaptive step budget from facts the loop already has - served context
  * window, prompt pressure, repeated-tool progress, and reasoning level - and keeps a separate, finite

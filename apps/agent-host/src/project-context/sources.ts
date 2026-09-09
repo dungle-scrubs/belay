@@ -10,7 +10,6 @@
 
 export const CONTEXT_SOURCE_KINDS = {
   belayRule: "belay-rule",
-  trevorRule: "belay-rule",
 } as const;
 
 export type ContextSourceKind = (typeof CONTEXT_SOURCE_KINDS)[keyof typeof CONTEXT_SOURCE_KINDS];

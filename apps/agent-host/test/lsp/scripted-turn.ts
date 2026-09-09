@@ -1,4 +1,4 @@
-import type { TrevorEventInput } from "@belay/session";
+import type { BelayEventInput } from "@belay/session";
 import type { Provider } from "@host/providers";
 import type { ScriptedCall } from "../support/fake-provider";
 
@@ -10,7 +10,7 @@ import type { ScriptedCall } from "../support/fake-provider";
  * regressions assert "one LSP call, then normal work" from the tool.started sequence.
  *
  * Only type-only imports are static here: the fake provider loads lazily at call time, AFTER
- * the test file has bound TREVOR_WORKSPACE (and any TREVOR_LSP_* knobs), because the host's
+ * the test file has bound BELAY_WORKSPACE (and any BELAY_LSP_* knobs), because the host's
  * boot/paths and the LSP singleton read the env at first import.
  */
 
@@ -26,7 +26,7 @@ export async function scriptedProvider(
 }
 
 /** The published result of the named tool's completion ("" when the tool never completed). */
-export function toolResult(events: readonly TrevorEventInput[], name: string): string {
+export function toolResult(events: readonly BelayEventInput[], name: string): string {
   const completed = events.find(
     (event) => event.type === "tool.completed" && event.payload.name === name,
   );
@@ -34,14 +34,14 @@ export function toolResult(events: readonly TrevorEventInput[], name: string): s
 }
 
 /** Every tool the turn started, in order - the "no further LSP calls" probe. */
-export function toolCallNames(events: readonly TrevorEventInput[]): string[] {
+export function toolCallNames(events: readonly BelayEventInput[]): string[] {
   return events
     .filter((event) => event.type === "tool.started")
     .map((event) => String(event.payload.name));
 }
 
 /** The terminal completion's text + error ("" / undefined when the turn never completed). */
-export function finalAnswer(events: readonly TrevorEventInput[]): {
+export function finalAnswer(events: readonly BelayEventInput[]): {
   readonly text: string;
   readonly error: unknown;
 } {

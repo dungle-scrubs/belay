@@ -12,11 +12,11 @@ import {
 } from "@belay/launcher";
 import { createService, startServer } from "@belay/server-kit";
 import {
+  type BelayEventInput,
   errorMessage,
   PRODUCER_IDS,
   SUPERVISOR_SESSION_ID,
   streamTransport,
-  type TrevorEventInput,
 } from "@belay/session";
 import { RESERVED_PORTS, serviceUrl } from "@belay/session/ports";
 import { createTelemetrySink } from "@belay/session/telemetry-file-sink";
@@ -51,7 +51,7 @@ function log(message: string, fields?: Record<string, unknown>): void {
 const transport = streamTransport(STORE_URL);
 
 /** Publishes one result event on the control session, stamping the supervisor producer id. */
-const emit = (event: TrevorEventInput): Promise<void> =>
+const emit = (event: BelayEventInput): Promise<void> =>
   transport.publishEvent(SUPERVISOR_SESSION_ID, {
     ...event,
     producerId: PRODUCER_IDS.supervisor,
@@ -59,7 +59,7 @@ const emit = (event: TrevorEventInput): Promise<void> =>
 
 /** Publishes an event on an arbitrary session (plan 58 M4): stamps a session.project marker on a
  *  freshly-minted project-scoped session before the host launches. */
-const publishToSession = (sessionId: string, event: TrevorEventInput): Promise<void> =>
+const publishToSession = (sessionId: string, event: BelayEventInput): Promise<void> =>
   transport.publishEvent(sessionId, {
     ...event,
     producerId: PRODUCER_IDS.supervisor,

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { decodeTrevorEvent, events, type SessionEvent, searchWorkspaceFiles } from "@belay/session";
+import { decodeBelayEvent, events, type SessionEvent, searchWorkspaceFiles } from "@belay/session";
 import { buildFileIndex } from "@host/file-mention/file-index";
 import { test } from "vitest";
 
@@ -54,7 +54,7 @@ test("host index over a temp workspace round-trips the wire and is searchable by
   assert.ok(!relPaths.some((p) => p.includes(".git/")));
 
   // Wire: the result event decodes back to exactly the relative paths the browser searches.
-  const decoded = decodeTrevorEvent(
+  const decoded = decodeBelayEvent(
     stored(
       events.fileIndexResult({
         requestId: "req-1",

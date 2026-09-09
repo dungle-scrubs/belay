@@ -7,7 +7,7 @@
  * source for every metadata field on every source, so the fix is a correctable override that WINS over
  * the bundled value, not a "pull it from the API".
  *
- * Corrections are USER-OWNED: they live in a hand-edited `<TREVOR_HOME>/models.json` (see
+ * Corrections are USER-OWNED: they live in a hand-edited `<BELAY_HOME>/models.json` (see
  * {@link USER_MODELS_JSON}), the same way pi-ai keeps `~/.pi/auth.json`, so a wrong window is fixed by
  * editing config rather than shipping a code change. The file is read once per host (and on
  * `/catalog-refresh` via {@link reloadModelOverrides}); absent or malformed, it contributes nothing.
@@ -31,7 +31,7 @@ export interface ModelMetadataOverride {
 
 /**
  * Built-in baseline corrections keyed by `modelId` (the live `/models` id). Kept tiny: corrections are
- * normally user-owned in `<TREVOR_HOME>/models.json`; an entry is added here only for a same-day
+ * normally user-owned in `<BELAY_HOME>/models.json`; an entry is added here only for a same-day
  * provider/registry gap we want shipped in code ahead of any user file. The user file overrides it
  * regardless.
  */

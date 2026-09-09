@@ -1,6 +1,6 @@
 import type { CapabilityManifest, ManifestScope } from "@belay/session";
 import { MANIFEST_VERSION } from "@belay/session";
-import { buildTrevorExportCommand } from "@host/manifest/export-command";
+import { buildBelayExportCommand } from "@host/manifest/export-command";
 import { registerManifestSource } from "@host/manifest/source";
 import { runCommand } from "@host/tools/run-shell";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,7 +14,7 @@ import { resolveInterpolationConfig } from "./interpolation";
  * re-interpolated). Also proves the runtime never reintroduces `op://`/secret resolution.
  */
 
-const ON = resolveInterpolationConfig({ TREVOR_ENABLE_INTERPOLATION: "1" });
+const ON = resolveInterpolationConfig({ BELAY_ENABLE_INTERPOLATION: "1" });
 const OFF = resolveInterpolationConfig({});
 
 function trusted(body: string): CommandFile {
@@ -61,7 +61,7 @@ describe("prompt-shell lane is NOT interpolation (M7)", () => {
 describe("capability export boundary (M7, D-004)", () => {
   it("/belay-export output is independent of the interpolation gate", async () => {
     registerManifestSource(manifestSource("Catalog"));
-    const command = buildTrevorExportCommand();
+    const command = buildBelayExportCommand();
     // The export command reads the manifest directly and consults no interpolation gate, so its output is
     // identical whether the gate is on or off (the config is not even passed to it).
     const withGateContext = await command.run("--compact", undefined);
@@ -76,7 +76,7 @@ describe("capability export boundary (M7, D-004)", () => {
     // The export renders manifest content verbatim; interpolation is a load-time step on FILE bodies, not
     // on rendered export output, so a section title containing `!echo pwned` is passed through literally.
     registerManifestSource(manifestSource("!echo pwned"));
-    const command = buildTrevorExportCommand();
+    const command = buildBelayExportCommand();
     const result = await command.run("--compact", undefined);
     const text = typeof result === "string" ? result : result.text;
     expect(text).toContain("!echo pwned");

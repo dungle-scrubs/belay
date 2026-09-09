@@ -1,7 +1,7 @@
 import type { SessionEvent } from "./event";
 import { PRODUCER_IDS } from "./identity";
 import { events } from "./protocol";
-import { decodeTrevorEvent } from "./protocol-decode";
+import { decodeBelayEvent } from "./protocol-decode";
 import type { PublishInput } from "./transport";
 
 /**
@@ -178,7 +178,7 @@ function reconstructActiveModel(events: readonly SessionEvent[]): ActiveModel | 
 
   let active: ActiveModel | null = null;
   for (const event of events) {
-    const decoded = decodeTrevorEvent(event);
+    const decoded = decodeBelayEvent(event);
     if (!decoded) {
       continue;
     }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  decodeTrevorEvent,
+  decodeBelayEvent,
   events,
   PRODUCER_IDS,
   type SessionConnection,
@@ -60,7 +60,7 @@ function awaitLaunchResult(requestId: string) {
     SUPERVISOR_SESSION_ID,
     viewerIdentity({ displayName: "reader", instanceId: "reader-1", participantId: "reader-1" }),
     (event) => {
-      const decoded = decodeTrevorEvent(event);
+      const decoded = decodeBelayEvent(event);
       return decoded?.type === "session.launch.result" && decoded.requestId === requestId;
     },
     { timeoutMs: 5000 },
@@ -72,7 +72,7 @@ function awaitSessionProject(sessionId: string) {
   return transport.awaitEvent(
     sessionId,
     viewerIdentity({ displayName: "reader", instanceId: "reader-2", participantId: "reader-2" }),
-    (event) => decodeTrevorEvent(event)?.type === "session.project",
+    (event) => decodeBelayEvent(event)?.type === "session.project",
     { timeoutMs: 5000 },
   );
 }
@@ -137,7 +137,7 @@ test("a launch with sessionId + projectPath uses the provided id, stamps a sessi
   // The launch result carries the caller-minted session id (not projectSessionId(root)).
   const result = await awaitLaunchResult("req-fresh");
   assert.ok(result, "a session.launch.result was published on the control session");
-  const decoded = result ? decodeTrevorEvent(result) : null;
+  const decoded = result ? decodeBelayEvent(result) : null;
   assert.equal(decoded?.type, "session.launch.result");
   if (decoded?.type === "session.launch.result") {
     assert.equal(decoded.sessionId, freshId);
@@ -150,7 +150,7 @@ test("a launch with sessionId + projectPath uses the provided id, stamps a sessi
   // A session.project marker was published on the NEW session (before launch).
   const marker = await awaitSessionProject(freshId);
   assert.ok(marker, "a session.project marker was published on the new session");
-  const markerDecoded = marker ? decodeTrevorEvent(marker) : null;
+  const markerDecoded = marker ? decodeBelayEvent(marker) : null;
   assert.equal(markerDecoded?.type, "session.project");
   if (markerDecoded?.type === "session.project") {
     assert.equal(markerDecoded.path, root);

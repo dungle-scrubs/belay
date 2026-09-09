@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import {
+  type BelayEventInput,
   type ConnectSessionOptions,
   PRODUCER_IDS,
   type PublishInput,
   type SessionEvent,
   SUPERVISOR_SESSION_ID,
   events as sessionEvents,
-  type TrevorEventInput,
 } from "@belay/session";
 import { recordingTransport, storedEvent } from "@belay/test-kit";
 import { act, renderHook } from "@testing-library/react";
@@ -44,7 +44,7 @@ const publishedTo = (published: readonly PublishInput[], type: string) =>
 /** Delivers a supervisor result on the (already replayed) control session, as a live tail event. */
 function deliverControl(
   connects: readonly ConnectSessionOptions[],
-  input: TrevorEventInput,
+  input: BelayEventInput,
   seq: number,
 ): void {
   controlConnect(connects)?.onEvent(
