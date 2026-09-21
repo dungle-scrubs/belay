@@ -15,20 +15,20 @@
     "typecheck": "tsgo --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@ast-grep/cli": "0.44.0",
-    "@earendil-works/pi-ai": "0.80.6",
-    "@sentry/node": "^10.70.0",
+    "@ast-grep/cli": "0.45.3",
+    "@earendil-works/pi-ai": "0.85.1",
+    "@sentry/node": "^10.75.0",
     "@belay/session": "workspace:*",
     "@vscode/ripgrep": "1.18.0",
-    "effect": "^3.22.1",
+    "effect": "^3.22.2",
     "web-search": "github:dungle-scrubs/web-search#e2c05fb47f5edb4c181c56b2f4e407bce9942b73",
-    "yaml": "^2.9.0"
+    "yaml": "^2.9.1"
   },
   "devDependencies": {
     "@belay/sdk": "workspace:*",
     "@belay/test-kit": "workspace:*",
-    "@types/node": "^26.2.0",
-    "tsx": "^4.23.12",
+    "@types/node": "^26.6.1",
+    "tsx": "^4.23.13",
     "typescript": "^6.0.3"
   }
 }
